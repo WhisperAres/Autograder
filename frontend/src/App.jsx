@@ -55,11 +55,31 @@ function App() {
         <Route
           path="/grader"
           element={
-            isAuthenticated && userRole === 'grader' ?
+            isAuthenticated && (userRole === 'grader' || userRole === 'ta') ?
             <div className="with-navbar">
               <nav className="navbar">
                 <div className="navbar-content">
                   <h2 className="navbar-title">Autograder - Grader</h2>
+                  <div className="navbar-user">
+                    <span>{user?.name}</span>
+                    <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                  </div>
+                </div>
+              </nav>
+              <GraderDashboard />
+            </div> :
+            <Navigate to="/login" />
+          }
+        />
+
+        <Route
+          path="/ta"
+          element={
+            isAuthenticated && userRole === 'ta' ?
+            <div className="with-navbar">
+              <nav className="navbar">
+                <div className="navbar-content">
+                  <h2 className="navbar-title">Autograder - TA</h2>
                   <div className="navbar-user">
                     <span>{user?.name}</span>
                     <button className="logout-btn" onClick={handleLogout}>Logout</button>

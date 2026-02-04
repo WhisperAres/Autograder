@@ -1,183 +1,139 @@
-const {
-  getSubmissionsByStudentId,
-  getSubmissionById,
-  getSubmissionsByAssignmentAndStudent,
-  getFileById,
-  getTestResults,
-  addSubmission,
-  addFileToSubmission,
-  addTestResults,
-  updateSubmissionViewTestResults,
-  deleteFileFromSubmission,
-} = require("../models/submissions");
+const Submission = require('../models/submission');
+const CodeFile = require('../models/codeFile');
+const FileService = require('../services/fileService');
 
-exports.uploadSubmission = (req, res) => {
+exports.uploadSubmission = async (req, res) => {
   try {
     const { assignmentId } = req.body;
     const studentId = req.user.id;
     const studentEmail = req.user.email;
 
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(400).json({ message: 'No file uploaded' });
     }
 
     if (!assignmentId) {
-      return res.status(400).json({ message: "Assignment ID required" });
+      return res.status(400).json({ message: 'Assignment ID required' });
     }
 
     let fileContent;
     try {
-      fileContent = req.file.buffer.toString("utf-8");
+      fileContent = req.file.buffer.toString('utf-8');
     } catch (err) {
-      // Fallback for binary files
-      fileContent = req.file.buffer.toString("binary");
+      fileContent = req.file.buffer.toString('binary');
     }
 
-    // Check if a submission already exists for this assignment and student
-    let submission = getSubmissionsByAssignmentAndStudent(assignmentId, studentId);
+    // Check if submission exists
+    let submission = await Submission.findOne({
+      where: {
+        studentId,
+        assignmentId: parseInt(assignmentId),
+      },
+    });
 
     if (!submission) {
-      // Create a new submission with the first file
-      submission = addSubmission({
+      // Create new submission
+      submission = await Submission.create({
         studentId,
         studentEmail,
         assignmentId: parseInt(assignmentId),
-        files: [
-          {
-            fileName: req.file.originalname,
-            fileContent: fileContent,
-            uploadedAt: new Date().toISOString(),
-          },
-        ],
+        marks: 0,
+        totalMarks: 100,
+        status: 'pending',
+        viewTestResults: false,
       });
-    } else {
-      // Add file to existing submission
-      addFileToSubmission(submission.id, {
-        fileName: req.file.originalname,
-        fileContent: fileContent,
-        uploadedAt: new Date().toISOString(),
-      });
-      // Get the updated submission with the new file
-      submission = getSubmissionById(submission.id);
     }
 
-    // Return submission without the large fileContent
-    const submissionToReturn = {
-      id: submission.id,
-      assignmentId: submission.assignmentId,
-      studentId: submission.studentId,
-      studentEmail: submission.studentEmail,
-      files: submission.files.map((f) => ({
-        id: f.id,
-        fileName: f.fileName,
-        uploadedAt: f.uploadedAt,
-      })),
-      marks: submission.marks,
-      totalMarks: submission.totalMarks,
-      status: submission.status,
-      viewTestResults: submission.viewTestResults,
-    };
+    // Save code file to database
+    await FileService.saveCodeFile(
+      submission.id,
+      req.file.originalname,
+      fileContent
+    );
 
-    res.json({
-      message: "File uploaded successfully",
-      submission: submissionToReturn,
+    // Fetch all files for this submission
+    const files = await CodeFile.findAll({
+      where: { submissionId: submission.id },
+      attributes: ['id', 'fileName'],
     });
-  } catch (error) {
-    console.error("Upload error:", error);
-    res.status(500).json({ message: "Error uploading submission" });
-  }
-};
 
-exports.getStudentSubmissions = (req, res) => {
-  try {
-    const studentId = req.user.id;
-    const submissions = getSubmissionsByStudentId(studentId);
-    
-    // Return submissions without large fileContent
-    const submissionsToReturn = submissions.map((submission) => ({
-      id: submission.id,
-      assignmentId: submission.assignmentId,
-      studentId: submission.studentId,
-      studentEmail: submission.studentEmail,
-      files: submission.files.map((f) => ({
-        id: f.id,
-        fileName: f.fileName,
-        uploadedAt: f.uploadedAt,
-      })),
-      marks: submission.marks,
-      totalMarks: submission.totalMarks,
-      status: submission.status,
-      viewTestResults: submission.viewTestResults,
-    }));
-
-    res.json(submissionsToReturn);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching submissions" });
-  }
-};
-
-exports.getSubmissionResults = (req, res) => {
-  try {
-    const { submissionId } = req.params;
-    const submission = getSubmissionById(submissionId);
-
-    if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
-    }
-
-    // Verify ownership
-    if (submission.studentId !== req.user.id) {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
-    // Check if student is allowed to view test results
-    if (!submission.viewTestResults) {
-      return res.status(403).json({ message: "Test results not available yet" });
-    }
-
-    const testResults = getTestResults(submissionId);
     res.json({
+      message: 'File uploaded successfully',
       submission: {
         id: submission.id,
         assignmentId: submission.assignmentId,
+        studentId: submission.studentId,
+        studentEmail: submission.studentEmail,
+        files: files,
         marks: submission.marks,
         totalMarks: submission.totalMarks,
         status: submission.status,
-        files: submission.files.map((f) => ({
-          id: f.id,
-          fileName: f.fileName,
-          uploadedAt: f.uploadedAt,
-        })),
+        viewTestResults: submission.viewTestResults,
       },
-      testResults,
     });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching results" });
+    console.error('Upload error:', error);
+    res.status(500).json({ message: 'Error uploading submission' });
   }
 };
 
-exports.getSubmissionCode = (req, res) => {
+exports.getStudentSubmissions = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // Fetch submissions for this student
+    const submissions = await Submission.findAll({
+      where: { studentId },
+    });
+
+    // For each submission, fetch all files
+    const submissionsWithFiles = await Promise.all(
+      submissions.map(async (submission) => {
+        const files = await CodeFile.findAll({
+          where: { submissionId: submission.id },
+          attributes: ['id', 'fileName'],
+        });
+
+        return {
+          id: submission.id,
+          assignmentId: submission.assignmentId,
+          studentId: submission.studentId,
+          studentEmail: submission.studentEmail,
+          files: files,
+          marks: submission.marks,
+          totalMarks: submission.totalMarks,
+          status: submission.status,
+          viewTestResults: submission.viewTestResults,
+        };
+      })
+    );
+
+    res.json(submissionsWithFiles);
+  } catch (error) {
+    console.error('Error fetching submissions:', error);
+    res.status(500).json({ message: 'Error fetching submissions' });
+  }
+};
+
+exports.getSubmissionCode = async (req, res) => {
   try {
     const { submissionId, fileId } = req.params;
-    const submission = getSubmissionById(submissionId);
 
+    // Verify submission exists and belongs to user
+    const submission = await Submission.findByPk(submissionId);
     if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
+      return res.status(404).json({ message: 'Submission not found' });
     }
 
     // Verify ownership
     if (submission.studentId !== req.user.id) {
-      return res.status(403).json({ message: "Unauthorized" });
+      return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const file = getFileById(submissionId, fileId);
-
+    // Fetch file with content from database
+    const file = await FileService.getFileWithContent(fileId);
     if (!file) {
-      return res.status(404).json({ message: "File not found" });
-    }
-
-    if (!file.fileContent) {
-      return res.status(404).json({ message: "File content not found" });
+      return res.status(404).json({ message: 'File not found' });
     }
 
     res.json({
@@ -185,55 +141,94 @@ exports.getSubmissionCode = (req, res) => {
       fileContent: file.fileContent,
     });
   } catch (error) {
-    console.error("Error fetching code:", error);
-    res.status(500).json({ message: "Error fetching code" });
+    console.error('Error fetching code:', error);
+    res.status(500).json({ message: 'Error fetching code' });
   }
 };
 
-exports.deleteSubmissionFile = (req, res) => {
+exports.getSubmissionResults = async (req, res) => {
   try {
-    const { submissionId, fileId } = req.params;
-    const submission = getSubmissionById(submissionId);
+    const { submissionId } = req.params;
+    const submission = await Submission.findByPk(submissionId);
 
     if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
+      return res.status(404).json({ message: 'Submission not found' });
     }
 
     // Verify ownership
     if (submission.studentId !== req.user.id) {
-      return res.status(403).json({ message: "Unauthorized" });
+      return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const deleted = deleteFileFromSubmission(submissionId, fileId);
-
-    if (!deleted) {
-      return res.status(404).json({ message: "File not found" });
+    // Check if student is allowed to view test results
+    if (!submission.viewTestResults) {
+      return res.status(403).json({ message: 'Test results not available yet' });
     }
 
-    // Return updated submission without fileContent
-    const updatedSubmission = getSubmissionById(submissionId);
-    const submissionToReturn = {
-      id: updatedSubmission.id,
-      assignmentId: updatedSubmission.assignmentId,
-      studentId: updatedSubmission.studentId,
-      studentEmail: updatedSubmission.studentEmail,
-      files: updatedSubmission.files.map((f) => ({
-        id: f.id,
-        fileName: f.fileName,
-        uploadedAt: f.uploadedAt,
-      })),
-      marks: updatedSubmission.marks,
-      totalMarks: updatedSubmission.totalMarks,
-      status: updatedSubmission.status,
-      viewTestResults: updatedSubmission.viewTestResults,
-    };
+    // Fetch files for submission
+    const files = await CodeFile.findAll({
+      where: { submissionId },
+      attributes: ['id', 'fileName'],
+    });
 
     res.json({
-      message: "File deleted successfully",
-      submission: submissionToReturn,
+      submission: {
+        id: submission.id,
+        assignmentId: submission.assignmentId,
+        marks: submission.marks,
+        totalMarks: submission.totalMarks,
+        status: submission.status,
+        files: files,
+      },
+      testResults: [],
     });
   } catch (error) {
-    console.error("Delete error:", error);
-    res.status(500).json({ message: "Error deleting file" });
+    res.status(500).json({ message: 'Error fetching results' });
+  }
+};
+
+exports.deleteSubmissionFile = async (req, res) => {
+  try {
+    const { submissionId, fileId } = req.params;
+    const submission = await Submission.findByPk(submissionId);
+
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    // Verify ownership
+    if (submission.studentId !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Delete file from database
+    const deleted = await FileService.deleteCodeFile(fileId);
+    if (!deleted) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Fetch remaining files
+    const remainingFiles = await CodeFile.findAll({
+      where: { submissionId },
+      attributes: ['id', 'fileName'],
+    });
+
+    res.json({
+      message: 'File deleted successfully',
+      submission: {
+        id: submission.id,
+        assignmentId: submission.assignmentId,
+        studentId: submission.studentId,
+        studentEmail: submission.studentEmail,
+        files: remainingFiles,
+        marks: submission.marks,
+        totalMarks: submission.totalMarks,
+        status: submission.status,
+        viewTestResults: submission.viewTestResults,
+      },
+    });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ message: 'Error deleting file' });
   }
 };

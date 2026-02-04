@@ -1,23 +1,31 @@
-const { getAllAssignments, getAssignmentById } = require("../models/assignments");
+const Assignment = require("../models/assignment");
+const TestCase = require("../models/testCase");
 
-exports.getAllAssignments = (req, res) => {
+exports.getAllAssignments = async (req, res) => {
   try {
-    const assignments = getAllAssignments();
+    const assignments = await Assignment.findAll({
+      include: [{ model: TestCase, as: "testCases" }],
+      order: [["id", "DESC"]]
+    });
     res.json(assignments);
   } catch (error) {
+    console.error("Error fetching assignments:", error);
     res.status(500).json({ message: "Error fetching assignments" });
   }
 };
 
-exports.getAssignmentById = (req, res) => {
+exports.getAssignmentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const assignment = getAssignmentById(id);
+    const assignment = await Assignment.findByPk(id, {
+      include: [{ model: TestCase, as: "testCases" }]
+    });
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
     }
     res.json(assignment);
   } catch (error) {
+    console.error("Error fetching assignment:", error);
     res.status(500).json({ message: "Error fetching assignment" });
   }
 };

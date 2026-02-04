@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "pg": "^8.18.0",
+    "pg-pool": "^3.11.0",
+    "postgresql": "^0.0.1",
+    "sequelize": "^6.37.7"
+  }
+}

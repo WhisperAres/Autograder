@@ -79,7 +79,6 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                 <div className="login-card">
                     <div className="login-header">
                         <h1 className="brand-title">Autograder</h1>
-                        <p className="brand-subtitle">Student Portal</p>
                     </div>
 
                     <form onSubmit={handleLogin} className="login-form">
@@ -88,7 +87,7 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                             <input
                                 type="email"
                                 id="email"
-                                placeholder="student@university.edu"
+                                placeholder="Enter email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -121,36 +120,6 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                             {loading ? "Logging in..." : "Login"}
                         </button>
                     </form>
-
-                    <div className="login-footer">
-                        <h3>Demo Accounts</h3>
-                        <div className="demo-accounts">
-                            <button
-                                type="button"
-                                className="demo-btn"
-                                onClick={() => quickLogin({ email: "student@uni.edu", password: "password" })}
-                            >
-                                <span className="demo-role">Student</span>
-                                <span className="demo-email">student@uni.edu</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="demo-btn"
-                                onClick={() => quickLogin({ email: "prof@uni.edu", password: "password" })}
-                            >
-                                <span className="demo-role">Grader</span>
-                                <span className="demo-email">prof@uni.edu</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="demo-btn"
-                                onClick={() => quickLogin({ email: "admin@uni.edu", password: "password" })}
-                            >
-                                <span className="demo-role">Admin</span>
-                                <span className="demo-email">admin@uni.edu</span>
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

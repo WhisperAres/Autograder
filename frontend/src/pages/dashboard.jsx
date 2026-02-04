@@ -269,6 +269,15 @@ export default function Dashboard({ handleLogout, user }) {
 
   return (
     <div className="dashboard-container">
+      {/* Theme Toggle */}
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        className="theme-toggle"
+        title="Toggle theme"
+      >
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+
       {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-content">
@@ -399,31 +408,33 @@ export default function Dashboard({ handleLogout, user }) {
                     <div className="panel-subtitle">
                       Submitted: {assignmentSubmission.files.length}
                     </div>
-                    <ul className="files-list">
+                    <div className="files-list">
                       {assignmentSubmission.files.map((file) => (
-                        <li
+                        <div
                           key={file.id}
-                          className={`file-item ${
-                            selectedFile?.id === file.id ? "active" : ""
-                          }`}
+                          className="file-row-container"
                         >
-                          <button
-                            className="file-name-btn"
+                          <div
+                            className={`file-view-container ${
+                              selectedFile?.id === file.id ? "active" : ""
+                            }`}
                             onClick={() => handleViewCode(file)}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, flex: 1, textAlign: "left" }}
+                            title="Click to view file"
                           >
-                            {file.fileName}
-                          </button>
+                            <span className="file-icon">📄</span>
+                            <span className="file-name-text">{file.fileName}</span>
+                          </div>
                           <button
-                            className="btn-remove-small"
+                            className="btn-delete-file"
                             onClick={() => handleDeleteFile(file.id)}
                             disabled={deleting}
+                            title="Delete this file"
                           >
-                            ✕
+                            🗑️ Delete
                           </button>
-                        </li>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 

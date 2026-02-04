@@ -5,13 +5,18 @@ const graderController = require("./grader.controller");
 
 const router = express.Router();
 
-// All grader routes are protected and require grader role
-router.use(verify, checkRole("grader"));
+// All grader routes are protected and require grader or ta role
+router.use(verify, checkRole("grader", "ta"));
+
+// Assignments
+router.get("/assignments", graderController.getAssignments);
 
 // Submission viewing
 router.get("/submissions", graderController.getAllSubmissions);
+router.get("/submissions/assignment/:assignmentId", graderController.getSubmissionsByAssignment);
 router.get("/submissions/:submissionId", graderController.getSubmissionForGrading);
 router.get("/submissions/:submissionId/code", graderController.getSubmissionCode);
+router.get("/submissions/:submissionId/code/:fileId", graderController.getSubmissionCode);
 router.get("/submissions/:submissionId/feedback", graderController.getSubmissionFeedback);
 
 // Test case running

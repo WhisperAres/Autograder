@@ -1,51 +1,114 @@
 import { useState, useEffect } from "react";
+import TestCaseManager from "./testCaseManager";
 import "./grader.css";
 
 export default function GraderDashboard() {
+  const [assignments, setAssignments] = useState([]);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
-  const [feedback, setFeedback] = useState("");
-  const [marks, setMarks] = useState("");
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [runningTests, setRunningTests] = useState(false);
-  const [showCodeViewer, setShowCodeViewer] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [codeContent, setCodeContent] = useState("");
   const [codeName, setCodeName] = useState("");
   const [testResults, setTestResults] = useState([]);
-  const [tabs, setTabs] = useState("submissions"); // submissions, code, feedback
+  const [runningTests, setRunningTests] = useState(false);
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [marks, setMarks] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [tab, setTab] = useState("details"); // details, code, feedback
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved ? JSON.parse(saved) : true;
+  });
+  const [showTestCaseManager, setShowTestCaseManager] = useState(false);
   const token = localStorage.getItem("token");
 
+  // Apply theme to document root
   useEffect(() => {
-    const fetchSubmissions = async () => {
+    if (darkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
+
+  // Fetch assignments
+  useEffect(() => {
+    const fetchAssignments = async () => {
       try {
-        const response = await fetch("http://localhost:5000/grader/submissions", {
+        const response = await fetch("http://localhost:5000/grader/assignments", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error("Failed to fetch submissions");
+        if (!response.ok) throw new Error("Failed to fetch assignments");
         const data = await response.json();
-        setSubmissions(data);
+        setAssignments(data || []);
+        setLoading(false);
       } catch (err) {
-        setError(err.message);
-      } finally {
+        setError("Error loading assignments: " + err.message);
         setLoading(false);
       }
     };
 
-    fetchSubmissions();
+    if (token) fetchAssignments();
   }, [token]);
+
+  // Fetch submissions when assignment is selected
+  const handleAssignmentClick = async (assignment) => {
+    setSelectedAssignment(assignment);
+    setSelectedSubmission(null);
+    setSubmissions([]);
+    setError("");
+    setCodeContent("");
+    setTestResults([]);
+    
+    try {
+      const response = await fetch(
+        `http://localhost:5000/grader/submissions/assignment/${assignment.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) throw new Error("Failed to fetch submissions");
+      const data = await response.json();
+      setSubmissions(data || []);
+    } catch (err) {
+      setError("Error loading submissions: " + err.message);
+    }
+  };
+
+  const handleBackToAssignments = () => {
+    setSelectedAssignment(null);
+    setSelectedSubmission(null);
+    setSubmissions([]);
+    setCodeContent("");
+    setTestResults([]);
+    setTab("details");
+  };
 
   const handleViewCode = async (submission) => {
     try {
+      setCodeContent("");
+      setCodeName("");
+      
+      // Fetch code files
       const response = await fetch(
         `http://localhost:5000/grader/submissions/${submission.id}/code`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data = await response.json();
-      setCodeContent(data.fileContent);
-      setCodeName(data.fileName);
-      setShowCodeViewer(true);
+      
+      if (!response.ok) throw new Error("Failed to fetch code");
+      const files = await response.json();
+      
+      if (!Array.isArray(files) || files.length === 0) {
+        setError("No code files found");
+        return;
+      }
+
+      // Get first file content
+      const firstFile = files[0];
+      setCodeContent(firstFile.fileContent || "");
+      setCodeName(firstFile.fileName || "Code");
     } catch (err) {
       setError("Failed to fetch code: " + err.message);
     }
@@ -53,13 +116,10 @@ export default function GraderDashboard() {
 
   const handleRunTests = async (submission) => {
     setRunningTests(true);
+    setError("");
+    setTestResults([]);
+    
     try {
-      const testCases = [
-        { name: "Test Case 1" },
-        { name: "Test Case 2" },
-        { name: "Test Case 3" },
-      ];
-
       const response = await fetch(
         `http://localhost:5000/grader/submissions/${submission.id}/run-tests`,
         {
@@ -68,14 +128,15 @@ export default function GraderDashboard() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ testCases }),
         }
       );
-
+      
       if (!response.ok) throw new Error("Failed to run tests");
       const data = await response.json();
-      setTestResults(data.results);
-      setTabs("feedback");
+      
+      setTestResults(data.results || []);
+      setSuccessMessage(`Tests executed: ${data.passCount || 0}/${data.totalCount || 0} passed`);
+      setTimeout(() => setSuccessMessage(""), 4000);
     } catch (err) {
       setError("Error running tests: " + err.message);
     } finally {
@@ -84,12 +145,18 @@ export default function GraderDashboard() {
   };
 
   const handleSubmitFeedback = async () => {
-    if (!feedback || marks === "") {
-      setError("Please enter both feedback and marks");
+    if (!marks) {
+      setError("Please enter marks");
+      return;
+    }
+    if (!feedback.trim()) {
+      setError("Please enter feedback");
       return;
     }
 
     setSubmittingFeedback(true);
+    setError("");
+    
     try {
       const response = await fetch(
         `http://localhost:5000/grader/submissions/${selectedSubmission.id}/feedback`,
@@ -104,10 +171,20 @@ export default function GraderDashboard() {
       );
 
       if (!response.ok) throw new Error("Failed to submit feedback");
-      setError("");
-      setFeedback("");
+      
+      setSuccessMessage("✓ Feedback submitted successfully!");
       setMarks("");
-      alert("Feedback submitted successfully!");
+      setFeedback("");
+      
+      // Update submission status
+      setSelectedSubmission({ ...selectedSubmission, status: "graded", marks: parseInt(marks) });
+      setSubmissions(submissions.map(sub =>
+        sub.id === selectedSubmission.id
+          ? { ...sub, status: "graded", marks: parseInt(marks) }
+          : sub
+      ));
+      
+      setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
       setError("Error submitting feedback: " + err.message);
     } finally {
@@ -115,57 +192,147 @@ export default function GraderDashboard() {
     }
   };
 
-  const handleSelectSubmission = (submission) => {
-    setSelectedSubmission(submission);
-    setTabs("submissions");
-    setFeedback("");
-    setMarks("");
-    setTestResults([]);
-  };
-
-  if (loading) {
-    return <div className="grader-dashboard"><div className="loading">Loading submissions...</div></div>;
+  // Show test case manager if selected
+  if (showTestCaseManager && selectedAssignment) {
+    return (
+      <TestCaseManager
+        assignment={selectedAssignment}
+        onBack={() => {
+          setShowTestCaseManager(false);
+          setSelectedAssignment(null);
+        }}
+        token={token}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+      />
+    );
   }
 
+  if (loading) {
+    return (
+      <div className="grader-dashboard">
+        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-secondary)" }}>
+          <p>📋 Loading assignments...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show assignment selection
+  if (!selectedAssignment) {
+    return (
+      <div className="grader-dashboard">
+        <div className="dashboard-header">
+          <h1>✅ Grader Dashboard</h1>
+          <p>Select an assignment to view and grade submissions</p>
+        </div>
+
+        {error && <div className="error-banner">{error}</div>}
+
+        <div className="assignments-grid">
+          {assignments.length === 0 ? (
+            <div className="empty-state">
+              <p>No assignments available</p>
+            </div>
+          ) : (
+            assignments.map((assignment) => (
+              <div
+                key={assignment.id}
+                className="assignment-card"
+              >
+                <div className="card-header">
+                  <h3>{assignment.title}</h3>
+                  <span className="total-marks">Total: {assignment.totalMarks || 100}</span>
+                </div>
+                <p className="description">{assignment.description || "No description"}</p>
+                <p className="due-date">
+                  📅 Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                </p>
+                <div className="card-buttons">
+                  <button 
+                    className="btn-select"
+                    onClick={() => handleAssignmentClick(assignment)}
+                  >
+                    Grade Submissions →
+                  </button>
+                  <button 
+                    className="btn-manage-tests"
+                    onClick={() => {
+                      setSelectedAssignment(assignment);
+                      setShowTestCaseManager(true);
+                    }}
+                  >
+                    Manage Test Cases
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Show submissions and grading interface
   return (
     <div className="grader-dashboard">
-      <div className="grader-header">
-        <h1>Grader Dashboard</h1>
-        <p>Review and grade student submissions</p>
+      {/* Theme Toggle */}
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        className="theme-toggle"
+        title="Toggle theme"
+      >
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+
+      <div className="dashboard-header">
+        <button className="btn-back" onClick={handleBackToAssignments}>
+          ← Back to Assignments
+        </button>
+        <div>
+          <h1>{selectedAssignment.title}</h1>
+          <p>Total Marks: {selectedAssignment.totalMarks || 100}</p>
+        </div>
       </div>
 
+      {error && <div className="error-banner">{error}</div>}
+      {successMessage && <div className="success-banner">{successMessage}</div>}
+
       <div className="grader-container">
-        {/* Left Panel - Submissions List */}
-        <div className="submissions-panel">
-          <h2>All Submissions ({submissions.length})</h2>
+        {/* Submissions List */}
+        <div className="submissions-list-panel">
+          <h2>📋 Submissions ({submissions.length})</h2>
+
           <div className="submissions-list">
             {submissions.length === 0 ? (
-              <p className="no-submissions">No submissions found</p>
+              <div className="empty-message">
+                <p>No submissions for this assignment</p>
+              </div>
             ) : (
               submissions.map((submission) => (
                 <div
                   key={submission.id}
-                  className={`submission-item ${
-                    selectedSubmission?.id === submission.id ? "active" : ""
-                  }`}
-                  onClick={() => handleSelectSubmission(submission)}
+                  className={`submission-item ${selectedSubmission?.id === submission.id ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedSubmission(submission);
+                    setTab("details");
+                    setCodeContent("");
+                    setTestResults([]);
+                    setMarks("");
+                    setFeedback("");
+                  }}
                 >
-                  <div className="submission-header">
-                    <h4>{submission.fileName}</h4>
+                  <div className="submission-top">
+                    <span className="student-id">👤 Student {submission.studentId}</span>
                     <span className={`status-badge status-${submission.status}`}>
                       {submission.status}
                     </span>
                   </div>
-                  <p className="submission-meta">
-                    Student ID: {submission.studentId}
+                  <p className="submitted-date">
+                    📅 {new Date(submission.submittedAt).toLocaleDateString()}
                   </p>
-                  <p className="submission-meta">
-                    Uploaded: {new Date(submission.uploadedAt).toLocaleString()}
-                  </p>
-                  {submission.marks && (
-                    <p className="submission-marks">
-                      Marks: {submission.marks}/{submission.totalMarks}
-                    </p>
+                  {submission.marks !== null && submission.marks !== undefined && (
+                    <p className="marks-info">⭐ Marks: {submission.marks}</p>
                   )}
                 </div>
               ))
@@ -173,65 +340,49 @@ export default function GraderDashboard() {
           </div>
         </div>
 
-        {/* Right Panel - Submission Details */}
-        <div className="details-panel">
+        {/* Submission Details */}
+        <div className="submission-details-panel">
           {selectedSubmission ? (
             <>
-              <div className="details-header">
-                <h2>{selectedSubmission.fileName}</h2>
+              <div className="submission-header">
+                <div>
+                  <h2>Student {selectedSubmission.studentId}</h2>
+                  <p>Submitted: {new Date(selectedSubmission.submittedAt).toLocaleString()}</p>
+                </div>
                 <span className={`status-badge status-${selectedSubmission.status}`}>
                   {selectedSubmission.status}
                 </span>
               </div>
 
-              <div className="details-tabs">
+              <div className="tabs">
                 <button
-                  className={`tab-button ${tabs === "submissions" ? "active" : ""}`}
-                  onClick={() => setTabs("submissions")}
+                  className={`tab ${tab === "details" ? "active" : ""}`}
+                  onClick={() => setTab("details")}
                 >
-                  Details
+                  📝 Details
                 </button>
                 <button
-                  className={`tab-button ${tabs === "code" ? "active" : ""}`}
+                  className={`tab ${tab === "code" ? "active" : ""}`}
                   onClick={() => {
-                    setTabs("code");
+                    setTab("code");
                     handleViewCode(selectedSubmission);
                   }}
                 >
-                  Code
+                  💻 Code
                 </button>
                 <button
-                  className={`tab-button ${tabs === "feedback" ? "active" : ""}`}
-                  onClick={() => setTabs("feedback")}
+                  className={`tab ${tab === "feedback" ? "active" : ""}`}
+                  onClick={() => setTab("feedback")}
                 >
-                  Feedback & Tests
+                  💬 Feedback
                 </button>
               </div>
 
-              {error && <div className="error-message">{error}</div>}
-
-              {tabs === "submissions" && (
-                <div className="details-content">
+              {tab === "details" && (
+                <div className="tab-content">
                   <div className="detail-item">
                     <label>Student ID:</label>
                     <span>{selectedSubmission.studentId}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Assignment ID:</label>
-                    <span>{selectedSubmission.assignmentId}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Uploaded:</label>
-                    <span>
-                      {new Date(selectedSubmission.uploadedAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Current Marks:</label>
-                    <span>
-                      {selectedSubmission.marks || "Not graded"} /{" "}
-                      {selectedSubmission.totalMarks}
-                    </span>
                   </div>
                   <div className="detail-item">
                     <label>Status:</label>
@@ -239,65 +390,77 @@ export default function GraderDashboard() {
                       {selectedSubmission.status}
                     </span>
                   </div>
-
-                  <div className="action-buttons">
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => handleRunTests(selectedSubmission)}
-                      disabled={runningTests}
-                    >
-                      {runningTests ? "Running Tests..." : "Run Test Cases"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tabs === "code" && showCodeViewer && (
-                <div className="details-content">
-                  <div className="code-viewer">
-                    <div className="code-header">
-                      <h4>{codeName}</h4>
+                  {selectedSubmission.marks !== null && (
+                    <div className="detail-item">
+                      <label>Marks:</label>
+                      <span>{selectedSubmission.marks}/{selectedSubmission.totalMarks || 100}</span>
                     </div>
-                    <pre className="code-content">
-                      <code>{codeContent}</code>
-                    </pre>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {tabs === "feedback" && (
-                <div className="details-content">
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleRunTests(selectedSubmission)}
+                    disabled={runningTests}
+                    style={{ marginTop: "1.5rem", width: "100%" }}
+                  >
+                    {runningTests ? "⏳ Running..." : "▶ Run Tests"}
+                  </button>
+
                   {testResults.length > 0 && (
-                    <div className="test-results">
-                      <h4>Test Results</h4>
+                    <div className="test-results" style={{ marginTop: "1.5rem" }}>
+                      <h4>🧪 Test Results</h4>
                       <div className="results-list">
                         {testResults.map((result, idx) => (
-                          <div key={idx} className="result-item">
-                            <div className={`result-status ${result.passed ? "passed" : "failed"}`}>
-                              {result.passed ? "✓ PASSED" : "✗ FAILED"}
-                            </div>
-                            <div className="result-info">
+                          <div
+                            key={idx}
+                            className={`result-item ${result.passed ? "passed" : "failed"}`}
+                          >
+                            <span className={`badge ${result.passed ? "pass" : "fail"}`}>
+                              {result.passed ? "✓ PASS" : "✗ FAIL"}
+                            </span>
+                            <div className="result-text">
                               <p className="test-name">{result.testName}</p>
-                              <p className="test-output">{result.output}</p>
+                              {!result.passed && (
+                                <p className="error-text">Expected: {result.expectedOutput}</p>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
+                </div>
+              )}
 
+              {tab === "code" && (
+                <div className="tab-content">
+                  {codeContent ? (
+                    <div className="code-viewer">
+                      <div className="code-header">
+                        <h4>📄 {codeName}</h4>
+                      </div>
+                      <pre className="code-content">
+                        <code>{codeContent}</code>
+                      </pre>
+                    </div>
+                  ) : (
+                    <p className="empty-message">Loading code...</p>
+                  )}
+                </div>
+              )}
+
+              {tab === "feedback" && (
+                <div className="tab-content">
                   <div className="feedback-form">
-                    <h4>Provide Feedback</h4>
-
                     <div className="form-group">
-                      <label>Marks *</label>
+                      <label>Marks (0-{selectedAssignment.totalMarks || 100}) *</label>
                       <input
                         type="number"
+                        min="0"
+                        max={selectedAssignment.totalMarks || 100}
                         value={marks}
                         onChange={(e) => setMarks(e.target.value)}
-                        placeholder="Enter marks (0-100)"
-                        min="0"
-                        max="100"
+                        placeholder="Enter marks"
                       />
                     </div>
 
@@ -306,8 +469,8 @@ export default function GraderDashboard() {
                       <textarea
                         value={feedback}
                         onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Write your feedback here..."
-                        rows="6"
+                        placeholder="Write feedback for the student..."
+                        rows="8"
                       ></textarea>
                     </div>
 
@@ -315,16 +478,17 @@ export default function GraderDashboard() {
                       className="btn btn-success"
                       onClick={handleSubmitFeedback}
                       disabled={submittingFeedback}
+                      style={{ width: "100%" }}
                     >
-                      {submittingFeedback ? "Submitting..." : "Submit Feedback"}
+                      {submittingFeedback ? "⏳ Submitting..." : "✓ Submit Feedback"}
                     </button>
                   </div>
                 </div>
               )}
             </>
           ) : (
-            <div className="no-selection">
-              <p>Select a submission to view details</p>
+            <div className="empty-state">
+              <p>👈 Select a submission to view details</p>
             </div>
           )}
         </div>

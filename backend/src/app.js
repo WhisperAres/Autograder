@@ -7,7 +7,30 @@ const graderRoutes = require("./auth/grader.routes");
 const adminRoutes = require("./auth/admin.routes");
 const verifyToken = require("./middlewares/verify.middleware");
 
+// Import all models for association setup
+const User = require("./models/user");
+const Assignment = require("./models/assignment");
+const Submission = require("./models/submission");
+const CodeFile = require("./models/codeFile");
+const TestCase = require("./models/testCase");
+const TestResult = require("./models/testResult");
+
 const app = express();
+
+// Setup model associations (must be done before routes are used)
+Submission.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
+Submission.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
+Submission.hasMany(CodeFile, { foreignKey: 'submissionId', as: 'codeFiles' });
+Submission.hasMany(TestResult, { foreignKey: 'submissionId', as: 'testResults' });
+
+CodeFile.belongsTo(Submission, { foreignKey: 'submissionId' });
+
+TestCase.belongsTo(Assignment, { foreignKey: 'assignmentId' });
+TestResult.belongsTo(Submission, { foreignKey: 'submissionId' });
+TestResult.belongsTo(TestCase, { foreignKey: 'testCaseId', as: 'testCase' });
+
+Assignment.hasMany(TestCase, { foreignKey: 'assignmentId', as: 'testCases' });
+Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
 
 // Middleware
 app.use(cors());
