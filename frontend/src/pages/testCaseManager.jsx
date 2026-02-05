@@ -184,7 +184,7 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
               <div className="form-group">
                 <label>Test Code *</label>
                 <textarea
-                  placeholder="Write your test code here"
+                  placeholder="Enter test code with assertions (e.g., assertEquals(5+5, 10), assertTrue(isValid()))"
                   value={newTestCase.testCode}
                   onChange={(e) =>
                     setNewTestCase({ ...newTestCase, testCode: e.target.value })

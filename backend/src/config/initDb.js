@@ -14,6 +14,8 @@ const Submission = require('../models/submission');
 const CodeFile = require('../models/codeFile');
 const TestCase = require('../models/testCase');
 const TestResult = require('../models/testResult');
+const GraderSolution = require('../models/graderSolution');
+const GraderSolutionFile = require('../models/graderSolutionFile');
 const bcrypt = require('bcryptjs');
 
 const initializeDatabase = async () => {
@@ -36,6 +38,15 @@ const initializeDatabase = async () => {
     
     Assignment.hasMany(TestCase, { foreignKey: 'assignmentId' });
     Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
+    
+    // Grader Solution associations
+    GraderSolution.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
+    GraderSolution.belongsTo(User, { foreignKey: 'graderId', as: 'grader' });
+    GraderSolution.hasMany(GraderSolutionFile, { foreignKey: 'solutionId', as: 'files' });
+    
+    GraderSolutionFile.belongsTo(GraderSolution, { foreignKey: 'solutionId' });
+    
+    Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolutions' });
     
     console.log('🔄 Syncing database models...');
     await sequelize.sync({ alter: false });

@@ -36,6 +36,8 @@ export default function AdminDashboard() {
   const [selectedUserRole, setSelectedUserRole] = useState("");
   const [submissionMarks, setSubmissionMarks] = useState("");
   const [testResults, setTestResults] = useState(null);
+  const [bulkTestsRunning, setBulkTestsRunning] = useState(false);
+  const [bulkTestResults, setBulkTestResults] = useState(null);
 
   // Fetch all data
   useEffect(() => {
@@ -197,6 +199,36 @@ export default function AdminDashboard() {
     }
   };
 
+  // Run tests for all students in assignment
+  const handleBulkRunTests = async () => {
+    if (!selectedAssignment) return;
+
+    setBulkTestsRunning(true);
+    setError("");
+    setBulkTestResults(null);
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/admin/assignments/${selectedAssignment.id}/run-all-tests`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to run tests");
+
+      const data = await response.json();
+      setBulkTestResults(data);
+      setError("");
+      alert(`Bulk test completed! Results saved.`);
+    } catch (err) {
+      setError("Error running bulk tests: " + err.message);
+    } finally {
+      setBulkTestsRunning(false);
+    }
+  };
+
   // Download marks CSV
   const handleDownloadCSV = async (assignmentId) => {
     try {
@@ -270,21 +302,55 @@ export default function AdminDashboard() {
 
       {error && <div className="error-message">{error}</div>}
 
-      {/* Main Tabs */}
-      <div className="main-tabs">
-        <button
-          className={`tab-btn ${activeTab === "assignments" ? "active" : ""}`}
-          onClick={() => { setActiveTab("assignments"); setSelectedAssignment(null); }}
-        >
-          📋 Assignments
-        </button>
-        <button
-          className={`tab-btn ${activeTab === "users" ? "active" : ""}`}
-          onClick={() => { setActiveTab("users"); setSelectedUserRole("student"); }}
-        >
-          👥 Users
-        </button>
-      </div>
+      {/* Main Tabs or Assignment Header */}
+      {!selectedAssignment ? (
+        <>
+          {/* Main Tabs */}
+          <div className="main-tabs">
+            <button
+              className={`tab-btn ${activeTab === "assignments" ? "active" : ""}`}
+              onClick={() => { setActiveTab("assignments"); setSelectedAssignment(null); }}
+            >
+              📋 Assignments
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "users" ? "active" : ""}`}
+              onClick={() => { setActiveTab("users"); setSelectedUserRole("student"); }}
+            >
+              👥 Users
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Assignment Header with Back Button */}
+          <div style={{
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            padding: "20px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "20px",
+            flexWrap: "wrap"
+          }}>
+            <button 
+              className="btn-back" 
+              onClick={() => setSelectedAssignment(null)}
+              style={{ fontSize: "1rem", padding: "8px 16px" }}
+            >
+              ← Back to Assignments
+            </button>
+            <h1 style={{ margin: 0, flex: 1, minWidth: "200px" }}>
+              {selectedAssignment.title}
+            </h1>
+            <button className="btn btn-danger" onClick={() => {
+              handleDeleteAssignment(selectedAssignment.id);
+            }}>🗑️ Delete</button>
+          </div>
+        </>
+      )}
 
       {/* ASSIGNMENTS TAB */}
       {activeTab === "assignments" && (
@@ -379,14 +445,6 @@ export default function AdminDashboard() {
             <>
               {/* Assignment Details */}
               <div className="assignment-details-section">
-                <div className="back-header">
-                  <button className="btn-back" onClick={() => setSelectedAssignment(null)}>← Back</button>
-                  <h2>{selectedAssignment.title}</h2>
-                  <button className="btn btn-danger" onClick={() => {
-                    handleDeleteAssignment(selectedAssignment.id);
-                  }}>🗑️ Delete</button>
-                </div>
-
                 <div className="details-tabs">
                   <button
                     className={`tab-btn ${detailsTab === "submissions" ? "active" : ""}`}
@@ -395,82 +453,152 @@ export default function AdminDashboard() {
                     📝 Submissions ({assignmentSubmissions.length})
                   </button>
                   <button
-                    className={`tab-btn ${detailsTab === "code" ? "active" : ""}`}
-                    onClick={() => setDetailsTab("code")}
-                  >
-                    👀 Code
-                  </button>
-                  <button
                     className={`tab-btn ${detailsTab === "marks" ? "active" : ""}`}
                     onClick={() => setDetailsTab("marks")}
                   >
                     ✏️ Edit Marks
                   </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleBulkRunTests}
+                    disabled={bulkTestsRunning || assignmentSubmissions.length === 0}
+                    style={{ marginLeft: "auto" }}
+                  >
+                    {bulkTestsRunning ? "⏳ Running..." : "🧪 Run Tests for All"}
+                  </button>
                 </div>
+
+                {bulkTestResults && (
+                  <div style={{
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid var(--primary)",
+                    borderRadius: "8px",
+                    padding: "15px",
+                    marginBottom: "20px"
+                  }}>
+                    <h4 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>Bulk Test Results</h4>
+                    <p style={{ margin: 0 }}>✅ Passed: {bulkTestResults.passCount || 0} | ❌ Failed: {bulkTestResults.failCount || 0}</p>
+                  </div>
+                )}
 
                 {/* Submissions List */}
                 {detailsTab === "submissions" && (
-                  <div className="submissions-list">
+                  <div style={{ maxHeight: "800px", overflowY: "auto" }}>
                     {assignmentSubmissions.length === 0 ? (
                       <p>No submissions yet</p>
                     ) : (
                       assignmentSubmissions.map(submission => (
                         <div
                           key={submission.id}
-                          className={`submission-item ${selectedSubmission?.id === submission.id ? "active" : ""}`}
+                          style={{
+                            background: "var(--bg-secondary)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            marginBottom: "15px",
+                            cursor: "pointer",
+                            transition: "all 0.3s ease",
+                          }}
                           onClick={() => {
-                            setSelectedSubmission(submission);
+                            setSelectedSubmission(submission.id === selectedSubmission?.id ? null : submission);
                             setSubmissionMarks(submission.marks || "");
                           }}
                         >
-                          <div className="submission-info">
-                            <h4>{submission.student?.name || "Unknown"}</h4>
-                            <p className="submission-email">{submission.student?.email}</p>
-                            <div className="submission-meta">
-                              <span className={`status-badge ${submission.status}`}>{submission.status}</span>
-                              <span className="marks-badge">{submission.marks || 0}/{submission.totalMarks}</span>
-                              <span>{new Date(submission.submittedAt).toLocaleString()}</span>
+                          <div style={{
+                            padding: "15px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: "15px",
+                            flexWrap: "wrap"
+                          }}>
+                            <div style={{ flex: 1, minWidth: "200px" }}>
+                              <h4 style={{ margin: "0 0 5px 0", color: "var(--primary)" }}>
+                                {submission.student?.name || "Unknown Student"}
+                              </h4>
+                              <p style={{ margin: "0 0 8px 0", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                                {submission.student?.email}
+                              </p>
+                              <div style={{ display: "flex", gap: "15px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                                <span className={`status-badge ${submission.status}`}>{submission.status}</span>
+                                <span className="marks-badge">{submission.marks || 0}/{submission.totalMarks}</span>
+                                <span>📅 {new Date(submission.submittedAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: "1.2rem", color: "var(--text-muted)" }}>
+                              {selectedSubmission?.id === submission.id ? "▼" : "▶"}
                             </div>
                           </div>
+
+                          {/* Inline Code View */}
+                          {selectedSubmission?.id === submission.id && (
+                            <div style={{
+                              borderTop: "1px solid var(--border)",
+                              padding: "15px",
+                              background: "var(--dark-secondary)"
+                            }}>
+                              {submission.codeFiles && submission.codeFiles.length > 0 ? (
+                                submission.codeFiles.map((file, idx) => (
+                                  <div key={idx} style={{ marginBottom: idx < submission.codeFiles.length - 1 ? "20px" : "0" }}>
+                                    <h5 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>
+                                      📄 {file.fileName}
+                                    </h5>
+                                    <pre style={{
+                                      background: "var(--bg-secondary)",
+                                      padding: "12px",
+                                      borderRadius: "6px",
+                                      overflow: "auto",
+                                      maxHeight: "300px",
+                                      margin: 0,
+                                      fontSize: "0.8rem",
+                                      color: "var(--text-secondary)",
+                                      border: "1px solid var(--border)"
+                                    }}>
+                                      <code>{file.fileContent}</code>
+                                    </pre>
+                                  </div>
+                                ))
+                              ) : (
+                                <p style={{ margin: 0, color: "var(--text-muted)" }}>No code files</p>
+                              )}
+
+                              <button
+                                className="btn btn-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRunTests(submission.id);
+                                }}
+                                style={{ marginTop: "15px", width: "100%" }}
+                              >
+                                ▶️ Run Tests for This Submission
+                              </button>
+
+                              {testResults && (
+                                <div style={{ marginTop: "15px" }}>
+                                  <h5 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>Test Results:</h5>
+                                  {testResults.map((result, idx) => (
+                                    <div key={idx} style={{
+                                      padding: "10px",
+                                      marginBottom: "8px",
+                                      borderRadius: "6px",
+                                      background: result.passed ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                                      border: `1px solid ${result.passed ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+                                    }}>
+                                      <p style={{ margin: 0, fontWeight: 600, color: result.passed ? "var(--primary)" : "#dc2626" }}>
+                                        {result.passed ? "✅" : "❌"} {result.testName}
+                                      </p>
+                                      {!result.passed && result.errorMessage && (
+                                        <p style={{ margin: "5px 0 0 0", fontSize: "0.85rem", color: "#fca5a5" }}>
+                                          {result.errorMessage}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))
-                    )}
-                  </div>
-                )}
-
-                {/* Code View */}
-                {detailsTab === "code" && selectedSubmission && (
-                  <div className="code-view">
-                    {selectedSubmission.codeFiles && selectedSubmission.codeFiles.length > 0 ? (
-                      selectedSubmission.codeFiles.map((file, idx) => (
-                        <div key={idx} className="code-file">
-                          <div className="code-header">
-                            <h4>{file.fileName}</h4>
-                          </div>
-                          <pre><code>{file.fileContent}</code></pre>
-                        </div>
-                      ))
-                    ) : (
-                      <p>No code files found</p>
-                    )}
-
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => handleRunTests(selectedSubmission.id)}
-                    >
-                      ▶️ Run Tests
-                    </button>
-
-                    {testResults && (
-                      <div className="test-results">
-                        <h4>Test Results:</h4>
-                        {testResults.map((result, idx) => (
-                          <div key={idx} className={`test-result ${result.passed ? "passed" : "failed"}`}>
-                            <p><strong>{result.testName}</strong> - {result.passed ? "✅ PASSED" : "❌ FAILED"}</p>
-                            {!result.passed && result.errorMessage && <p className="error">{result.errorMessage}</p>}
-                          </div>
-                        ))}
-                      </div>
                     )}
                   </div>
                 )}

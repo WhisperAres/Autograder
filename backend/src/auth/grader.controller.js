@@ -3,9 +3,28 @@ const Assignment = require("../models/assignment");
 const CodeFile = require("../models/codeFile");
 const TestCase = require("../models/testCase");
 const TestResult = require("../models/testResult");
+const GraderSolution = require("../models/graderSolution");
+const GraderSolutionFile = require("../models/graderSolutionFile");
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
+
+// Detect Java executable path (handle both Windows and Unix)
+const getJavaExecutable = () => {
+  const isWindows = os.platform() === 'win32';
+  const javaCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\java.exe"` : 'java';
+  return javaCmd;
+};
+
+const getJavacExecutable = () => {
+  const isWindows = os.platform() === 'win32';
+  const javacCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\javac.exe"` : 'javac';
+  return javacCmd;
+};
+
+const JAVA_CMD = getJavaExecutable();
+const JAVAC_CMD = getJavacExecutable();
 
 // Get all assignments (for grader to select from)
 exports.getAssignments = async (req, res) => {
@@ -115,9 +134,10 @@ exports.runTestCases = async (req, res) => {
           // Determine how to execute based on file type
           let command = "";
           if (mainFile.fileName.endsWith(".java")) {
-            // For Java
+            // For Java - compile all .java files together to handle dependencies
             const className = mainFile.fileName.replace(".java", "");
-            command = `cd "${tempDir}" && javac ${mainFile.fileName} && java ${className}`;
+            const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java")).map(f => f.fileName).join(" ");
+            command = `cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles} && ${JAVA_CMD} ${className}`;
           } else if (mainFile.fileName.endsWith(".js")) {
             // For JavaScript/Node
             command = `cd "${tempDir}" && node ${mainFile.fileName}`;
@@ -324,5 +344,413 @@ exports.updateSubmissionStatus = async (req, res) => {
   } catch (error) {
     console.error("Error updating submission:", error);
     res.status(500).json({ message: "Error updating submission" });
+  }
+};
+// Upload grader's own solution
+exports.uploadGraderSolution = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const graderId = req.user.id;
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files provided" });
+    }
+
+    // Create grader solution record
+    const solution = await GraderSolution.create({
+      assignmentId: parseInt(assignmentId),
+      graderId
+    });
+
+    // Save all files
+    const savedFiles = await Promise.all(
+      req.files.map(file => 
+        GraderSolutionFile.create({
+          solutionId: solution.id,
+          fileName: file.originalname,
+          fileContent: file.buffer.toString('utf-8')
+        })
+      )
+    );
+
+    const files = savedFiles.map(f => ({
+      id: f.id,
+      fileName: f.fileName,
+      fileContent: f.fileContent
+    }));
+
+    res.json({
+      message: "Solutions uploaded successfully",
+      solutionId: solution.id,
+      files,
+      fileCount: files.length
+    });
+  } catch (error) {
+    console.error("Error uploading solution:", error);
+    res.status(500).json({ message: "Error uploading solution" });
+  }
+};
+
+// Run test cases for grader's solution (supports multiple files)
+exports.runGraderTests = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { solutionFiles, solutionId, solutionContent, fileName } = req.body;
+
+    // Support three formats:
+    // 1. solutionId (from database) - fetch files from DB
+    // 2. solutionFiles array (from frontend upload)
+    // 3. solutionContent + fileName (legacy format)
+    
+    let files = [];
+    
+    if (solutionId) {
+      // Fetch from database
+      const solution = await GraderSolution.findByPk(parseInt(solutionId), {
+        include: [{ model: GraderSolutionFile, as: 'files' }]
+      });
+      
+      if (!solution) {
+        return res.status(404).json({ message: "Solution not found" });
+      }
+      
+      files = solution.files.map(f => ({
+        fileName: f.fileName,
+        fileContent: f.fileContent
+      }));
+    } else if (solutionFiles && Array.isArray(solutionFiles)) {
+      files = solutionFiles;
+    } else if (solutionContent && fileName) {
+      files = [{ fileName, fileContent: solutionContent }];
+    }
+    
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: "No solution files provided" });
+    }
+
+    // Get test cases for this assignment
+    const testCases = await TestCase.findAll({
+      where: { assignmentId }
+    });
+
+    if (testCases.length === 0) {
+      return res.json({
+        message: "No test cases found",
+        results: []
+      });
+    }
+
+    const results = [];
+    let passCount = 0;
+    const tempDir = path.join(__dirname, '../../temp', `grader_test_${Date.now()}`);
+
+    // Create temp directory for all files
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    try {
+      // Write all files to temp directory
+      for (const file of files) {
+        const filePath = path.join(tempDir, file.fileName);
+        fs.writeFileSync(filePath, file.fileContent);
+      }
+
+      // Find the main file (Java, Python, or JavaScript)
+      const mainFile = files.find(f => 
+        f.fileName.endsWith('.java') || f.fileName.endsWith('.py') || f.fileName.endsWith('.js')
+      ) || files[0];
+
+      const fileExt = path.extname(mainFile.fileName);
+      const className = path.basename(mainFile.fileName, fileExt);
+
+      for (const testCase of testCases) {
+        try {
+          let testPassed = false;
+          let errorMessage = '';
+          let output = '';
+
+          try {
+            if (fileExt === '.java') {
+              // Compile all Java files together
+              const javaFiles = files.filter(f => f.fileName.endsWith('.java')).map(f => f.fileName).join(' ');
+              execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles}`, { timeout: 5000 });
+              
+              // For Java, create a test file that runs assertions
+              const uniqueId = Date.now();
+              const testFileName = `Test${uniqueId}.java`;
+              const className = `Test${uniqueId}`;
+              const testCode = `public class ${className} {
+    public static void main(String[] args) {
+        try {
+            ${testCase.testCode}
+            System.out.println("PASS");
+        } catch (AssertionError e) {
+            System.out.println("FAIL: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("FAIL: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}`;
+              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+              
+              // Compile and run test
+              output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${className}`, { 
+                timeout: 5000,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe']
+              }).trim();
+              
+              testPassed = output.includes("PASS");
+            } else if (fileExt === '.py') {
+              // For Python, create test file
+              const uniqueId = Date.now();
+              const testFileName = `test${uniqueId}.py`;
+              const testCode = `try:
+    ${testCase.testCode}
+    print("PASS")
+except AssertionError as e:
+    print("FAIL: " + str(e))
+except Exception as e:
+    print("FAIL: " + str(e))
+`;
+              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+              
+              output = execSync(`cd "${tempDir}" && python ${testFileName}`, { 
+                timeout: 5000,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe']
+              }).trim();
+              
+              testPassed = output.includes("PASS");
+            } else if (fileExt === '.js') {
+              // For JavaScript, create test file
+              const uniqueId = Date.now();
+              const testFileName = `test${uniqueId}.js`;
+              const testCode = `try {
+    ${testCase.testCode}
+    console.log("PASS");
+} catch (e) {
+    console.log("FAIL: " + e.message);
+}
+`;
+              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+              
+              output = execSync(`cd "${tempDir}" && node ${testFileName}`, { 
+                timeout: 5000,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe']
+              }).trim();
+              
+              testPassed = output.includes("PASS");
+            }
+          } catch (execError) {
+            testPassed = false;
+            // Capture both stdout and stderr
+            const stderr = execError.stderr?.toString() || '';
+            const stdout = execError.stdout?.toString() || '';
+            errorMessage = stderr || stdout || execError.message || 'Test execution failed';
+          }
+
+          if (testPassed) passCount++;
+
+          results.push({
+            testName: testCase.testName,
+            passed: testPassed,
+            errorMessage: testPassed ? null : errorMessage,
+            marks: testCase.marks
+          });
+        } catch (err) {
+          results.push({
+            testName: testCase.testName,
+            passed: false,
+            errorMessage: err.message,
+            marks: testCase.marks
+          });
+        }
+      }
+    } finally {
+      // Clean up temp directory
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (e) {
+        console.error('Error cleaning temp directory:', e);
+      }
+    }
+
+    res.json({
+      message: "Tests completed",
+      results,
+      passCount,
+      totalCount: testCases.length
+    });
+  } catch (error) {
+    console.error("Error running tests:", error);
+    res.status(500).json({ message: "Error running tests" });
+  }
+};
+
+// Get grader's uploaded solutions for an assignment
+exports.getGraderSolutions = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const graderId = req.user.id;
+
+    const solutions = await GraderSolution.findAll({
+      where: { 
+        assignmentId: parseInt(assignmentId),
+        graderId 
+      },
+      include: [{
+        model: GraderSolutionFile,
+        as: 'files',
+        attributes: ['id', 'fileName']
+      }],
+      order: [['uploadedAt', 'DESC']]
+    });
+
+    res.json(solutions || []);
+  } catch (error) {
+    console.error("Error fetching solutions:", error);
+    res.status(500).json({ message: "Error fetching solutions" });
+  }
+};
+
+// Get specific solution with files
+exports.getGraderSolution = async (req, res) => {
+  try {
+    const { solutionId } = req.params;
+    const graderId = req.user.id;
+
+    const solution = await GraderSolution.findOne({
+      where: { 
+        id: parseInt(solutionId),
+        graderId 
+      },
+      include: [{
+        model: GraderSolutionFile,
+        as: 'files'
+      }]
+    });
+
+    if (!solution) {
+      return res.status(404).json({ message: "Solution not found" });
+    }
+
+    res.json(solution);
+  } catch (error) {
+    console.error("Error fetching solution:", error);
+    res.status(500).json({ message: "Error fetching solution" });
+  }
+};
+
+// Get specific file from solution
+exports.getGraderSolutionFile = async (req, res) => {
+  try {
+    const { solutionId, fileId } = req.params;
+    const graderId = req.user.id;
+
+    const solution = await GraderSolution.findOne({
+      where: { 
+        id: parseInt(solutionId),
+        graderId 
+      }
+    });
+
+    if (!solution) {
+      return res.status(404).json({ message: "Solution not found" });
+    }
+
+    const file = await GraderSolutionFile.findOne({
+      where: {
+        id: parseInt(fileId),
+        solutionId: parseInt(solutionId)
+      }
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    res.json(file);
+  } catch (error) {
+    console.error("Error fetching file:", error);
+    res.status(500).json({ message: "Error fetching file" });
+  }
+};
+
+// Delete solution and all its files
+exports.deleteGraderSolution = async (req, res) => {
+  try {
+    const { solutionId } = req.params;
+    const graderId = req.user.id;
+
+    const solution = await GraderSolution.findOne({
+      where: { 
+        id: parseInt(solutionId),
+        graderId 
+      }
+    });
+
+    if (!solution) {
+      return res.status(404).json({ message: "Solution not found" });
+    }
+
+    // Delete all files first
+    await GraderSolutionFile.destroy({
+      where: { solutionId: parseInt(solutionId) }
+    });
+
+    // Delete solution
+    await solution.destroy();
+
+    res.json({ message: "Solution deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting solution:", error);
+    res.status(500).json({ message: "Error deleting solution" });
+  }
+};
+
+// Delete specific file from solution
+exports.deleteGraderSolutionFile = async (req, res) => {
+  try {
+    const { solutionId, fileId } = req.params;
+    const graderId = req.user.id;
+
+    const solution = await GraderSolution.findOne({
+      where: { 
+        id: parseInt(solutionId),
+        graderId 
+      }
+    });
+
+    if (!solution) {
+      return res.status(404).json({ message: "Solution not found" });
+    }
+
+    const file = await GraderSolutionFile.findOne({
+      where: {
+        id: parseInt(fileId),
+        solutionId: parseInt(solutionId)
+      }
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    await file.destroy();
+
+    // Get remaining files
+    const remainingFiles = await GraderSolutionFile.findAll({
+      where: { solutionId: parseInt(solutionId) }
+    });
+
+    res.json({ 
+      message: "File deleted successfully",
+      remainingFiles 
+    });
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    res.status(500).json({ message: "Error deleting file" });
   }
 };

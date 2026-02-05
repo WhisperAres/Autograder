@@ -14,6 +14,8 @@ const Submission = require("./models/submission");
 const CodeFile = require("./models/codeFile");
 const TestCase = require("./models/testCase");
 const TestResult = require("./models/testResult");
+const GraderSolution = require("./models/graderSolution");
+const GraderSolutionFile = require("./models/graderSolutionFile");
 
 const app = express();
 
@@ -31,6 +33,13 @@ TestResult.belongsTo(TestCase, { foreignKey: 'testCaseId', as: 'testCase' });
 
 Assignment.hasMany(TestCase, { foreignKey: 'assignmentId', as: 'testCases' });
 Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
+
+// Grader Solution associations
+GraderSolution.hasMany(GraderSolutionFile, { foreignKey: 'solutionId', as: 'files' });
+GraderSolutionFile.belongsTo(GraderSolution, { foreignKey: 'solutionId' });
+GraderSolution.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
+GraderSolution.belongsTo(User, { foreignKey: 'graderId', as: 'grader' });
+Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolutions' });
 
 // Middleware
 app.use(cors());

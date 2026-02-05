@@ -5,6 +5,26 @@ const CodeFile = require("../models/codeFile");
 const TestCase = require("../models/testCase");
 const TestResult = require("../models/testResult");
 const bcrypt = require("bcryptjs");
+const os = require("os");
+const path = require("path");
+const fs = require("fs");
+const { execSync } = require("child_process");
+
+// Detect Java executable path (handle both Windows and Unix)
+const getJavaExecutable = () => {
+  const isWindows = os.platform() === 'win32';
+  const javaCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\java.exe"` : 'java';
+  return javaCmd;
+};
+
+const getJavacExecutable = () => {
+  const isWindows = os.platform() === 'win32';
+  const javacCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\javac.exe"` : 'javac';
+  return javacCmd;
+};
+
+const JAVA_CMD = getJavaExecutable();
+const JAVAC_CMD = getJavacExecutable();
 
 // ==================== USER MANAGEMENT ====================
 
@@ -352,37 +372,73 @@ exports.runTestCases = async (req, res) => {
         let errorMessage = "";
 
         try {
-          const mainFile = codeFiles.find(f =>
-            f.fileName.endsWith(".java") || f.fileName.endsWith(".js")
-          ) || codeFiles[0];
-
+          const codeFileExtensions = codeFiles.map(f => path.extname(f.fileName))[0];
+          let actualOutput = "";
           let command = "";
-          if (mainFile.fileName.endsWith(".java")) {
-            const className = mainFile.fileName.replace(".java", "");
-            command = `cd "${tempDir}" && javac ${mainFile.fileName} && java ${className}`;
-          } else if (mainFile.fileName.endsWith(".js")) {
-            command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-          } else if (mainFile.fileName.endsWith(".py")) {
-            command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+
+          // Compile all Java files first if there are any
+          const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+          if (javaFiles.length > 0) {
+            const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
+              timeout: 5000,
+              stdio: ['pipe', 'pipe', 'pipe']
+            });
           }
 
-          if (command) {
-            if (testCase.input) {
-              actualOutput = execSync(command, {
-                input: testCase.input,
-                encoding: "utf8",
-                stdio: ["pipe", "pipe", "pipe"],
-                timeout: 5000
-              }).trim();
-            } else {
-              actualOutput = execSync(command, {
-                encoding: "utf8",
-                timeout: 5000
-              }).trim();
+          if (codeFileExtensions === ".java" || javaFiles.length > 0) {
+            // For Java, create a test file that runs the test code as a harness
+            const uniqueId = Date.now();
+            const testFileName = `Test${uniqueId}.java`;
+            const testClassName = `Test${uniqueId}`;
+            const testCode = `public class ${testClassName} {
+    public static void main(String[] args) {
+        try {
+            ${testCase.testCode}
+            System.out.println("PASS");
+        } catch (AssertionError e) {
+            System.out.println("FAIL: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("FAIL: " + e.getMessage());
+        }
+    }
+}`;
+            fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+            command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+            actualOutput = execSync(command, {
+              encoding: "utf8",
+              timeout: 5000,
+              stdio: ['pipe', 'pipe', 'pipe']
+            }).trim();
+          } else {
+            const mainFile = codeFiles.find(f =>
+              f.fileName.endsWith(".js")
+            ) || codeFiles[0];
+
+            if (mainFile.fileName.endsWith(".js")) {
+              command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+            } else if (mainFile.fileName.endsWith(".py")) {
+              command = `cd "${tempDir}" && python ${mainFile.fileName}`;
             }
 
-            passed = actualOutput === testCase.expectedOutput.trim();
+            if (command) {
+              if (testCase.input) {
+                actualOutput = execSync(command, {
+                  input: testCase.input,
+                  encoding: "utf8",
+                  stdio: ["pipe", "pipe", "pipe"],
+                  timeout: 5000
+                }).trim();
+              } else {
+                actualOutput = execSync(command, {
+                  encoding: "utf8",
+                  timeout: 5000
+                }).trim();
+              }
+            }
           }
+
+          passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
         } catch (execError) {
           errorMessage = execError.message || "Execution failed";
           passed = false;
@@ -611,10 +667,224 @@ exports.deleteTestCase = async (req, res) => {
       return res.status(404).json({ message: "Test case not found" });
     }
 
+    // Delete all test results associated with this test case first (foreign key constraint)
+    await TestResult.destroy({
+      where: { testCaseId }
+    });
+
+    // Now delete the test case
     await testCase.destroy();
-    res.json({ message: "Test case deleted" });
+    res.json({ message: "Test case deleted successfully" });
   } catch (error) {
     console.error("Error deleting test case:", error);
-    res.status(500).json({ message: "Error deleting test case" });
+    res.status(500).json({ message: "Error deleting test case", error: error.message });
+  }
+};
+
+// ==================== BULK OPERATIONS ====================
+
+// Run test cases for all submissions in an assignment
+exports.runBulkTests = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+
+    const submissions = await Submission.findAll({
+      where: { assignmentId },
+      include: [
+        { model: CodeFile, as: "codeFiles" },
+        { model: Assignment, as: "assignment" }
+      ]
+    });
+
+    if (submissions.length === 0) {
+      return res.json({
+        message: "No submissions found",
+        passCount: 0,
+        failCount: 0,
+        errors: []
+      });
+    }
+
+    let passCount = 0;
+    let failCount = 0;
+    const errors = [];
+    const submissionResults = [];
+
+    for (const submission of submissions) {
+      try {
+        // Get test cases for this assignment
+        const testCases = await TestCase.findAll({
+          where: { assignmentId }
+        });
+
+        if (testCases.length === 0) continue;
+
+        const codeFiles = submission.codeFiles;
+        if (!codeFiles || codeFiles.length === 0) {
+          errors.push(`Submission ${submission.id}: No code files`);
+          failCount += testCases.length;
+          continue;
+        }
+
+        // Create unique temp directory for this submission
+        const tempDir = path.join(__dirname, `../../temp/submission_${submission.id}_${Date.now()}`);
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+        try {
+          // Write all code files to temp directory
+          for (const codeFile of codeFiles) {
+            const filePath = path.join(tempDir, codeFile.fileName);
+            fs.writeFileSync(filePath, codeFile.fileContent, "utf8");
+          }
+
+          // Check if there are Java files
+          const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+          
+          // Compile all Java files if they exist
+          if (javaFiles.length > 0) {
+            try {
+              const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+              execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+                timeout: 10000,
+                stdio: ['pipe', 'pipe', 'pipe']
+              });
+            } catch (compileErr) {
+              const errorMsg = `Submission ${submission.id}: Java compilation failed - ${compileErr.message}`;
+              errors.push(errorMsg);
+              console.error(errorMsg);
+              failCount += testCases.length;
+              continue; // Skip all tests for this submission
+            }
+          }
+
+          // Run each test case
+          for (const testCase of testCases) {
+            try {
+              let passed = false;
+              let actualOutput = "";
+              let errorMessage = "";
+
+              try {
+                if (javaFiles.length > 0) {
+                  // For Java, create a test harness file
+                  const uniqueId = Date.now() + Math.random().toString().slice(2);
+                  const testFileName = `Test${uniqueId}.java`;
+                  const testClassName = `Test${uniqueId}`;
+                  const testCode = `public class ${testClassName} {
+    public static void main(String[] args) {
+        try {
+            ${testCase.testCode}
+            System.out.println("PASS");
+        } catch (AssertionError e) {
+            System.out.println("FAIL: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("FAIL: " + e.getMessage());
+        }
+    }
+}`;
+                  
+                  fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+                  
+                  const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+                  actualOutput = execSync(cmd, {
+                    encoding: "utf8",
+                    timeout: 10000,
+                    stdio: ['pipe', 'pipe', 'pipe']
+                  }).trim();
+                  
+                  passed = actualOutput.includes("PASS");
+                } else {
+                  // For non-Java languages
+                  const mainFile = codeFiles[0];
+                  const fileExt = path.extname(mainFile.fileName);
+                  let command = '';
+
+                  if (fileExt === '.js') {
+                    command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+                  } else if (fileExt === '.py') {
+                    command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+                  }
+
+                  if (command) {
+                    if (testCase.input) {
+                      actualOutput = execSync(command, {
+                        input: testCase.input,
+                        encoding: "utf8",
+                        timeout: 10000,
+                        stdio: ['pipe', 'pipe', 'pipe']
+                      }).trim();
+                    } else {
+                      actualOutput = execSync(command, {
+                        encoding: "utf8",
+                        timeout: 10000,
+                        stdio: ['pipe', 'pipe', 'pipe']
+                      }).trim();
+                    }
+                    passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput?.trim();
+                  }
+                }
+              } catch (execError) {
+                passed = false;
+                actualOutput = "";
+                errorMessage = execError.message || "Execution error";
+              }
+
+              // Save test result
+              await TestResult.create({
+                submissionId: submission.id,
+                testCaseId: testCase.id,
+                passed,
+                actualOutput: passed ? actualOutput : "",
+                errorMessage: !passed ? errorMessage : null
+              });
+
+              if (passed) passCount++;
+              else failCount++;
+
+            } catch (testErr) {
+              failCount++;
+              const errorMsg = `Submission ${submission.id}, Test ${testCase.testName}: ${testErr.message}`;
+              errors.push(errorMsg);
+              console.error(errorMsg);
+            }
+          }
+
+          // Update submission status
+          await submission.update({ status: "evaluated" });
+
+        } finally {
+          // Clean up temp directory
+          try {
+            if (fs.existsSync(tempDir)) {
+              fs.rmSync(tempDir, { recursive: true, force: true });
+            }
+          } catch (cleanupErr) {
+            console.error(`Failed to cleanup temp dir ${tempDir}:`, cleanupErr.message);
+          }
+        }
+
+      } catch (submissionErr) {
+        const errorMsg = `Submission ${submission.id}: ${submissionErr.message}`;
+        errors.push(errorMsg);
+        console.error(errorMsg);
+        failCount += (await TestCase.count({ where: { assignmentId } }));
+      }
+    }
+
+    res.json({
+      message: "Bulk tests completed",
+      passCount,
+      failCount,
+      totalTests: passCount + failCount,
+      successRate: `${Math.round((passCount / (passCount + failCount)) * 100)}%`,
+      errors: errors.length > 0 ? errors : null
+    });
+  } catch (error) {
+    console.error("Error running bulk tests:", error);
+    res.status(500).json({
+      message: "Error running bulk tests",
+      error: error.message,
+      errors: [error.message]
+    });
   }
 };

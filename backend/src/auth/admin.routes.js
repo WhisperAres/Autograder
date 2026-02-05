@@ -32,6 +32,7 @@ router.get("/submissions", checkRole("admin"), adminController.getAllSubmissions
 router.get("/submissions/assignment/:assignmentId", checkRole("admin"), adminController.getSubmissionsByAssignment);
 router.patch("/submissions/:submissionId/marks", checkRole("admin", "ta"), adminController.updateSubmissionMarks);
 router.post("/submissions/:submissionId/run-tests", checkRole("admin", "ta"), adminController.runTestCases);
+router.post("/assignments/:assignmentId/run-all-tests", checkRole("admin"), adminController.runBulkTests);
 
 // ==================== REPORTING & DOWNLOADS ====================
 router.get("/assignments/:assignmentId/marks-report", checkRole("admin"), adminController.getMarksReport);

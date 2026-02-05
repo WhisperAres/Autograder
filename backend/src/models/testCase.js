@@ -18,8 +18,8 @@ const TestCase = sequelize.define('TestCase', {
   },
   testCode: {
     type: DataTypes.TEXT,
-    allowNull: false,
-    comment: 'Java test code with assertions and main function'
+    allowNull: true,
+    comment: 'Test code with assertions (e.g., assertEquals, assertTrue)'
   },
   marks: {
     type: DataTypes.INTEGER,
