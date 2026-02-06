@@ -21,20 +21,29 @@ const Submission = sequelize.define('Submission', {
     allowNull: false,
   },
   marks: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
   totalMarks: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 100,
   },
   status: {
-    type: DataTypes.ENUM('pending', 'evaluated', 'graded'),
+    type: DataTypes.ENUM('pending', 'grading', 'evaluated', 'graded', 'no-code', 'no-tests', 'compilation-error', 'error'),
     defaultValue: 'pending',
   },
   viewTestResults: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
+  },
+  viewMarks: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Toggle to show marks to student'
+  },
+  submittedAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
   },
 }, {
   tableName: 'submissions',

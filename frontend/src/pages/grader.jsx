@@ -341,7 +341,7 @@ export default function GraderDashboard() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ feedback, marks: parseInt(marks) }),
+          body: JSON.stringify({ feedback, marks: parseFloat(marks) }),
         }
       );
 
@@ -352,10 +352,10 @@ export default function GraderDashboard() {
       setFeedback("");
       
       // Update submission status
-      setSelectedSubmission({ ...selectedSubmission, status: "graded", marks: parseInt(marks) });
+      setSelectedSubmission({ ...selectedSubmission, status: "graded", marks: parseFloat(marks) });
       setSubmissions(submissions.map(sub =>
         sub.id === selectedSubmission.id
-          ? { ...sub, status: "graded", marks: parseInt(marks) }
+          ? { ...sub, status: "graded", marks: parseFloat(marks) }
           : sub
       ));
       
@@ -404,7 +404,7 @@ export default function GraderDashboard() {
 
         {error && <div className="error-banner">{error}</div>}
 
-        <div className="assignments-grid">
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {assignments.length === 0 ? (
             <div className="empty-state">
               <p>No assignments available</p>
@@ -413,29 +413,40 @@ export default function GraderDashboard() {
             assignments.map((assignment) => (
               <div
                 key={assignment.id}
-                className="assignment-card"
+                onClick={() => handleAssignmentClick(assignment)}
+                style={{
+                  padding: "12px 16px",
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "16px",
+                  transition: "all 0.15s ease"
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "rgba(16, 185, 129, 0.06)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
               >
-                <div className="card-header">
-                  <h3>{assignment.title}</h3>
-                  <span className="total-marks">Total: {assignment.totalMarks || 100}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h4 style={{ margin: "0 0 4px 0", color: "var(--primary)" }}>{assignment.title}</h4>
+                  <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", display: "flex", gap: "12px", alignItems: "center" }}>
+                    <span>📌 {assignment.totalMarks || 100} marks</span>
+                    <span>📅 {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : "No due date"}</span>
+                  </div>
                 </div>
-                <p className="description">{assignment.description || "No description"}</p>
-                <p className="due-date">
-                  📅 Due: {new Date(assignment.dueDate).toLocaleDateString()}
-                </p>
-                <div className="card-buttons">
-                  <button 
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
                     className="btn-select"
-                    onClick={() => handleAssignmentClick(assignment)}
+                    onClick={(e) => { e.stopPropagation(); handleAssignmentClick(assignment); }}
                   >
                     Grade Submissions →
                   </button>
-                  <button 
+                  <button
                     className="btn-manage-tests"
-                    onClick={() => {
-                      setSelectedAssignment(assignment);
-                      setShowTestCaseManager(true);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); setSelectedAssignment(assignment); setShowTestCaseManager(true); }}
                     title="Edit test cases for this assignment"
                   >
                     ✏️ Edit Test Cases

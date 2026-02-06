@@ -62,6 +62,11 @@ export default function Dashboard({ handleLogout, user }) {
     };
 
     fetchData();
+
+    // Poll for updates every 5 seconds to catch admin mark visibility changes
+    const interval = setInterval(fetchData, 5000);
+
+    return () => clearInterval(interval);
   }, [navigate]);
 
   const handleAssignmentClick = (assignment) => {
@@ -71,6 +76,14 @@ export default function Dashboard({ handleLogout, user }) {
     const submission = submissions.find((s) => s.assignmentId === assignment.id);
     setAssignmentSubmission(submission || null);
   };
+
+  // Update assignmentSubmission when submissions are refetched (polls)
+  useEffect(() => {
+    if (selectedAssignment && submissions.length > 0) {
+      const updatedSubmission = submissions.find((s) => s.assignmentId === selectedAssignment.id);
+      setAssignmentSubmission(updatedSubmission || null);
+    }
+  }, [submissions, selectedAssignment]);
 
   const handleBackToAssignments = () => {
     setSelectedAssignment(null);
@@ -111,7 +124,12 @@ export default function Dashboard({ handleLogout, user }) {
         });
 
         if (!response.ok) {
-          alert("Upload failed");
+          const errorData = await response.json();
+          if (errorData.isLate) {
+            alert(`❌ ${errorData.message}`);
+          } else {
+            alert("Upload failed: " + errorData.message);
+          }
           setUploadingFiles(false);
           return;
         }
@@ -132,7 +150,7 @@ export default function Dashboard({ handleLogout, user }) {
       setAssignmentSubmission(updatedSubmission || null);
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Upload failed");
+      alert("Upload failed: " + error.message);
     } finally {
       setUploadingFiles(false);
     }
@@ -306,28 +324,85 @@ export default function Dashboard({ handleLogout, user }) {
             <div className="view-header">
               <h2>Assignments</h2>
             </div>
-            <div className="assignments-grid">
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {assignments.length === 0 ? (
                 <p className="empty-state">No assignments available</p>
               ) : (
                 assignments.map((assignment) => {
-                  const hasSubmission = submissions.some(
+                  const submission = submissions.find(
                     (s) => s.assignmentId === assignment.id
                   );
+                  const dueDate = new Date(assignment.dueDate);
+                  const isOverdue = dueDate < new Date();
+                  
                   return (
                     <div
                       key={assignment.id}
-                      className="assignment-card"
                       onClick={() => handleAssignmentClick(assignment)}
+                      style={{
+                        padding: "12px 16px",
+                        background: "var(--bg-secondary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "16px",
+                        transition: "all 0.2s ease",
+                        hover: { background: "rgba(16, 185, 129, 0.1)" }
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
                     >
-                      <div className="card-header">
-                        <h3>{assignment.title}</h3>
-                        {hasSubmission && (
-                          <span className="badge-submitted">✓ Submitted</span>
-                        )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h4 style={{ margin: "0 0 4px 0", color: "var(--primary)" }}>
+                          {assignment.title}
+                          {submission && (
+                            <span style={{ 
+                              marginLeft: "8px", 
+                              fontSize: "0.8rem", 
+                              color: "#10b981",
+                              fontWeight: "normal"
+                            }}>
+                              ✓
+                            </span>
+                          )}
+                        </h4>
+                        <div style={{ 
+                          fontSize: "0.85rem", 
+                          color: "var(--text-muted)",
+                          display: "flex",
+                          gap: "16px",
+                          alignItems: "center"
+                        }}>
+                          <span>📅 {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {isOverdue ? (
+                            <span style={{ color: "#ef4444", fontWeight: "bold" }}>🔒 Closed</span>
+                          ) : (
+                            <span style={{ color: "#10b981" }}>✓ Open</span>
+                          )}
+                        </div>
                       </div>
-                      <p className="card-description">{assignment.description}</p>
-                      <p className="card-meta">Due: {assignment.dueDate}</p>
+                      
+                      {/* Show marks if allowed and submission exists */}
+                      {submission && (["evaluated","graded","compilation-error","no-code","no-tests","error"].includes(submission.status)) && (submission.viewMarks || assignment.canViewMarks) && (
+                        <div style={{
+                          textAlign: "right",
+                          minWidth: "80px"
+                        }}>
+                          <div style={{
+                            fontSize: "1.2rem",
+                            fontWeight: "bold",
+                            color: "var(--primary)"
+                          }}>
+                            {submission.marks}/{submission.totalMarks}
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            marks
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -353,6 +428,30 @@ export default function Dashboard({ handleLogout, user }) {
               <div className="files-panel">
                 <div className="panel-title">Files</div>
 
+                {/* Due Date Status */}
+                {(() => {
+                  const dueDate = new Date(selectedAssignment.dueDate);
+                  const isOverdue = dueDate < new Date();
+                  return (
+                    <div style={{
+                      padding: "10px 12px",
+                      background: isOverdue ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                      border: "1px solid " + (isOverdue ? "#ef4444" : "#10b981"),
+                      borderRadius: "4px",
+                      marginBottom: "12px",
+                      fontSize: "0.9rem",
+                      color: isOverdue ? "#ef4444" : "#10b981",
+                      fontWeight: "500"
+                    }}>
+                      {isOverdue ? (
+                        <>🔒 Submission Closed • Due: {dueDate.toLocaleString()}</>
+                      ) : (
+                        <>✓ Open • Due: {dueDate.toLocaleString()}</>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Upload Section */}
                 <div className="upload-box">
                   <form onSubmit={handleUpload}>
@@ -364,9 +463,17 @@ export default function Dashboard({ handleLogout, user }) {
                         accept=".js,.py,.java,.cpp,.c,.txt"
                         multiple
                         className="file-input-hidden"
+                        disabled={new Date(selectedAssignment.dueDate) < new Date()}
                       />
-                      <label htmlFor="file-input" className="btn-upload">
-                        + Select Files
+                      <label 
+                        htmlFor="file-input" 
+                        className="btn-upload"
+                        style={{
+                          opacity: new Date(selectedAssignment.dueDate) < new Date() ? 0.5 : 1,
+                          cursor: new Date(selectedAssignment.dueDate) < new Date() ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {new Date(selectedAssignment.dueDate) < new Date() ? "❌ Submission Closed" : "+ Select Files"}
                       </label>
                     </div>
 
@@ -394,7 +501,7 @@ export default function Dashboard({ handleLogout, user }) {
 
                     <button
                       type="submit"
-                      disabled={uploadingFiles || files.length === 0}
+                      disabled={uploadingFiles || files.length === 0 || new Date(selectedAssignment.dueDate) < new Date()}
                       className="btn-submit"
                     >
                       {uploadingFiles ? "Uploading..." : "Upload"}
@@ -407,6 +514,11 @@ export default function Dashboard({ handleLogout, user }) {
                   <div className="submitted-files">
                     <div className="panel-subtitle">
                       Submitted: {assignmentSubmission.files.length}
+                      {assignmentSubmission.submittedAt && (
+                        <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginLeft: "8px" }}>
+                          • {new Date(assignmentSubmission.submittedAt).toLocaleString()}
+                        </span>
+                      )}
                     </div>
                     <div className="files-list">
                       {assignmentSubmission.files.map((file) => (
@@ -422,7 +534,14 @@ export default function Dashboard({ handleLogout, user }) {
                             title="Click to view file"
                           >
                             <span className="file-icon">📄</span>
-                            <span className="file-name-text">{file.fileName}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <div className="file-name-text">{file.fileName}</div>
+                              {file.uploadedAt && (
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                  {new Date(file.uploadedAt).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <button
                             className="btn-delete-file"
@@ -439,13 +558,13 @@ export default function Dashboard({ handleLogout, user }) {
                 )}
 
                 {/* Marks Section */}
-                {assignmentSubmission && assignmentSubmission.status === "evaluated" && (
+                {assignmentSubmission && (["evaluated","graded","compilation-error","no-code","no-tests","error"].includes(assignmentSubmission.status)) && (assignmentSubmission.viewMarks || (selectedAssignment && selectedAssignment.canViewMarks)) && (
                   <div className="marks-box">
                     <div className="marks-label">Score</div>
                     <div className="marks-value">
                       {assignmentSubmission.marks}/{assignmentSubmission.totalMarks}
                     </div>
-                    {assignmentSubmission.viewTestResults && (
+                    {(assignmentSubmission.viewMarks || (selectedAssignment && selectedAssignment.canViewMarks)) && (
                       <button
                         onClick={handleViewResults}
                         className="btn-results"
@@ -492,32 +611,28 @@ export default function Dashboard({ handleLogout, user }) {
               </button>
             </div>
 
-            <div className="modal-content">
-              <div className="score-display">
-                <span className="score">
-                  {testResults.submission.marks}/{testResults.submission.totalMarks}
-                </span>
-              </div>
+              <div className="modal-content">
+                <div className="score-display">
+                  <span className="score">
+                    {testResults.submission.marks}/{testResults.submission.totalMarks}
+                  </span>
+                </div>
 
-              <div className="results-list">
-                {testResults.testResults.map((test, index) => (
-                  <div
-                    key={index}
-                    className={`result-item ${test.passed ? "pass" : "fail"}`}
-                  >
-                    <span className="result-badge">
-                      {test.passed ? "✓" : "✗"}
-                    </span>
-                    <div className="result-info">
-                      <p className="result-name">{test.testCase}</p>
-                      <p className="result-details">
-                        Expected: {test.expected} | Got: {test.actual}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                <div className="results-list simple-list">
+                  {testResults.testResults.length === 0 ? (
+                    <div style={{ padding: '12px', color: 'var(--text-muted)' }}>No test results available</div>
+                  ) : (
+                    testResults.testResults.map((test) => (
+                      <div key={test.id} className={`result-item ${test.passed ? "pass" : "fail"}`}>
+                        <span className="result-badge">{test.passed ? "✓" : "✗"}</span>
+                        <div className="result-info">
+                          <p className="result-name">{test.testName}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
 
             <div className="modal-footer">
               <button

@@ -24,6 +24,10 @@ const CodeFile = sequelize.define('CodeFile', {
     type: DataTypes.FLOAT,
     allowNull: true,
   },
+  uploadedAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
 }, {
   tableName: 'code_files',
   timestamps: false,

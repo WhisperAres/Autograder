@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "migrate:marks": "node src/config/alterMarksToDecimal.js",
+    "delete:assignments": "node src/config/deleteAssignments.js"
   },
   "keywords": [],
   "author": "",

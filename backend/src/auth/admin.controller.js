@@ -247,6 +247,33 @@ exports.deleteAssignment = async (req, res) => {
   }
 };
 
+// Toggle allow students to view marks for an assignment
+exports.toggleCanViewMarks = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { canViewMarks } = req.body;
+
+    if (canViewMarks === undefined || canViewMarks === null) {
+      return res.status(400).json({ message: "canViewMarks parameter required" });
+    }
+
+    const assignment = await Assignment.findByPk(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    await assignment.update({ canViewMarks: Boolean(canViewMarks) });
+
+    res.json({
+      message: `Students can ${canViewMarks ? 'now' : 'no longer'} view marks for this assignment`,
+      assignment
+    });
+  } catch (error) {
+    console.error("Error toggling view marks:", error);
+    res.status(500).json({ message: "Error toggling view marks" });
+  }
+};
+
 // ==================== GRADING & MARKS ====================
 
 // Get all submissions with marks
@@ -303,13 +330,15 @@ exports.updateSubmissionMarks = async (req, res) => {
       return res.status(404).json({ message: "Submission not found" });
     }
 
-    if (marks < 0 || marks > submission.totalMarks) {
+    // Convert to float and validate
+    const floatMarks = parseFloat(marks);
+    if (isNaN(floatMarks) || floatMarks < 0) {
       return res.status(400).json({ 
-        message: `Marks must be between 0 and ${submission.totalMarks}` 
+        message: "Marks must be a non-negative number" 
       });
     }
 
-    await submission.update({ marks });
+    await submission.update({ marks: floatMarks });
 
     res.json({
       message: "Marks updated successfully",
@@ -318,6 +347,183 @@ exports.updateSubmissionMarks = async (req, res) => {
   } catch (error) {
     console.error("Error updating marks:", error);
     res.status(500).json({ message: "Error updating marks" });
+  }
+};
+
+// Toggle allow students to view marks
+exports.toggleViewMarks = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { canView } = req.body;
+
+    if (canView === undefined || canView === null) {
+      return res.status(400).json({ message: "canView parameter required" });
+    }
+
+    const submission = await Submission.findByPk(submissionId);
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    await submission.update({ viewMarks: Boolean(canView) });
+
+    res.json({
+      message: "View marks permission updated successfully",
+      submission: {
+        id: submission.id,
+        viewMarks: submission.viewMarks
+      }
+    });
+  } catch (error) {
+    console.error("Error updating view marks permission:", error);
+    res.status(500).json({ message: "Error updating view marks permission" });
+  }
+};
+
+// Get code files for a submission
+exports.getSubmissionCodeFiles = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+
+    const codeFiles = await CodeFile.findAll({
+      where: { submissionId },
+      attributes: ['id', 'fileName', 'fileContent']
+    });
+
+    if (!codeFiles || codeFiles.length === 0) {
+      return res.json([]);
+    }
+
+    res.json(codeFiles);
+  } catch (error) {
+    console.error("Error fetching code files:", error);
+    res.status(500).json({ message: "Error fetching code files" });
+  }
+};
+
+// Run a single test case for a submission
+exports.runSingleTest = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { testCaseId } = req.body;
+
+    const submission = await Submission.findByPk(submissionId, {
+      include: [{ model: CodeFile, as: "codeFiles" }]
+    });
+
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    const testCase = await TestCase.findByPk(testCaseId);
+    if (!testCase) {
+      return res.status(404).json({ message: "Test case not found" });
+    }
+
+    const codeFiles = submission.codeFiles;
+    if (!codeFiles || codeFiles.length === 0) {
+      return res.status(404).json({ message: "No code files found" });
+    }
+
+    const tempDir = path.join(__dirname, "../../temp", `test_${submissionId}_${testCaseId}_${Date.now()}`);
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    try {
+      // Write code files to temp directory
+      for (const codeFile of codeFiles) {
+        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
+      }
+
+      let passed = false;
+      let actualOutput = "";
+      let errorMessage = "";
+
+      try {
+        const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+        
+        if (javaFiles.length > 0) {
+          // Compile Java files
+          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+            timeout: 5000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+
+          // Create test harness
+          const uniqueId = Date.now() + Math.random().toString();
+          const testFileName = `Test${uniqueId}.java`;
+          const testClassName = `Test${uniqueId}`;
+          const testCode = `public class ${testClassName} {
+  public static void main(String[] args) {
+    try {
+      ${testCase.testCode}
+      System.out.println("PASS");
+    } catch (AssertionError e) {
+      System.out.println("FAIL: " + e.getMessage());
+    } catch (Exception e) {
+      System.out.println("FAIL: " + e.getMessage());
+    }
+  }
+}`;
+          fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+          
+          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+          actualOutput = execSync(cmd, {
+            encoding: "utf8",
+            timeout: 5000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          }).trim();
+          
+          passed = actualOutput.includes("PASS");
+        } else {
+          // For JavaScript/Python
+          const mainFile = codeFiles[0];
+          const fileExt = path.extname(mainFile.fileName);
+          let command = '';
+
+          if (fileExt === '.js') {
+            command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+          } else if (fileExt === '.py') {
+            command = `cd "${tempDir}" && python3 ${mainFile.fileName}`;
+          }
+
+          if (command) {
+            actualOutput = execSync(command, {
+              encoding: "utf8",
+              timeout: 5000,
+              stdio: ['pipe', 'pipe', 'pipe']
+            }).trim();
+            passed = actualOutput.includes("PASS");
+          }
+        }
+      } catch (execError) {
+        passed = false;
+        errorMessage = execError.message || "Test execution failed";
+      }
+
+      res.json({
+        testName: testCase.testName,
+        testCaseId: testCase.id,
+        passed,
+        actualOutput: passed ? actualOutput : "",
+        errorMessage: passed ? null : errorMessage,
+        marks: testCase.marks || 0
+      });
+    } finally {
+      // Clean up temp directory
+      try {
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      } catch (cleanupErr) {
+        console.error("Cleanup error:", cleanupErr);
+      }
+    }
+  } catch (error) {
+    console.error("Error running single test:", error);
+    res.status(500).json({ message: "Error running test: " + error.message });
   }
 };
 
@@ -365,6 +571,9 @@ exports.runTestCases = async (req, res) => {
         const filePath = path.join(tempDir, codeFile.fileName);
         fs.writeFileSync(filePath, codeFile.fileContent, "utf8");
       }
+
+      // Remove any previous test results for this submission to avoid duplicates
+      await TestResult.destroy({ where: { submissionId } });
 
       for (const testCase of testCases) {
         let passed = false;
@@ -461,14 +670,28 @@ exports.runTestCases = async (req, res) => {
         });
       }
 
-      await submission.update({ status: "evaluated" });
+      // Calculate marks based on passed tests
+      let totalMarksEarned = 0;
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].passed) {
+          totalMarksEarned += parseFloat(testCases[i].marks) || 0;
+        }
+      }
+
+      // Update submission with calculated marks and status
+      await submission.update({ 
+        marks: totalMarksEarned,
+        status: "evaluated" 
+      });
 
       res.json({
         message: "Test cases executed",
         results,
         submissionId,
         passCount: results.filter(r => r.passed).length,
-        totalCount: results.length
+        totalCount: results.length,
+        marksObtained: totalMarksEarned,
+        totalMarks: submission.totalMarks
       });
     } finally {
       try {
@@ -617,7 +840,7 @@ exports.createTestCase = async (req, res) => {
       assignmentId: parseInt(assignmentId),
       testName,
       testCode,
-      marks: parseInt(marks) || 1,
+      marks: parseFloat(marks) || 1,
       isHidden: isHidden === 'true' || isHidden === true,
     });
 
@@ -647,7 +870,7 @@ exports.updateTestCase = async (req, res) => {
 
     if (testName) testCase.testName = testName;
     if (testCode) testCase.testCode = testCode;
-    if (marks !== undefined) testCase.marks = parseInt(marks);
+    if (marks !== undefined) testCase.marks = parseFloat(marks);
     if (isHidden !== undefined) testCase.isHidden = isHidden;
 
     await testCase.save();
@@ -691,38 +914,115 @@ exports.runBulkTests = async (req, res) => {
     const submissions = await Submission.findAll({
       where: { assignmentId },
       include: [
-        { model: CodeFile, as: "codeFiles" },
-        { model: Assignment, as: "assignment" }
+        { model: Assignment, as: "assignment" },
+        { model: User, as: "student", attributes: ['id', 'name', 'email'] }
       ]
     });
 
     if (submissions.length === 0) {
       return res.json({
         message: "No submissions found",
-        passCount: 0,
-        failCount: 0,
+        totalSubmissions: 0,
+        results: [],
         errors: []
       });
     }
 
-    let passCount = 0;
-    let failCount = 0;
+    const assignment = await Assignment.findByPk(assignmentId);
+    let testCases = await TestCase.findAll({
+      where: { assignmentId }
+    });
+    
+    // Ensure marks are numeric (fix string concatenation issue)
+    testCases = testCases.map(tc => {
+      const tcData = tc.get ? tc.get({ plain: true }) : tc;
+      return {
+        ...tcData,
+        marks: Number(tcData.marks) || 0
+      };
+    });
+
     const errors = [];
-    const submissionResults = [];
+    const studentResults = [];
+    let totalPassedTests = 0;
+    let totalFailedTests = 0;
+
+    // Clear previous test results and reset marks for all submissions of this assignment
+    try {
+      const submissionIds = submissions.map(s => s.id);
+      if (submissionIds.length > 0) {
+        await TestResult.destroy({ where: { submissionId: submissionIds } });
+        await Submission.update({ marks: 0, status: 'pending' }, { where: { id: submissionIds } });
+      }
+    } catch (clearErr) {
+      console.error('Error clearing previous test results/marks:', clearErr);
+      // continue anyway
+    }
 
     for (const submission of submissions) {
+      let submissionPassCount = 0;
+      let submissionFailCount = 0;
+      const testResults = [];
+
       try {
-        // Get test cases for this assignment
-        const testCases = await TestCase.findAll({
-          where: { assignmentId }
-        });
+        // Mark this submission as currently being graded to avoid racey pending/graded states
+        try {
+          await submission.update({ status: 'grading' });
+        } catch (statusErr) {
+          console.error('Failed to set grading status for submission', submission.id, statusErr.message || statusErr);
+        }
 
-        if (testCases.length === 0) continue;
+        if (testCases.length === 0) {
+          try {
+            await submission.update({ marks: 0, status: 'no-tests' });
+          } catch (uErr) {
+            console.error('Failed to update submission when no test cases:', submission.id, uErr.message || uErr);
+          }
+          studentResults.push({
+            submissionId: submission.id,
+            studentId: submission.studentId,
+            studentName: submission.student.name,
+            studentEmail: submission.student.email,
+            passedTests: 0,
+            totalTests: 0,
+            marksAllocated: 0,
+            status: "no-tests"
+          });
+          continue;
+        }
 
-        const codeFiles = submission.codeFiles;
+        // Fetch latest code files for this submission from DB to ensure updated files are used
+        const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
         if (!codeFiles || codeFiles.length === 0) {
-          errors.push(`Submission ${submission.id}: No code files`);
-          failCount += testCases.length;
+          errors.push(`${submission.student.name}: No code files submitted`);
+          // Remove previous results and create failing TestResult rows so this submission is graded as 0
+          try {
+            await TestResult.destroy({ where: { submissionId: submission.id } });
+            for (const tc of testCases) {
+              await TestResult.create({
+                submissionId: submission.id,
+                testCaseId: tc.id,
+                passed: false,
+                actualOutput: "",
+                errorMessage: 'No code files submitted'
+              });
+            }
+            await submission.update({ marks: 0, status: 'no-code' });
+          } catch (errCreating) {
+            console.error('Error creating no-code test results for', submission.id, errCreating.message || errCreating);
+            errors.push(`${submission.student.name}: failed to record no-code results`);
+          }
+
+          studentResults.push({
+            submissionId: submission.id,
+            studentId: submission.studentId,
+            studentName: submission.student.name,
+            studentEmail: submission.student.email,
+            passedTests: 0,
+            totalTests: testCases.length,
+            marksAllocated: 0,
+            status: "no-code"
+          });
           continue;
         }
 
@@ -737,6 +1037,9 @@ exports.runBulkTests = async (req, res) => {
             fs.writeFileSync(filePath, codeFile.fileContent, "utf8");
           }
 
+          // Remove any existing test results for this submission to avoid duplicate entries
+          await TestResult.destroy({ where: { submissionId: submission.id } });
+
           // Check if there are Java files
           const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
           
@@ -749,11 +1052,131 @@ exports.runBulkTests = async (req, res) => {
                 stdio: ['pipe', 'pipe', 'pipe']
               });
             } catch (compileErr) {
-              const errorMsg = `Submission ${submission.id}: Java compilation failed - ${compileErr.message}`;
+              const errorMsg = `${submission.student.name}: Java compilation failed`;
               errors.push(errorMsg);
-              console.error(errorMsg);
-              failCount += testCases.length;
-              continue; // Skip all tests for this submission
+              console.error(errorMsg, compileErr.message || compileErr);
+              // Attempt partial grading: try compiling individual java files and run tests against any
+              try {
+                // map testCaseId -> passed boolean
+                const passedTests = new Map();
+                const testOutputs = new Map();
+                const testErrors = new Map();
+
+                // Try compiling each java file individually and run tests that may pass
+                for (const jf of javaFiles) {
+                  try {
+                    // compile single java file
+                    execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${jf.fileName}`, {
+                      timeout: 10000,
+                      stdio: ['pipe', 'pipe', 'pipe']
+                    });
+
+                    // For each test case, attempt to run a test harness using the available compiled classes
+                    for (const testCase of testCases) {
+                      // skip if already passed by another file
+                      if (passedTests.get(testCase.id)) continue;
+
+                      const uniqueId2 = Date.now() + Math.random().toString().slice(2);
+                      const testFileName2 = `Test${uniqueId2}.java`;
+                      const testClassName2 = `Test${uniqueId2}`;
+                      const testCode2 = `public class ${testClassName2} {\n    public static void main(String[] args) {\n        try {\n            ${testCase.testCode}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n        }\n    }\n}`;
+                      fs.writeFileSync(path.join(tempDir, testFileName2), testCode2);
+                      const cmd2 = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName2} && ${JAVA_CMD} ${testClassName2}`;
+                      try {
+                        const out = execSync(cmd2, { encoding: 'utf8', timeout: 10000, stdio: ['pipe','pipe','pipe'] }).trim();
+                        if (out.includes('PASS')) {
+                          passedTests.set(testCase.id, true);
+                          testOutputs.set(testCase.id, out);
+                        } else {
+                          // record non-pass output for later
+                          testErrors.set(testCase.id, out);
+                        }
+                      } catch (runErr) {
+                        testErrors.set(testCase.id, runErr.message || String(runErr));
+                      }
+                    }
+                  } catch (singleCompileErr) {
+                    // this single-file compile failed; continue with other files
+                    continue;
+                  }
+                }
+
+                // Remove any existing test results for this submission to avoid duplicates
+                await TestResult.destroy({ where: { submissionId: submission.id } });
+
+                // Create TestResult rows: passed where true, failed otherwise with compilation message
+                let marksFromPartial = 0;
+                for (const tc of testCases) {
+                  const passed = Boolean(passedTests.get(tc.id));
+                  if (passed) {
+                    await TestResult.create({
+                      submissionId: submission.id,
+                      testCaseId: tc.id,
+                      passed: true,
+                      actualOutput: testOutputs.get(tc.id) || 'PASS',
+                      errorMessage: null
+                    });
+                    marksFromPartial += Number(tc.marks) || 0;
+                  } else {
+                    const errMsg = testErrors.get(tc.id) || `Java compilation failed: ${compileErr.message || compileErr}`;
+                    await TestResult.create({
+                      submissionId: submission.id,
+                      testCaseId: tc.id,
+                      passed: false,
+                      actualOutput: "",
+                      errorMessage: errMsg
+                    });
+                  }
+                }
+
+                if (marksFromPartial > 0) {
+                  await submission.update({ marks: marksFromPartial, status: 'graded' });
+                  studentResults.push({
+                    submissionId: submission.id,
+                    studentId: submission.studentId,
+                    studentName: submission.student.name,
+                    studentEmail: submission.student.email,
+                    passedTests: Array.from(passedTests.values()).filter(Boolean).length,
+                    totalTests: testCases.length,
+                    marksAllocated: marksFromPartial,
+                    testDetails: [],
+                    status: 'graded'
+                  });
+                } else {
+                  // nothing passed; record compilation-error status
+                  await submission.update({ marks: 0, status: 'compilation-error' });
+                  studentResults.push({
+                    submissionId: submission.id,
+                    studentId: submission.studentId,
+                    studentName: submission.student.name,
+                    studentEmail: submission.student.email,
+                    passedTests: 0,
+                    totalTests: testCases.length,
+                    marksAllocated: 0,
+                    status: 'compilation-error'
+                  });
+                }
+              } catch (errCreating) {
+                console.error('Error creating compilation-failure test results for', submission.id, errCreating.message || errCreating);
+                errors.push(`${submission.student.name}: failed to record compilation-error results`);
+                // fallback: mark as compilation-error
+                try {
+                  await submission.update({ marks: 0, status: 'compilation-error' });
+                } catch (uerr) {
+                  console.error('Failed to update submission status to compilation-error', submission.id, uerr.message || uerr);
+                }
+                studentResults.push({
+                  submissionId: submission.id,
+                  studentId: submission.studentId,
+                  studentName: submission.student.name,
+                  studentEmail: submission.student.email,
+                  passedTests: 0,
+                  totalTests: testCases.length,
+                  marksAllocated: 0,
+                  status: 'compilation-error'
+                });
+              }
+              continue;
             }
           }
 
@@ -838,19 +1261,55 @@ exports.runBulkTests = async (req, res) => {
                 errorMessage: !passed ? errorMessage : null
               });
 
-              if (passed) passCount++;
-              else failCount++;
+              testResults.push({
+                testName: testCase.testName,
+                passed,
+                marks: testCase.marks || 0
+              });
+
+              if (passed) {
+                submissionPassCount++;
+                totalPassedTests++;
+              } else {
+                submissionFailCount++;
+                totalFailedTests++;
+              }
 
             } catch (testErr) {
-              failCount++;
-              const errorMsg = `Submission ${submission.id}, Test ${testCase.testName}: ${testErr.message}`;
+              submissionFailCount++;
+              totalFailedTests++;
+              const errorMsg = `${submission.student.name} - Test ${testCase.testName}: ${testErr.message}`;
               errors.push(errorMsg);
               console.error(errorMsg);
             }
           }
 
-          // Update submission status
-          await submission.update({ status: "evaluated" });
+          // Calculate marks for this submission based on passed tests
+          let marksEarned = 0;
+          for (const testResult of testResults) {
+            if (testResult.passed) {
+              marksEarned += Number(testResult.marks) || 0;
+            }
+          }
+
+          // Update submission with marks and status
+          await submission.update({
+            marks: marksEarned,
+            status: "graded"
+          });
+          // reload to ensure we have latest values
+          await submission.reload();
+
+          studentResults.push({
+            submissionId: submission.id,
+            studentId: submission.studentId,
+            studentName: submission.student.name,
+            studentEmail: submission.student.email,
+            passedTests: submissionPassCount,
+            totalTests: testCases.length,
+            marksAllocated: marksEarned,
+            testDetails: testResults
+          });
 
         } finally {
           // Clean up temp directory
@@ -864,27 +1323,83 @@ exports.runBulkTests = async (req, res) => {
         }
 
       } catch (submissionErr) {
-        const errorMsg = `Submission ${submission.id}: ${submissionErr.message}`;
+        const errorMsg = `${submission.student?.name || 'Unknown'}: ${submissionErr.message}`;
         errors.push(errorMsg);
         console.error(errorMsg);
-        failCount += (await TestCase.count({ where: { assignmentId } }));
+        studentResults.push({
+          submissionId: submission.id,
+          studentId: submission.studentId,
+          studentName: submission.student.name,
+          studentEmail: submission.student.email,
+          passedTests: 0,
+          totalTests: testCases.length,
+          marksAllocated: 0,
+          status: "error"
+        });
       }
     }
 
+    // Fetch fresh submissions to return updated marks/status
+    const updatedSubmissions = await Submission.findAll({
+      where: { assignmentId },
+      include: [
+        { model: User, as: 'student', attributes: ['id', 'name', 'email'] },
+        { model: CodeFile, as: 'codeFiles' }
+      ],
+      order: [['id', 'DESC']]
+    });
+
     res.json({
-      message: "Bulk tests completed",
-      passCount,
-      failCount,
-      totalTests: passCount + failCount,
-      successRate: `${Math.round((passCount / (passCount + failCount)) * 100)}%`,
-      errors: errors.length > 0 ? errors : null
+      message: "Bulk tests completed successfully",
+      assignmentId,
+      assignmentTitle: assignment.title,
+      totalSubmissions: submissions.length,
+      totalTests: testCases.length,
+      totalPassedTests,
+      totalFailedTests,
+      results: studentResults,
+      errors: errors.length > 0 ? errors : null,
+      updatedSubmissions
     });
   } catch (error) {
     console.error("Error running bulk tests:", error);
     res.status(500).json({
       message: "Error running bulk tests",
-      error: error.message,
-      errors: [error.message]
+      error: error.message
     });
+  }
+};
+
+// Run test cases for all submissions in an assignment
+exports.runTestCasesForAll = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+
+    // Fetch all submissions for the assignment
+    const submissions = await Submission.findAll({ where: { assignmentId } });
+
+    if (submissions.length === 0) {
+      return res.status(404).json({ message: "No submissions found for this assignment" });
+    }
+
+    // Clear old marks for all submissions
+    await Submission.update({ marks: 0, status: "pending" }, { where: { assignmentId } });
+
+    const results = [];
+
+    for (const submission of submissions) {
+      const result = await this.runTestCases({ params: { submissionId: submission.id } }, {
+        json: (data) => results.push(data),
+        status: () => ({ json: () => {} })
+      });
+    }
+
+    res.json({
+      message: "Test cases executed for all submissions",
+      results
+    });
+  } catch (error) {
+    console.error("Error running test cases for all submissions:", error);
+    res.status(500).json({ message: "Error running test cases for all submissions" });
   }
 };

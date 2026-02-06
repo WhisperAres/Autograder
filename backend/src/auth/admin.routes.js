@@ -18,6 +18,7 @@ router.patch("/users/:userId/role", checkRole("admin"), adminController.updateUs
 router.get("/assignments", checkRole("admin"), adminController.getAssignments);
 router.post("/assignments", checkRole("admin"), adminController.createAssignment);
 router.patch("/assignments/:assignmentId", checkRole("admin"), adminController.updateAssignment);
+router.patch("/assignments/:assignmentId/view-marks", checkRole("admin"), adminController.toggleCanViewMarks);
 router.delete("/assignments/:assignmentId", checkRole("admin"), adminController.deleteAssignment);
 
 // ==================== TEST CASE MANAGEMENT ====================
@@ -30,9 +31,13 @@ router.delete("/test-cases/:testCaseId", checkRole("admin", "ta"), adminControll
 // ==================== GRADING & SUBMISSIONS ====================
 router.get("/submissions", checkRole("admin"), adminController.getAllSubmissions);
 router.get("/submissions/assignment/:assignmentId", checkRole("admin"), adminController.getSubmissionsByAssignment);
+router.get("/submissions/:submissionId/code-files", checkRole("admin", "ta"), adminController.getSubmissionCodeFiles);
 router.patch("/submissions/:submissionId/marks", checkRole("admin", "ta"), adminController.updateSubmissionMarks);
+router.patch("/submissions/:submissionId/view-marks", checkRole("admin"), adminController.toggleViewMarks);
 router.post("/submissions/:submissionId/run-tests", checkRole("admin", "ta"), adminController.runTestCases);
+router.post("/submissions/:submissionId/run-single-test", checkRole("admin", "ta"), adminController.runSingleTest);
 router.post("/assignments/:assignmentId/run-all-tests", checkRole("admin"), adminController.runBulkTests);
+router.post("/assignments/:assignmentId/run-tests", checkRole("admin"), adminController.runTestCasesForAll);
 
 // ==================== REPORTING & DOWNLOADS ====================
 router.get("/assignments/:assignmentId/marks-report", checkRole("admin"), adminController.getMarksReport);

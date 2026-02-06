@@ -22,7 +22,7 @@ const TestCase = sequelize.define('TestCase', {
     comment: 'Test code with assertions (e.g., assertEquals, assertTrue)'
   },
   marks: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 1,
   },
   isHidden: {

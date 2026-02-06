@@ -8,6 +8,7 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
   const [successMessage, setSuccessMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [editingTestCase, setEditingTestCase] = useState(null);
 
   // Form states
   const [newTestCase, setNewTestCase] = useState({
@@ -33,7 +34,12 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
       );
       if (!response.ok) throw new Error("Failed to fetch test cases");
       const data = await response.json();
-      setTestCases(data || []);
+      // Ensure marks are converted to numbers
+      const testCasesWithNumericMarks = (data || []).map(tc => ({
+        ...tc,
+        marks: typeof tc.marks === 'string' ? parseFloat(tc.marks) : tc.marks
+      }));
+      setTestCases(testCasesWithNumericMarks);
     } catch (err) {
       setError("Error loading test cases: " + err.message);
     } finally {
@@ -56,30 +62,32 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
 
     setUploading(true);
     try {
-      const response = await fetch(
-        `http://localhost:5000/admin/assignments/${assignment.id}/test-cases`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            testName: newTestCase.testName,
-            testCode: newTestCase.testCode,
-            marks: newTestCase.marks,
-            isHidden: newTestCase.isHidden,
-          }),
-        }
-      );
+      const method = editingTestCase ? "PATCH" : "POST";
+      const endpoint = editingTestCase 
+        ? `http://localhost:5000/admin/test-cases/${editingTestCase.id}`
+        : `http://localhost:5000/admin/assignments/${assignment.id}/test-cases`;
+
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          testName: newTestCase.testName,
+          testCode: newTestCase.testCode,
+          marks: newTestCase.marks,
+          isHidden: newTestCase.isHidden,
+        }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to create test case");
+        throw new Error(errorData.message || `Failed to ${editingTestCase ? 'update' : 'create'} test case`);
       }
 
       const responseData = await response.json();
-      setSuccessMessage("✓ Test case created successfully!");
+      setSuccessMessage(`✓ Test case ${editingTestCase ? 'updated' : 'created'} successfully!`);
       setTimeout(() => setSuccessMessage(""), 3000);
 
       // Reset form
@@ -90,11 +98,12 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
         isHidden: false,
       });
       setShowForm(false);
+      setEditingTestCase(null);
 
       // Refresh list
       fetchTestCases();
     } catch (err) {
-      setError("Error creating test case: " + err.message);
+      setError(`Error ${editingTestCase ? 'updating' : 'creating'} test case: ` + err.message);
     } finally {
       setUploading(false);
     }
@@ -120,6 +129,28 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
     } catch (err) {
       setError("Error deleting test case: " + err.message);
     }
+  };
+
+  const handleEditTestCase = (testCase) => {
+    setEditingTestCase(testCase);
+    setNewTestCase({
+      testName: testCase.testName,
+      testCode: testCase.testCode,
+      marks: testCase.marks || 1,
+      isHidden: testCase.isHidden || false,
+    });
+    setShowForm(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTestCase(null);
+    setNewTestCase({
+      testName: "",
+      testCode: "",
+      marks: 1,
+      isHidden: false,
+    });
+    setShowForm(false);
   };
 
   if (loading) {
@@ -161,9 +192,15 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
             <h2>Test Cases ({testCases.length})</h2>
             <button
               className="btn-primary"
-              onClick={() => setShowForm(!showForm)}
+              onClick={() => {
+                if (editingTestCase) {
+                  handleCancelEdit();
+                } else {
+                  setShowForm(!showForm);
+                }
+              }}
             >
-              {showForm ? "✕ Cancel" : "+ Add Test Case"}
+              {editingTestCase ? "✕ Cancel Edit" : showForm ? "✕ Cancel" : "+ Add Test Case"}
             </button>
           </div>
 
@@ -199,19 +236,20 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
                 <label>Marks *</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.01"
+                  step="0.01"
                   value={newTestCase.marks}
                   onChange={(e) =>
                     setNewTestCase({
                       ...newTestCase,
-                      marks: parseInt(e.target.value),
+                      marks: parseFloat(e.target.value),
                     })
                   }
                 />
               </div>
 
               <button type="submit" className="btn-submit" disabled={uploading}>
-                {uploading ? "Creating..." : "Create Test Case"}
+                {uploading ? (editingTestCase ? "Updating..." : "Creating...") : (editingTestCase ? "Update Test Case" : "Create Test Case")}
               </button>
             </form>
           )}
@@ -227,14 +265,23 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
                   <div className="tc-header">
                     <div className="tc-info">
                       <h3>{testCase.testName}</h3>
-                      <span className="tc-marks">Marks: {testCase.marks || 1}</span>
+                      <span className="tc-marks">Marks: {Number(testCase.marks).toFixed(2)}</span>
                     </div>
-                    <button
-                      className="btn-danger"
-                      onClick={() => handleDeleteTestCase(testCase.id)}
-                    >
-                      🗑️ Delete
-                    </button>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        className="btn-primary"
+                        onClick={() => handleEditTestCase(testCase)}
+                        style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        className="btn-danger"
+                        onClick={() => handleDeleteTestCase(testCase.id)}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
                   </div>
 
                   <div className="tc-content">
@@ -262,7 +309,7 @@ export default function TestCaseManager({ assignment, onBack, token, darkMode, s
             </div>
             <div className="stat">
               <span>Total Marks:</span>
-              <strong>{testCases.reduce((sum, tc) => sum + (tc.marks || 0), 0)}</strong>
+              <strong>{testCases.reduce((sum, tc) => sum + (Number(tc.marks) || 0), 0).toFixed(2)}</strong>
             </div>
           </div>
         </div>

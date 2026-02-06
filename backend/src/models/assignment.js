@@ -21,8 +21,12 @@ const Assignment = sequelize.define('Assignment', {
     allowNull: false,
   },
   totalMarks: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 100,
+  },
+  canViewMarks: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
   },
 }, {
   tableName: 'assignments',

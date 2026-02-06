@@ -188,15 +188,28 @@ exports.runTestCases = async (req, res) => {
         });
       }
 
-      // Update submission status to evaluated
-      await submission.update({ status: "evaluated" });
+      // Calculate marks based on passed tests
+      let totalMarksEarned = 0;
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].passed) {
+          totalMarksEarned += parseFloat(testCases[i].marks) || 0;
+        }
+      }
+
+      // Update submission with calculated marks and status
+      await submission.update({ 
+        marks: totalMarksEarned,
+        status: "evaluated" 
+      });
 
       res.json({
         message: "Test cases executed",
         results,
         submissionId,
         passCount: results.filter(r => r.passed).length,
-        totalCount: results.length
+        totalCount: results.length,
+        marksObtained: totalMarksEarned,
+        totalMarks: submission.totalMarks
       });
     } finally {
       // Clean up temp directory
@@ -230,7 +243,7 @@ exports.provideFeedback = async (req, res) => {
 
     // Update submission marks and status
     await submission.update({
-      marks: parseInt(marks),
+      marks: parseFloat(marks),
       status: "graded"
     });
 

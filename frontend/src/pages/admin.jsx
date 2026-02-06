@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import StudentDetail from "./studentDetail";
 import "./admin.css";
 
 export default function AdminDashboard() {
@@ -11,6 +12,7 @@ export default function AdminDashboard() {
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [detailsTab, setDetailsTab] = useState("submissions");
+  const [showStudentDetail, setShowStudentDetail] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,6 +34,7 @@ export default function AdminDashboard() {
 
   // Form states
   const [newAssignment, setNewAssignment] = useState({ title: "", description: "", dueDate: "", totalMarks: 100 });
+  const [editingAssignment, setEditingAssignment] = useState(null);
   const [newUser, setNewUser] = useState({ email: "", name: "", role: "student" });
   const [selectedUserRole, setSelectedUserRole] = useState("");
   const [submissionMarks, setSubmissionMarks] = useState("");
@@ -104,6 +107,52 @@ export default function AdminDashboard() {
     }
   };
 
+  // Edit assignment
+  const handleEditAssignment = (assignment) => {
+    setEditingAssignment({ ...assignment });
+  };
+
+  // Update assignment
+  const handleUpdateAssignment = async () => {
+    if (!editingAssignment.title || !editingAssignment.dueDate) {
+      setError("Title and due date required");
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/admin/assignments/${editingAssignment.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: editingAssignment.title,
+          description: editingAssignment.description,
+          dueDate: editingAssignment.dueDate,
+          totalMarks: editingAssignment.totalMarks
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update assignment");
+
+      const data = await response.json();
+      setAssignments(assignments.map(a => a.id === editingAssignment.id ? data.assignment : a));
+      setEditingAssignment(null);
+      setSelectedAssignment(null);
+      setError("");
+      alert("Assignment updated successfully!");
+      fetchAllData();
+    } catch (err) {
+      setError("Error updating assignment: " + err.message);
+    }
+  };
+
+  // Cancel edit
+  const handleCancelEdit = () => {
+    setEditingAssignment(null);
+  };
+
   // Create new user
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -167,7 +216,7 @@ export default function AdminDashboard() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ marks: parseInt(marks) }),
+        body: JSON.stringify({ marks: parseFloat(marks) }),
       });
 
       if (!response.ok) throw new Error("Failed to update marks");
@@ -178,6 +227,58 @@ export default function AdminDashboard() {
       alert("Marks updated successfully!");
     } catch (err) {
       setError("Error updating marks: " + err.message);
+    }
+  };
+
+  // Toggle allow students to view marks for an assignment
+  const handleToggleCanViewMarks = async (assignmentId, canViewMarks) => {
+    try {
+      const response = await fetch(`http://localhost:5000/admin/assignments/${assignmentId}/view-marks`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ canViewMarks }),
+      });
+
+      if (!response.ok) throw new Error("Failed to toggle view marks");
+
+      const data = await response.json();
+      console.log("Toggle response:", data);
+
+      // Update local state with server response
+      setAssignments(assignments.map(a => 
+        a.id === assignmentId ? { ...a, ...data.assignment } : a
+      ));
+      
+      alert(`Marks ${canViewMarks ? 'enabled' : 'disabled'} for students`);
+    } catch (err) {
+      setError("Error toggling view marks: " + err.message);
+      console.error("Toggle error:", err);
+    }
+  };
+
+  // Toggle allow students to view marks for a specific submission
+  const handleToggleViewMarks = async (submissionId, currentViewMarks) => {
+    try {
+      const response = await fetch(`http://localhost:5000/admin/submissions/${submissionId}/view-marks`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ canView: !currentViewMarks }),
+      });
+
+      if (!response.ok) throw new Error("Failed to toggle marks visibility");
+
+      // Update local state
+      setSubmissions(submissions.map(s => 
+        s.id === submissionId ? { ...s, viewMarks: !currentViewMarks } : s
+      ));
+    } catch (err) {
+      setError("Error toggling marks visibility: " + err.message);
     }
   };
 
@@ -221,7 +322,28 @@ export default function AdminDashboard() {
       const data = await response.json();
       setBulkTestResults(data);
       setError("");
-      alert(`Bulk test completed! Results saved.`);
+
+      // Small delay to ensure database changes are committed
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // If backend returned updated submissions, use them immediately
+      if (data && data.updatedSubmissions) {
+        setSubmissions(data.updatedSubmissions);
+      } else {
+        // Refresh submissions for this specific assignment
+        const submissionsRes = await fetch(
+          `http://localhost:5000/admin/submissions/assignment/${selectedAssignment.id}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (submissionsRes.ok) {
+          const allSubmissions = await submissionsRes.json();
+          setSubmissions(allSubmissions);
+        }
+      }
+      
+      alert(`Tests completed! ${data.totalSubmissions} students processed.`);
     } catch (err) {
       setError("Error running bulk tests: " + err.message);
     } finally {
@@ -280,6 +402,24 @@ export default function AdminDashboard() {
   const assignmentSubmissions = selectedAssignment
     ? submissions.filter(s => s.assignmentId === selectedAssignment.id)
     : [];
+
+  // If showing student detail, render that view
+  if (showStudentDetail && selectedAssignment && selectedSubmission) {
+    const submission = assignmentSubmissions.find(s => s.id === selectedSubmission.id) || 
+                       assignmentSubmissions.find(s => s.id === selectedSubmission);
+    if (submission) {
+      return (
+        <StudentDetail
+          submission={submission}
+          assignment={selectedAssignment}
+          token={token}
+          onBack={() => setShowStudentDetail(false)}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
+      );
+    }
+  }
 
   const studentUsers = users.filter(u => u.role === "student");
   const taUsers = users.filter(u => u.role === "ta");
@@ -390,19 +530,58 @@ export default function AdminDashboard() {
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Due Date *</label>
-                      <input
-                        type="datetime-local"
-                        value={newAssignment.dueDate}
-                        onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
-                      />
+                      <label>Due Date & Time *</label>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <input
+                          type="date"
+                          value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[0] : ''}
+                          onChange={(e) => {
+                            const dateStr = e.target.value;
+                            const time = newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
+                            setNewAssignment({...newAssignment, dueDate: `${dateStr}T${time}`});
+                          }}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border)",
+                            background: "var(--bg-primary)",
+                            color: "var(--text)",
+                            fontSize: "1rem",
+                            cursor: "pointer",
+                            flex: 1
+                          }}
+                        />
+                        <input
+                          type="time"
+                          value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
+                          onChange={(e) => {
+                            const dateStr = newAssignment.dueDate ? newAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                            setNewAssignment({...newAssignment, dueDate: `${dateStr}T${e.target.value}`});
+                          }}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border)",
+                            background: "var(--bg-primary)",
+                            color: "var(--text)",
+                            fontSize: "1rem",
+                            cursor: "pointer",
+                            flex: 1
+                          }}
+                        />
+                      </div>
+                      {newAssignment.dueDate && (
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                          📅 {new Date(newAssignment.dueDate).toLocaleString()}
+                        </div>
+                      )}
                     </div>
                     <div className="form-group">
                       <label>Total Marks</label>
                       <input
                         type="number"
                         value={newAssignment.totalMarks}
-                        onChange={(e) => setNewAssignment({...newAssignment, totalMarks: parseInt(e.target.value)})}
+                        onChange={(e) => setNewAssignment({...newAssignment, totalMarks: parseFloat(e.target.value)})}
                         min="1"
                       />
                     </div>
@@ -410,34 +589,110 @@ export default function AdminDashboard() {
                   <button type="submit" className="btn btn-success">Create Assignment</button>
                 </form>
 
-                {/* Assignments Grid */}
-                <div className="assignments-grid">
-                  {assignments.map(assignment => (
-                    <div
-                      key={assignment.id}
-                      className="assignment-card"
-                      onClick={() => setSelectedAssignment(assignment)}
-                    >
-                      <div className="assignment-header">
-                        <h3>{assignment.title}</h3>
-                        <button
-                          className="btn-icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownloadCSV(assignment.id);
-                          }}
-                          title="Download marks as CSV"
-                        >
-                          ⬇️
-                        </button>
+                {/* Assignments List */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {assignments.length === 0 ? (
+                    <p style={{ color: "var(--text-muted)" }}>No assignments yet</p>
+                  ) : (
+                    assignments.map(assignment => (
+                      <div
+                        key={assignment.id}
+                        style={{
+                          padding: "12px 16px",
+                          background: "var(--bg-secondary)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "16px",
+                          transition: "all 0.2s ease"
+                        }}
+                        onClick={() => setSelectedAssignment(assignment)}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ margin: "0 0 4px 0", color: "var(--primary)" }}>
+                            {assignment.title}
+                          </h4>
+                          <div style={{ 
+                            fontSize: "0.85rem", 
+                            color: "var(--text-muted)",
+                            display: "flex",
+                            gap: "16px",
+                            alignItems: "center"
+                          }}>
+                            <span>📌 {assignment.totalMarks} marks</span>
+                            <span>📅 {new Date(assignment.dueDate).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+
+                        {/* View Marks Toggle & Edit Button */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          {/* Animated Toggle Switch */}
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCanViewMarks(assignment.id, !assignment.canViewMarks);
+                            }}
+                            style={{
+                              width: "50px",
+                              height: "24px",
+                              background: assignment.canViewMarks ? "var(--primary)" : "var(--border)",
+                              borderRadius: "12px",
+                              cursor: "pointer",
+                              position: "relative",
+                              transition: "background 0.3s ease",
+                              display: "flex",
+                              alignItems: "center",
+                              padding: "0 2px"
+                            }}
+                            title="Toggle to show/hide marks"
+                          >
+                            <div
+                              style={{
+                                width: "20px",
+                                height: "20px",
+                                background: "white",
+                                borderRadius: "50%",
+                                position: "absolute",
+                                left: assignment.canViewMarks ? "28px" : "2px",
+                                transition: "left 0.3s ease",
+                                boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", minWidth: "70px" }}>
+                            {assignment.canViewMarks ? "✓ Visible" : "Hidden"}
+                          </span>
+                          <button
+                            className="btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditAssignment(assignment);
+                            }}
+                            title="Edit assignment"
+                            style={{ padding: "4px 8px" }}
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            className="btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadCSV(assignment.id);
+                            }}
+                            title="Download marks as CSV"
+                            style={{ padding: "4px 8px" }}
+                          >
+                            ⬇️
+                          </button>
+                        </div>
                       </div>
-                      <p className="assignment-desc">{assignment.description}</p>
-                      <div className="assignment-meta">
-                        <span>📌 {assignment.totalMarks} marks</span>
-                        <span>📅 {new Date(assignment.dueDate).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </>
@@ -468,168 +723,431 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                {bulkTestResults && (
-                  <div style={{
-                    background: "rgba(16, 185, 129, 0.1)",
-                    border: "1px solid var(--primary)",
-                    borderRadius: "8px",
-                    padding: "15px",
-                    marginBottom: "20px"
-                  }}>
-                    <h4 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>Bulk Test Results</h4>
-                    <p style={{ margin: 0 }}>✅ Passed: {bulkTestResults.passCount || 0} | ❌ Failed: {bulkTestResults.failCount || 0}</p>
-                  </div>
-                )}
-
-                {/* Submissions List */}
+                {/* Submissions List - Compact */}
                 {detailsTab === "submissions" && (
-                  <div style={{ maxHeight: "800px", overflowY: "auto" }}>
+                  <div style={{ maxHeight: "900px", overflowY: "auto" }}>
                     {assignmentSubmissions.length === 0 ? (
                       <p>No submissions yet</p>
                     ) : (
-                      assignmentSubmissions.map(submission => (
-                        <div
-                          key={submission.id}
-                          style={{
-                            background: "var(--bg-secondary)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "8px",
-                            marginBottom: "15px",
-                            cursor: "pointer",
-                            transition: "all 0.3s ease",
-                          }}
-                          onClick={() => {
-                            setSelectedSubmission(submission.id === selectedSubmission?.id ? null : submission);
-                            setSubmissionMarks(submission.marks || "");
-                          }}
-                        >
-                          <div style={{
-                            padding: "15px",
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: "15px",
-                            flexWrap: "wrap"
-                          }}>
-                            <div style={{ flex: 1, minWidth: "200px" }}>
-                              <h4 style={{ margin: "0 0 5px 0", color: "var(--primary)" }}>
-                                {submission.student?.name || "Unknown Student"}
-                              </h4>
-                              <p style={{ margin: "0 0 8px 0", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                                {submission.student?.email}
-                              </p>
-                              <div style={{ display: "flex", gap: "15px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                                <span className={`status-badge ${submission.status}`}>{submission.status}</span>
-                                <span className="marks-badge">{submission.marks || 0}/{submission.totalMarks}</span>
-                                <span>📅 {new Date(submission.submittedAt).toLocaleString()}</span>
-                              </div>
-                            </div>
-                            <div style={{ fontSize: "1.2rem", color: "var(--text-muted)" }}>
-                              {selectedSubmission?.id === submission.id ? "▼" : "▶"}
-                            </div>
-                          </div>
-
-                          {/* Inline Code View */}
-                          {selectedSubmission?.id === submission.id && (
-                            <div style={{
-                              borderTop: "1px solid var(--border)",
-                              padding: "15px",
-                              background: "var(--dark-secondary)"
-                            }}>
-                              {submission.codeFiles && submission.codeFiles.length > 0 ? (
-                                submission.codeFiles.map((file, idx) => (
-                                  <div key={idx} style={{ marginBottom: idx < submission.codeFiles.length - 1 ? "20px" : "0" }}>
-                                    <h5 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>
-                                      📄 {file.fileName}
-                                    </h5>
-                                    <pre style={{
-                                      background: "var(--bg-secondary)",
-                                      padding: "12px",
-                                      borderRadius: "6px",
-                                      overflow: "auto",
-                                      maxHeight: "300px",
-                                      margin: 0,
-                                      fontSize: "0.8rem",
-                                      color: "var(--text-secondary)",
-                                      border: "1px solid var(--border)"
-                                    }}>
-                                      <code>{file.fileContent}</code>
-                                    </pre>
+                      <>
+                        <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "15px" }}>
+                          👥 {assignmentSubmissions.length} student(s) uploaded
+                        </div>
+                        <div style={{ display: "grid", gap: "8px" }}>
+                          {assignmentSubmissions.map(submission => (
+                            <div
+                              key={submission.id}
+                              style={{
+                                background: selectedSubmission?.id === submission.id ? "rgba(16, 185, 129, 0.1)" : "var(--bg-secondary)",
+                                border: selectedSubmission?.id === submission.id ? "2px solid var(--primary)" : "1px solid var(--border)",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.2s ease",
+                              }}
+                              onClick={() => {
+                                setSelectedSubmission(submission.id === selectedSubmission?.id ? null : submission);
+                                setSubmissionMarks(submission.marks || "");
+                              }}
+                            >
+                              <div style={{
+                                padding: "10px 12px",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "12px",
+                              }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <h5 style={{ margin: "0 0 3px 0", color: "var(--primary)", fontSize: "0.95rem" }}>
+                                    {submission.student?.name || "Unknown"}
+                                  </h5>
+                                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                    <span>{submission.student?.email}</span>
+                                    <span className={`status-badge ${submission.status}`} style={{ padding: "2px 6px", fontSize: "0.75rem" }}>{submission.status}</span>
+                                    <span style={{ fontWeight: 600, color: "var(--primary)" }}>{submission.marks || 0}/{submission.totalMarks}</span>
                                   </div>
-                                ))
-                              ) : (
-                                <p style={{ margin: 0, color: "var(--text-muted)" }}>No code files</p>
-                              )}
-
-                              <button
-                                className="btn btn-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRunTests(submission.id);
-                                }}
-                                style={{ marginTop: "15px", width: "100%" }}
-                              >
-                                ▶️ Run Tests for This Submission
-                              </button>
-
-                              {testResults && (
-                                <div style={{ marginTop: "15px" }}>
-                                  <h5 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>Test Results:</h5>
-                                  {testResults.map((result, idx) => (
-                                    <div key={idx} style={{
-                                      padding: "10px",
-                                      marginBottom: "8px",
-                                      borderRadius: "6px",
-                                      background: result.passed ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
-                                      border: `1px solid ${result.passed ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
-                                    }}>
-                                      <p style={{ margin: 0, fontWeight: 600, color: result.passed ? "var(--primary)" : "#dc2626" }}>
-                                        {result.passed ? "✅" : "❌"} {result.testName}
-                                      </p>
-                                      {!result.passed && result.errorMessage && (
-                                        <p style={{ margin: "5px 0 0 0", fontSize: "0.85rem", color: "#fca5a5" }}>
-                                          {result.errorMessage}
-                                        </p>
-                                      )}
+                                </div>
+                                <div style={{ fontSize: "1rem", color: "var(--text-muted)" }}>
+                                  {selectedSubmission?.id === submission.id ? "▼" : "▶"}
+                                </div>
+                              </div>
+                              {/* Expanded Details */}
+                              {selectedSubmission?.id === submission.id && (
+                                <div style={{
+                                  borderTop: "1px solid var(--border)",
+                                  padding: "12px",
+                                  background: "var(--dark-secondary)",
+                                  fontSize: "0.85rem"
+                                }}>
+                                  {/* Marks Section */}
+                                  <div style={{ marginBottom: "12px", padding: "10px", background: "rgba(16, 185, 129, 0.05)", borderRadius: "4px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                      <span style={{ color: "var(--text-muted)" }}>📊 Current Marks:</span>
+                                      <span style={{ fontSize: "1.1rem", fontWeight: "bold", color: "var(--primary)" }}>{submission.marks || 0}/{submission.totalMarks}</span>
                                     </div>
-                                  ))}
+                                    <p style={{ margin: "0 0 8px 0", color: "var(--text-muted)", fontSize: "0.75rem" }}>Submitted: {new Date(submission.submittedAt).toLocaleString()}</p>
+                                  </div>
+
+                                  {/* Code Files */}
+                                  {submission.codeFiles && submission.codeFiles.length > 0 ? (
+                                    <div style={{ marginBottom: "12px" }}>
+                                      <h6 style={{ margin: "0 0 8px 0", color: "var(--primary)" }}>📄 Code Files:</h6>
+                                      {submission.codeFiles.map((file, idx) => (
+                                        <details key={idx} style={{ marginBottom: "8px" }}>
+                                          <summary style={{ cursor: "pointer", color: "var(--primary)", padding: "6px", background: "rgba(16, 185, 129, 0.05)", borderRadius: "3px" }}>
+                                            {file.fileName}
+                                          </summary>
+                                          <pre style={{
+                                            background: "var(--bg-secondary)",
+                                            padding: "10px",
+                                            borderRadius: "4px",
+                                            overflow: "auto",
+                                            maxHeight: "250px",
+                                            margin: "6px 0 0 0",
+                                            fontSize: "0.75rem",
+                                            color: "var(--text-secondary)",
+                                            border: "1px solid var(--border)"
+                                          }}>
+                                            <code>{file.fileContent}</code>
+                                          </pre>
+                                        </details>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p style={{ margin: "0 0 12px 0", color: "var(--text-muted)" }}>No code files</p>
+                                  )}
+
+                                  {/* Test Results from Bulk Run */}
+                                  {bulkTestResults?.results && (
+                                    (() => {
+                                      const studentResult = bulkTestResults.results.find(r => r.submissionId === submission.id);
+                                      return studentResult ? (
+                                        <div style={{ padding: "10px", background: "rgba(16, 185, 129, 0.05)", borderRadius: "4px" }}>
+                                          <h6 style={{ margin: "0 0 8px 0", color: "var(--primary)" }}>🧪 Test Results:</h6>
+                                          <div style={{ fontSize: "0.8rem", marginBottom: "8px" }}>
+                                            <div style={{ display: "flex", gap: "15px" }}>
+                                              <span>✅ Passed: <strong>{studentResult.passedTests}</strong></span>
+                                              <span>❌ Failed: <strong>{studentResult.totalTests - studentResult.passedTests}</strong></span>
+                                              <span>⭐ Marks: <strong style={{ color: "var(--primary)" }}>{studentResult.marksAllocated}</strong></span>
+                                            </div>
+                                          </div>
+                                          {studentResult.testDetails && (
+                                            <details style={{ fontSize: "0.75rem" }}>
+                                              <summary style={{ cursor: "pointer", color: "var(--primary)" }}>Details</summary>
+                                              <div style={{ marginTop: "6px", paddingTop: "6px", borderTop: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                                                {studentResult.testDetails.map((test, idx) => (
+                                                  <div key={idx} style={{ margin: "4px 0", color: test.passed ? "#10b981" : "#ef4444" }}>
+                                                    {test.passed ? "✅" : "❌"} {test.testName} (+{test.marks})
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </details>
+                                          )}
+                                        </div>
+                                      ) : null;
+                                    })()
+                                  )}
+
+                                  {/* Action Buttons */}
+                                  <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                                    <button
+                                      className="btn btn-primary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowStudentDetail(true);
+                                      }}
+                                      style={{ flex: 1, fontSize: "0.85rem", padding: "8px" }}
+                                    >
+                                      📁 View Files
+                                    </button>
+                                    <button
+                                      className="btn btn-primary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRunTests(submission.id);
+                                      }}
+                                      style={{ flex: 1, fontSize: "0.85rem", padding: "8px" }}
+                                    >
+                                      ▶️ Run Tests
+                                    </button>
+                                  </div>
+
+                                  {testResults && (
+                                    <div style={{ marginTop: "12px", padding: "10px", background: "rgba(16, 185, 129, 0.05)", borderRadius: "4px" }}>
+                                      <h6 style={{ margin: "0 0 8px 0", color: "var(--primary)" }}>Individual Test Results:</h6>
+                                      {testResults.map((result, idx) => (
+                                        <div key={idx} style={{
+                                          padding: "6px",
+                                          marginBottom: "4px",
+                                          borderRadius: "3px",
+                                          background: result.passed ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                                          fontSize: "0.8rem"
+                                        }}>
+                                          <p style={{ margin: 0, fontWeight: 600, color: result.passed ? "var(--primary)" : "#dc2626" }}>
+                                            {result.passed ? "✅" : "❌"} {result.testName}
+                                          </p>
+                                          {!result.passed && result.errorMessage && (
+                                            <p style={{ margin: "3px 0 0 0", fontSize: "0.75rem", color: "#fca5a5" }}>
+                                              {result.errorMessage}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
-                          )}
+                          ))}
                         </div>
-                      ))
+                      </>
                     )}
                   </div>
                 )}
 
                 {/* Edit Marks */}
-                {detailsTab === "marks" && selectedSubmission && (
+                {detailsTab === "marks" && assignmentSubmissions.length > 0 && (
                   <div className="marks-editor">
-                    <div className="mark-item">
-                      <h4>{selectedSubmission.student?.name}</h4>
-                      <div className="mark-input-group">
-                        <input
-                          type="number"
-                          min="0"
-                          max={selectedSubmission.totalMarks}
-                          value={submissionMarks}
-                          onChange={(e) => setSubmissionMarks(e.target.value)}
-                          placeholder="Enter marks"
-                        />
-                        <span className="max-marks">/ {selectedSubmission.totalMarks}</span>
-                        <button
-                          className="btn btn-success"
-                          onClick={() => handleUpdateMarks(selectedSubmission.id, submissionMarks)}
-                        >
-                          Save
-                        </button>
-                      </div>
+                    <h4 style={{ marginTop: 0 }}>📊 Edit Marks for {selectedAssignment.title}</h4>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Click a student to edit marks and allow viewing</p>
+                    <div style={{ display: "grid", gap: "10px", maxHeight: "600px", overflowY: "auto" }}>
+                      {assignmentSubmissions.map(submission => (
+                        <div key={submission.id}>
+                          <div
+                            style={{
+                              background: selectedSubmission?.id === submission.id ? "rgba(16, 185, 129, 0.1)" : "var(--bg-secondary)",
+                              border: "1px solid var(--border)",
+                              borderRadius: selectedSubmission?.id === submission.id ? "6px 6px 0 0" : "6px",
+                              padding: "10px",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "10px"
+                            }}
+                            onClick={() => {
+                              setSelectedSubmission(submission);
+                              setSubmissionMarks(submission.marks || "");
+                            }}
+                          >
+                            <div>
+                              <h5 style={{ margin: "0 0 3px 0", color: "var(--primary)" }}>{submission.student?.name}</h5>
+                              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>{submission.student?.email}</p>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "0.9rem", color: "var(--primary)", fontWeight: "bold" }}>{submission.marks || 0}/{submission.totalMarks}</span>
+                              {selectedSubmission?.id === submission.id && (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  max={submission.totalMarks}
+                                  value={submissionMarks}
+                                  onChange={(e) => setSubmissionMarks(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  placeholder="Enter marks"
+                                  style={{
+                                    width: "70px",
+                                    padding: "6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid var(--border)",
+                                    background: "var(--bg-secondary)",
+                                    color: "var(--text)",
+                                    fontSize: "0.9rem"
+                                  }}
+                                />
+                              )}
+                            </div>
+                            {selectedSubmission?.id === submission.id && (
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                  className="btn btn-success"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateMarks(submission.id, submissionMarks);
+                                  }}
+                                  style={{ padding: "6px 12px", fontSize: "0.85rem" }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleViewMarks(submission.id, submission.viewMarks);
+                                  }}
+                                  style={{
+                                    background: submission.viewMarks ? "var(--primary)" : "var(--border)",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    padding: "6px 12px",
+                                    fontSize: "0.85rem",
+                                    color: "white",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    fontWeight: "bold"
+                                  }}
+                                  title={submission.viewMarks ? "Marks visible to student" : "Marks hidden from student"}
+                                >
+                                  <span style={{
+                                    display: "inline-block",
+                                    width: "24px",
+                                    height: "14px",
+                                    borderRadius: "7px",
+                                    background: submission.viewMarks ? "white" : "#ccc",
+                                    position: "relative",
+                                    transition: "all 0.3s"
+                                  }}>
+                                    <span style={{
+                                      position: "absolute",
+                                      width: "12px",
+                                      height: "12px",
+                                      borderRadius: "50%",
+                                      background: submission.viewMarks ? "var(--primary)" : "#999",
+                                      top: "1px",
+                                      left: submission.viewMarks ? "11px" : "1px",
+                                      transition: "left 0.3s"
+                                    }}></span>
+                                  </span>
+                                  {submission.viewMarks ? "Visible" : "Hidden"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
             </>
+          )}
+
+          {/* EDIT ASSIGNMENT MODAL */}
+          {editingAssignment && (
+            <div style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0, 0, 0, 0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000
+            }} onClick={() => setEditingAssignment(null)}>
+              <div style={{
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                padding: "30px",
+                maxWidth: "500px",
+                width: "90%",
+                maxHeight: "90vh",
+                overflowY: "auto"
+              }} onClick={(e) => e.stopPropagation()}>
+                <h2 style={{ marginTop: 0, color: "var(--primary)" }}>✏️ Edit Assignment</h2>
+                
+                <div className="form-group">
+                  <label>Title *</label>
+                  <input
+                    type="text"
+                    value={editingAssignment.title}
+                    onChange={(e) => setEditingAssignment({...editingAssignment, title: e.target.value})}
+                    placeholder="Assignment title"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea
+                    value={editingAssignment.description || ""}
+                    onChange={(e) => setEditingAssignment({...editingAssignment, description: e.target.value})}
+                    placeholder="Assignment description"
+                    rows="3"
+                  ></textarea>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Due Date & Time *</label>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <input
+                        type="date"
+                        value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[0] : ''}
+                        onChange={(e) => {
+                          const dateStr = e.target.value;
+                          const time = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
+                          setEditingAssignment({...editingAssignment, dueDate: `${dateStr}T${time}`});
+                        }}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "4px",
+                          border: "1px solid var(--border)",
+                          background: "var(--bg-primary)",
+                          color: "var(--text)",
+                          fontSize: "1rem",
+                          cursor: "pointer",
+                          flex: 1
+                        }}
+                      />
+                      <input
+                        type="time"
+                        value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
+                        onChange={(e) => {
+                          const dateStr = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                          setEditingAssignment({...editingAssignment, dueDate: `${dateStr}T${e.target.value}`});
+                        }}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "4px",
+                          border: "1px solid var(--border)",
+                          background: "var(--bg-primary)",
+                          color: "var(--text)",
+                          fontSize: "1rem",
+                          cursor: "pointer",
+                          flex: 1
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Total Marks</label>
+                    <input
+                      type="number"
+                      value={editingAssignment.totalMarks}
+                      onChange={(e) => setEditingAssignment({...editingAssignment, totalMarks: parseFloat(e.target.value)})}
+                      min="1"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+
+                {editingAssignment.dueDate && (
+                  <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "10px", padding: "10px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px" }}>
+                    📅 {new Date(editingAssignment.dueDate).toLocaleString()}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                  <button
+                    onClick={handleUpdateAssignment}
+                    className="btn btn-success"
+                    style={{ flex: 1 }}
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="btn btn-cancel"
+                    style={{ flex: 1, background: "var(--border)", color: "var(--text)" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
