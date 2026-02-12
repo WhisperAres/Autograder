@@ -5,6 +5,9 @@ const assignmentRoutes = require("./auth/assignments.routes");
 const submissionRoutes = require("./auth/submissions.routes");
 const graderRoutes = require("./auth/grader.routes");
 const adminRoutes = require("./auth/admin.routes");
+const adminPagesRoutes = require("./auth/admin-pages.routes");
+const graderPagesRoutes = require("./auth/grader-pages.routes");
+const studentPagesRoutes = require("./auth/student-pages.routes");
 const verifyToken = require("./middlewares/verify.middleware");
 
 // Import all models for association setup
@@ -55,5 +58,15 @@ app.use("/assignments", verifyToken, assignmentRoutes);
 app.use("/submissions", verifyToken, submissionRoutes);
 app.use("/grader", graderRoutes);
 app.use("/admin", adminRoutes);
+
+// ==================== PAGE-SPECIFIC ROUTES ====================
+// Admin dashboard pages (with verify middleware)
+app.use("/admin/page", verifyToken, adminPagesRoutes);
+
+// Grader dashboard pages (with verify middleware)
+app.use("/grader/page", verifyToken, graderPagesRoutes);
+
+// Student dashboard pages (with verify middleware)
+app.use("/student/page", verifyToken, studentPagesRoutes);
 
 module.exports = app;

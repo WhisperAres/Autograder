@@ -8,18 +8,24 @@
  *   node addUser.js                              (interactive mode)
  *   node addUser.js <email> <password> <role>   (command line args)
  * 
- * Roles: student, ta, admin
+ * Roles: student, grader, admin
  * 
  * Examples:
  *   node addUser.js
  *   node addUser.js student@uni.edu mypassword123 student
- *   node addUser.js ta@uni.edu tapass123 ta
+ *   node addUser.js grader@uni.edu tapass123 grader
  */
 
 const sequelize = require('./src/config/database');
 const User = require('./src/models/user');
 const bcrypt = require('bcryptjs');
 const readline = require('readline');
+const session = require('express-session');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const secretKey = process.env.JWT_SECRET;
+const tokenExpiration = process.env.JWT_EXPIRATION || '1800s';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -35,8 +41,8 @@ const addUser = async (email, password, role, name) => {
     console.log('✅ Database connection successful');
 
     // Validate role
-    if (!['student', 'ta', 'admin'].includes(role)) {
-      console.error('❌ Invalid role. Must be: student, ta, or admin');
+    if (!['student', 'grader', 'admin'].includes(role)) {
+      console.error('❌ Invalid role. Must be: student, grader, or admin');
       process.exit(1);
     }
 
@@ -91,10 +97,10 @@ const interactiveMode = async () => {
     process.exit(1);
   }
 
-  console.log('\n👤 Role options: student, ta, admin');
+  console.log('\n👤 Role options: student, grader, admin');
   const role = await question('👤 Role: ');
-  if (!['student', 'ta', 'admin'].includes(role)) {
-    console.error('❌ Invalid role. Must be: student, ta, or admin');
+  if (!['student', 'grader', 'admin'].includes(role)) {
+    console.error('❌ Invalid role. Must be: student, grader, or admin');
     process.exit(1);
   }
 
@@ -130,8 +136,8 @@ const main = async () => {
       process.exit(1);
     }
 
-    if (!['student', 'ta', 'admin'].includes(role)) {
-      console.error('❌ Invalid role. Must be: student, ta, or admin');
+    if (!['student', 'grader', 'admin'].includes(role)) {
+      console.error('❌ Invalid role. Must be: student, grader, or admin');
       process.exit(1);
     }
 

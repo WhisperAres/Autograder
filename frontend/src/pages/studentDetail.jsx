@@ -20,7 +20,7 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
     try {
       // Get code files for this submission
       const filesRes = await fetch(
-        `http://localhost:5000/admin/submissions/${submission.id}/code-files`,
+        `http://localhost:5000/admin/page/grade-submission/${submission.id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (filesRes.ok) {
@@ -34,7 +34,7 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
 
       // Get test cases for this assignment
       const testsRes = await fetch(
-        `http://localhost:5000/admin/assignments/${assignment.id}/test-cases`,
+        `http://localhost:5000/admin/page/test-cases-management/${assignment.id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (testsRes.ok) {
@@ -60,7 +60,7 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
 
     try {
       const response = await fetch(
-        `http://localhost:5000/admin/submissions/${submission.id}/run-single-test`,
+        `http://localhost:5000/admin/page/grade-submission/${submission.id}/run-single-test`,
         {
           method: "POST",
           headers: {

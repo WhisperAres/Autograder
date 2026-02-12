@@ -19,11 +19,13 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-fileupload": "^1.5.2",
+    "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "pg": "^8.18.0",
     "pg-pool": "^3.11.0",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "session": "^0.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

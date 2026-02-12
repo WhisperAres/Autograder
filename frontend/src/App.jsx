@@ -16,7 +16,12 @@ function App() {
     const storedUser = localStorage.getItem('user')
     
     if (token && storedUser) {
-      const userData = JSON.parse(storedUser)
+      const parsed = JSON.parse(storedUser)
+      // Normalize legacy 'ta' role to 'grader'
+      const normalizedRole = (parsed.role === 'ta' || parsed.role === 'TA') ? 'grader' : parsed.role;
+      const userData = { ...parsed, role: normalizedRole };
+      // Ensure localStorage stays normalized
+      localStorage.setItem('user', JSON.stringify(userData));
       setIsAuthenticated(true)
       setUserRole(userData.role)
       setUser(userData)
@@ -38,13 +43,41 @@ function App() {
           path="/login" 
           element={
             isAuthenticated ? 
-            <Navigate to={`/${userRole}`} /> : 
+            (userRole === 'grader' ? <Navigate to="/grader/dashboard" replace={true} /> : <Navigate to={`/${userRole}`} replace={true} />) : 
             <Login setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} setUser={setUser} />
           } 
         />
 
+        {/* Student routes: keep backward compatible /student -> dashboard */}
         <Route
           path="/student"
+          element={
+            isAuthenticated && userRole === 'student' ?
+            <Navigate to="/student/dashboard" /> :
+            <Navigate to="/login" />
+          }
+        />
+
+        <Route
+          path="/student/dashboard"
+          element={
+            isAuthenticated && userRole === 'student' ?
+            <Dashboard handleLogout={handleLogout} user={user} /> :
+            <Navigate to="/login" />
+          }
+        />
+
+        <Route
+          path="/student/submit/:assignmentId"
+          element={
+            isAuthenticated && userRole === 'student' ?
+            <Dashboard handleLogout={handleLogout} user={user} /> :
+            <Navigate to="/login" />
+          }
+        />
+
+        <Route
+          path="/student/view-results/:submissionId"
           element={
             isAuthenticated && userRole === 'student' ?
             <Dashboard handleLogout={handleLogout} user={user} /> :
@@ -55,40 +88,99 @@ function App() {
         <Route
           path="/grader"
           element={
-            isAuthenticated && (userRole === 'grader' || userRole === 'ta') ?
-            <div className="with-navbar">
-              <nav className="navbar">
-                <div className="navbar-content">
-                  <h2 className="navbar-title">Autograder - Grader</h2>
-                  <div className="navbar-user">
-                    <span>{user?.name}</span>
-                    <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                  </div>
-                </div>
-              </nav>
-              <GraderDashboard />
-            </div> :
-            <Navigate to="/login" />
+            isAuthenticated && userRole === 'grader' ? (
+              <Navigate to="/grader/dashboard" />
+            ) : (
+              <Navigate to="/login" />
+            )
           }
         />
 
         <Route
-          path="/ta"
+          path="/grader/dashboard"
           element={
-            isAuthenticated && userRole === 'ta' ?
-            <div className="with-navbar">
-              <nav className="navbar">
-                <div className="navbar-content">
-                  <h2 className="navbar-title">Autograder - TA</h2>
-                  <div className="navbar-user">
-                    <span>{user?.name}</span>
-                    <button className="logout-btn" onClick={handleLogout}>Logout</button>
+            isAuthenticated && userRole === 'grader' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Grader</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
                   </div>
-                </div>
-              </nav>
-              <GraderDashboard />
-            </div> :
-            <Navigate to="/login" />
+                </nav>
+                <GraderDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/grader/test-solutions/:assignmentId"
+          element={
+            isAuthenticated && userRole === 'grader' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Grader</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <GraderDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/grader/grade-submissions/:submissionId"
+          element={
+            isAuthenticated && userRole === 'grader' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Grader</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <GraderDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/grader/dashboard"
+          element={
+            isAuthenticated && userRole === 'grader' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Grader</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <GraderDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
           }
         />
 
@@ -96,19 +188,74 @@ function App() {
           path="/admin"
           element={
             isAuthenticated && userRole === 'admin' ?
-            <div className="with-navbar">
-              <nav className="navbar">
-                <div className="navbar-content">
-                  <h2 className="navbar-title">Autograder - Admin</h2>
-                  <div className="navbar-user">
-                    <span>{user?.name}</span>
-                    <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                  </div>
-                </div>
-              </nav>
-              <AdminDashboard />
-            </div> :
+            <Navigate to="/admin/dashboard" /> :
             <Navigate to="/login" />
+          }
+        />
+
+        <Route
+          path="/admin/dashboard"
+          element={
+            isAuthenticated && userRole === 'admin' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Admin</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <AdminDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/admin/test-cases-management/:assignmentId"
+          element={
+            isAuthenticated && userRole === 'admin' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Admin</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <AdminDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/admin/grade-submission/:submissionId"
+          element={
+            isAuthenticated && userRole === 'admin' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Admin</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <AdminDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
           }
         />
 

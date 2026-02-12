@@ -25,11 +25,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const secret = process.env.JWT_SECRET || "SECRET_KEY";
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      secret,
-      { expiresIn: "1d" }
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRATION || "1800s" } // Match expiration with .env
     );
 
     res.json({

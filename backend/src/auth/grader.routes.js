@@ -8,8 +8,8 @@ const adminController = require("./admin.controller");
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// All grader routes are protected and require grader or ta role
-router.use(verify, checkRole("grader", "ta"));
+// All grader routes are protected and require grader role
+router.use(verify, checkRole("grader"));
 
 // Assignments
 router.get("/assignments", graderController.getAssignments);

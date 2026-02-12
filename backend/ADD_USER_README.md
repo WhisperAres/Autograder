@@ -7,7 +7,7 @@ This script allows you to easily add new users to the database with securely has
 ✅ **Secure Password Hashing** - Uses bcrypt with 10 salt rounds  
 ✅ **Two Modes** - Interactive or command-line arguments  
 ✅ **Duplicate Prevention** - Checks if email already exists  
-✅ **Role Support** - student, ta, admin  
+✅ **Role Support** - student, grader, admin  
 ✅ **Database Integration** - Directly adds to PostgreSQL database  
 
 ## Setup
@@ -45,8 +45,8 @@ Examples:
 # Add a student
 node addUser.js student1@uni.edu password123 student "John Doe"
 
-# Add a TA
-node addUser.js ta1@uni.edu password456 ta "Jane Smith"
+# Add a Grader
+node addUser.js grader1@uni.edu password456 grader "Jane Smith"
 
 # Add an admin
 node addUser.js admin2@uni.edu password789 admin "Admin User"
@@ -58,7 +58,7 @@ node addUser.js student2@uni.edu password000 student
 ## Roles
 
 - **student** - Can submit assignments, view grades
-- **ta** - Can grade submissions, view all students
+- **grader** - Can grade submissions, view all students
 - **admin** - Full system control
 
 ## Password Requirements
@@ -120,8 +120,8 @@ node addUser.js student1@uni.edu pass1 student "Student One"
 node addUser.js student2@uni.edu pass2 student "Student Two"
 node addUser.js student3@uni.edu pass3 student "Student Three"
 
-# Add TAs
-node addUser.js ta1@uni.edu tapass ta "TA One"
+# Add Graders
+node addUser.js grader1@uni.edu tapass grader "Grader One"
 
 # Add another admin
 node addUser.js admin2@uni.edu adminpass admin "Admin Two"
@@ -134,7 +134,7 @@ node addUser.js admin2@uni.edu adminpass admin "Admin Two"
 - Use a different email
 
 **Error: "Invalid role"**
-- Role must be: `student`, `ta`, or `admin` (lowercase)
+- Role must be: `student`, `grader`, or `admin` (lowercase)
 
 **Error: "Database connection Error"**
 - Make sure PostgreSQL is running

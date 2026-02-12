@@ -57,6 +57,7 @@
   gap: 15px;
   color: var(--navbar-text-color);
   font-weight: 500;
+  margin-right: 5px;
 }
 
 .logout-btn {
@@ -69,6 +70,9 @@
   font-size: 0.9rem;
   font-weight: 600;
   transition: all 0.3s ease;
+  margin-right: 15px;
+  height: 40px;
+  width: 75.6px;
 }
 
 .logout-btn:hover {

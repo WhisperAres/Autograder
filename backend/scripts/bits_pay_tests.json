@@ -1,0 +1,122 @@
+[
+  {
+    "testName": "isInternational",
+    "testCode": "Transaction t1 = new Transaction(\"TXN-101\", 100.0, 'C', true);\nTransaction t2 = new Transaction(\"TXN-102\", 100.0, 'D', false);\nassertTrue(t1.isInternational());\nassertFalse(t2.isInternational());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "getProcessingFee",
+    "testCode": "Transaction international = new Transaction(\"INT-201\", 200.0, 'D', true);\nTransaction domestic = new Transaction(\"DOM-202\", 200.0, 'D', false);\nassertEquals(5, international.getProcessingFee());\nassertEquals(0, domestic.getProcessingFee());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "getType",
+    "testCode": "Transaction credit = new Transaction(\"TXN-301\", 150.0, 'C', false);\nTransaction debit = new Transaction(\"TXN-302\", 150.0, 'D', true);\nassertEquals('C', credit.getType());\nassertEquals('D', debit.getType());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "addTransaction",
+    "testCode": "Wallet w = new Wallet(\"Poojan Virani\", \"2023A3PS0123G\", 5);\nTransaction t = new Transaction(\"TXN-401\", 100.0, 'C', false);\nassertTrue(w.addTransaction(t));\nassertEquals(1, w.getCount());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "getCampus",
+    "testCode": "Wallet goaWallet = new Wallet(\"Student1\", \"2023A3PS0123G\", 5);\nWallet hydWallet = new Wallet(\"Student2\", \"2022A7PS1234A\", 5);\nWallet pilaniWallet = new Wallet(\"Student3\", \"2021A1PS5678Z\", 5);\nassertEquals('G', goaWallet.getCampus());\nassertEquals('A', hydWallet.getCampus());\nassertEquals('Z', pilaniWallet.getCampus());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "getShortCode",
+    "testCode": "Wallet w1 = new Wallet(\"Alice\", \"2023A3PS1102G\", 5);\nWallet w2 = new Wallet(\"Bob\", \"2022A7PS1003H\", 5);\nassertEquals(1102, w1.getShortCode());\nassertEquals(1003, w2.getShortCode());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "calculateCreditScore",
+    "testCode": "Wallet w = new Wallet(\"Student\", \"2023A3PS0100K\", 5);\nassertEquals(175, w.calculateCreditScore());",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "calculateBalanceOnlyCredits",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nw.addTransaction(new Transaction(\"TXN-801\", 100.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-802\", 50.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-803\", 25.0, 'C', false));\nassertEquals(175.0, p.calculateBalance(w));",
+    "marks": 0.25,
+    "isHidden": false
+  },
+  {
+    "testName": "calculateBalanceMixed",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nw.addTransaction(new Transaction(\"TXN-901\", 200.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-902\", 50.0, 'D', false));\nw.addTransaction(new Transaction(\"TXN-903\", 30.0, 'D', true));\nassertEquals(115.0, p.calculateBalance(w));",
+    "marks": 0.25,
+    "isHidden": false
+  },
+  {
+    "testName": "convertToTokens",
+    "testCode": "Processor p = new Processor();\nassertEquals(151, p.convertToTokens(100.99));\nassertEquals(76, p.convertToTokens(50.8));",
+    "marks": 0.5,
+    "isHidden": false
+  },
+  {
+    "testName": "isEligibleForUpgrade",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0500G\", 5);\nw.addTransaction(new Transaction(\"TXN-1101\", 500.0, 'C', false));\nassertTrue(p.isEligibleForUpgrade(w));",
+    "marks": 0.25,
+    "isHidden": false
+  },
+  {
+    "testName": "getHistory",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nTransaction t1 = new Transaction(\"TXN-1201\", 100.0, 'C', false);\nTransaction t2 = new Transaction(\"TXN-1202\", 50.0, 'D', false);\nw.addTransaction(t1);\nw.addTransaction(t2);\nTransaction[] history = p.getTransactions(w);\nassertNotNull(history);\nassertEquals(t1, history[0]);\nassertEquals(t2, history[1]);",
+    "marks": 0.25,
+    "isHidden": false
+  },
+  {
+    "testName": "hidden-eligibility-false-1",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0050G\", 5);\nw.addTransaction(new Transaction(\"TXN-1301\", 100.0, 'C', false));\nassertFalse(p.isEligibleForUpgrade(w));",
+    "marks": 0.5,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-eligibility-false-2",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0200H\", 5);\nw.addTransaction(new Transaction(\"TXN-1401\", 300.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-1402\", 100.0, 'D', false));\nassertFalse(p.isEligibleForUpgrade(w));",
+    "marks": 0.5,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-calc-balance-mixed-different",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nw.addTransaction(new Transaction(\"TXN-1501\", 500.0, 'C', true));\nw.addTransaction(new Transaction(\"TXN-1502\", 100.0, 'D', true));\nw.addTransaction(new Transaction(\"TXN-1503\", 200.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-1504\", 50.0, 'D', false));\nassertEquals(545.0, p.calculateBalance(w));",
+    "marks": 0.75,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-calc-credits-only",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nw.addTransaction(new Transaction(\"TXN-1601\", 250.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-1602\", 150.0, 'C', true));\nw.addTransaction(new Transaction(\"TXN-1603\", 100.0, 'C', false));\nassertEquals(500.0, p.calculateBalance(w));",
+    "marks": 0.75,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-getCategory",
+    "testCode": "Transaction t1 = new Transaction(\"TXN-701\", 100.0, 'C', false);\nTransaction t2 = new Transaction(\"INT-702\", 200.0, 'D', true);\nTransaction t3 = new Transaction(\"DOM-703\", 150.0, 'C', false);\nassertEquals(\"TXN\", t1.getCategory());\nassertEquals(\"INT\", t2.getCategory());\nassertEquals(\"DOM\", t3.getCategory());",
+    "marks": 0.75,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-isInternational-variations",
+    "testCode": "Transaction domestic1 = new Transaction(\"TXN-801\", 100.0, 'C', false);\nTransaction domestic2 = new Transaction(\"TXN-802\", 200.0, 'D', false);\nTransaction international = new Transaction(\"TXN-803\", 300.0, 'C', true);\nassertFalse(domestic1.isInternational());\nassertFalse(domestic2.isInternational());\nassertTrue(international.isInternational());",
+    "marks": 0.5,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-getShortCode-variations",
+    "testCode": "Wallet w1 = new Wallet(\"Test1\", \"2023A3PS0001G\", 5);\nWallet w2 = new Wallet(\"Test2\", \"2022A7PS9999H\", 5);\nWallet w3 = new Wallet(\"Test3\", \"2021A1PS0500P\", 5);\nassertEquals(1, w1.getShortCode());\nassertEquals(9999, w2.getShortCode());\nassertEquals(500, w3.getShortCode());",
+    "marks": 0.5,
+    "isHidden": true
+  },
+  {
+    "testName": "hidden-calc-balance-negative",
+    "testCode": "Processor p = new Processor();\nWallet w = new Wallet(\"Test\", \"2023A3PS0001G\", 5);\nw.addTransaction(new Transaction(\"TXN-1901\", 100.0, 'C', false));\nw.addTransaction(new Transaction(\"TXN-1902\", 200.0, 'D', true));\nw.addTransaction(new Transaction(\"TXN-1903\", 50.0, 'D', false));\nassertEquals(-1.0, p.calculateBalance(w));",
+    "marks": 0.75,
+    "isHidden": true
+  }
+]

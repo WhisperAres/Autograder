@@ -13,6 +13,7 @@ router.get("/users", checkRole("admin"), adminController.getAllUsers);
 router.post("/users", checkRole("admin"), adminController.createUser);
 router.get("/users/role/:role", checkRole("admin"), adminController.getUsersByRole);
 router.patch("/users/:userId/role", checkRole("admin"), adminController.updateUserRole);
+router.delete("/users/:userId", checkRole("admin"), adminController.deleteUser);
 
 // ==================== ASSIGNMENT MANAGEMENT ====================
 router.get("/assignments", checkRole("admin"), adminController.getAssignments);
@@ -22,20 +23,20 @@ router.patch("/assignments/:assignmentId/view-marks", checkRole("admin"), adminC
 router.delete("/assignments/:assignmentId", checkRole("admin"), adminController.deleteAssignment);
 
 // ==================== TEST CASE MANAGEMENT ====================
-// Allow both admin and ta (graders) to manage test cases
-router.get("/assignments/:assignmentId/test-cases", checkRole("admin", "ta"), adminController.getTestCases);
-router.post("/assignments/:assignmentId/test-cases", checkRole("admin", "ta"), adminController.createTestCase);
-router.patch("/test-cases/:testCaseId", checkRole("admin", "ta"), adminController.updateTestCase);
-router.delete("/test-cases/:testCaseId", checkRole("admin", "ta"), adminController.deleteTestCase);
+// Allow both admin and grader to manage test cases
+router.get("/assignments/:assignmentId/test-cases", checkRole("admin", "grader"), adminController.getTestCases);
+router.post("/assignments/:assignmentId/test-cases", checkRole("admin", "grader"), adminController.createTestCase);
+router.patch("/test-cases/:testCaseId", checkRole("admin", "grader"), adminController.updateTestCase);
+router.delete("/test-cases/:testCaseId", checkRole("admin", "grader"), adminController.deleteTestCase);
 
 // ==================== GRADING & SUBMISSIONS ====================
 router.get("/submissions", checkRole("admin"), adminController.getAllSubmissions);
 router.get("/submissions/assignment/:assignmentId", checkRole("admin"), adminController.getSubmissionsByAssignment);
-router.get("/submissions/:submissionId/code-files", checkRole("admin", "ta"), adminController.getSubmissionCodeFiles);
-router.patch("/submissions/:submissionId/marks", checkRole("admin", "ta"), adminController.updateSubmissionMarks);
 router.patch("/submissions/:submissionId/view-marks", checkRole("admin"), adminController.toggleViewMarks);
-router.post("/submissions/:submissionId/run-tests", checkRole("admin", "ta"), adminController.runTestCases);
-router.post("/submissions/:submissionId/run-single-test", checkRole("admin", "ta"), adminController.runSingleTest);
+router.get("/submissions/:submissionId/code-files", checkRole("admin", "grader"), adminController.getSubmissionCodeFiles);
+router.patch("/submissions/:submissionId/marks", checkRole("admin", "grader"), adminController.updateSubmissionMarks);
+router.post("/submissions/:submissionId/run-tests", checkRole("admin", "grader"), adminController.runTestCases);
+router.post("/submissions/:submissionId/run-single-test", checkRole("admin", "grader"), adminController.runSingleTest);
 router.post("/assignments/:assignmentId/run-all-tests", checkRole("admin"), adminController.runBulkTests);
 router.post("/assignments/:assignmentId/run-tests", checkRole("admin"), adminController.runTestCasesForAll);
 

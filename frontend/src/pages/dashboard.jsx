@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import Modal from "../components/Modal";
 import "./dashboard.css";
 
 export default function Dashboard({ handleLogout, user }) {
@@ -22,6 +23,22 @@ export default function Dashboard({ handleLogout, user }) {
     return saved ? JSON.parse(saved) : false;
   });
 
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState('info');
+  const [modalActions, setModalActions] = useState([]);
+
+  // Helper function to show modal
+  const showModal = (title, message, type = 'info', actions = []) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
+    setModalActions(actions.length > 0 ? actions : [{ label: 'OK', onClick: () => setIsModalOpen(false) }]);
+    setIsModalOpen(true);
+  };
+
   // Apply theme to document root and save preference
   useEffect(() => {
     if (darkMode) {
@@ -42,13 +59,13 @@ export default function Dashboard({ handleLogout, user }) {
 
     const fetchData = async () => {
       try {
-        const assignmentsRes = await fetch("http://localhost:5000/assignments", {
+        const assignmentsRes = await fetch("http://localhost:5000/student/page/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const assignmentsData = await assignmentsRes.json();
         setAssignments(assignmentsData);
 
-        const submissionsRes = await fetch("http://localhost:5000/submissions", {
+        const submissionsRes = await fetch("http://localhost:5000/student/page/dashboard/submissions", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const submissionsData = await submissionsRes.json();
@@ -68,6 +85,52 @@ export default function Dashboard({ handleLogout, user }) {
 
     return () => clearInterval(interval);
   }, [navigate]);
+
+  // Respond to route params (e.g., /student/submit/:assignmentId or /student/view-results/:submissionId)
+  const { assignmentId, submissionId } = useParams();
+
+  useEffect(() => {
+    if (!loading && assignments.length > 0) {
+      if (assignmentId) {
+        const found = assignments.find(a => String(a.id) === String(assignmentId));
+        if (found) {
+          handleAssignmentClick(found);
+        }
+      } else if (submissionId) {
+        // Find submission and show results
+        const foundSubmission = submissions.find(s => String(s.id) === String(submissionId));
+        if (foundSubmission) {
+          setAssignmentSubmission(foundSubmission);
+          handleViewResults();
+        } else {
+          // try fetching results directly from the page-specific endpoint
+          (async () => {
+            try {
+              const token = localStorage.getItem("token");
+              const response = await fetch(`http://localhost:5000/student/page/view-results/${submissionId}`, { headers: { Authorization: `Bearer ${token}` } });
+              if (!response.ok) return;
+              const data = await response.json();
+              // Backend returns { submission: {...}, testResults: [...] }
+              setTestResults(data);
+              if (data.submission) setAssignmentSubmission(data.submission);
+              setShowTestResults(true);
+            } catch (err) {
+              console.error("Error fetching results by param:", err);
+            }
+          })();
+        }
+      } else {
+        // No route params - reset to dashboard view
+        setSelectedAssignment(null);
+        setSelectedFile(null);
+        setFiles([]);
+        setShowTestResults(false);
+        setCodeContent("");
+        setAssignmentSubmission(null);
+        setTestResults(null);
+      }
+    }
+  }, [assignmentId, submissionId, loading, assignments, submissions]);
 
   const handleAssignmentClick = (assignment) => {
     setSelectedAssignment(assignment);
@@ -91,6 +154,8 @@ export default function Dashboard({ handleLogout, user }) {
     setFiles([]);
     setShowTestResults(false);
     setCodeContent("");
+    // Ensure the URL updates back to the main student dashboard
+    navigate('/student/dashboard');
   };;
 
   const handleFileChange = (e) => {
@@ -104,7 +169,7 @@ export default function Dashboard({ handleLogout, user }) {
   const handleUpload = async (e) => {
     e.preventDefault();
     if (files.length === 0 || !selectedAssignment) {
-      alert("Please select files");
+      showModal('Upload Failed', 'Please select files to upload.', 'warning');
       return;
     }
 
@@ -115,20 +180,25 @@ export default function Dashboard({ handleLogout, user }) {
       for (const file of files) {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("assignmentId", selectedAssignment.id);
+        formData.append("assignmentId", assignmentId);
 
-        const response = await fetch("http://localhost:5000/submissions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
+
+        const response = await fetch(
+          `http://localhost:5000/student/page/submit-assignment/${selectedAssignment.id}/upload`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          }
+        );
 
         if (!response.ok) {
           const errorData = await response.json();
           if (errorData.isLate) {
-            alert(`❌ ${errorData.message}`);
+            showModal('Submission Late', errorData.message, 'error');
           } else {
-            alert("Upload failed: " + errorData.message);
+            showModal('Upload Failed', errorData.message, 'error');
+
           }
           setUploadingFiles(false);
           return;
@@ -136,9 +206,9 @@ export default function Dashboard({ handleLogout, user }) {
       }
 
       setFiles([]);
-      alert("Files uploaded successfully!");
+      showModal('Success', 'Files uploaded successfully!', 'success');
 
-      const submissionsRes = await fetch("http://localhost:5000/submissions", {
+      const submissionsRes = await fetch("http://localhost:5000/student/page/dashboard/submissions", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const submissionsData = await submissionsRes.json();
@@ -150,7 +220,7 @@ export default function Dashboard({ handleLogout, user }) {
       setAssignmentSubmission(updatedSubmission || null);
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Upload failed: " + error.message);
+      showModal('Upload Error', error.message, 'error');
     } finally {
       setUploadingFiles(false);
     }
@@ -160,12 +230,12 @@ export default function Dashboard({ handleLogout, user }) {
     const token = localStorage.getItem("token");
     try {
       const response = await fetch(
-        `http://localhost:5000/submissions/${assignmentSubmission.id}/results`,
+        `http://localhost:5000/student/page/view-results/${assignmentSubmission.id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (!response.ok) {
-        alert("Results not available");
+        showModal('No Results', 'Results are not available yet.', 'warning');
         return;
       }
 
@@ -174,14 +244,14 @@ export default function Dashboard({ handleLogout, user }) {
       setShowTestResults(true);
     } catch (error) {
       console.error("Error fetching results:", error);
-      alert("Failed to load results");
+      showModal('Error', 'Failed to load results.', 'error');
     }
   };
 
   const handleViewCode = async (file) => {
     if (!assignmentSubmission || !file || !file.id) {
       console.error("Invalid file or submission", { file, assignmentSubmission });
-      alert("Error: Invalid file");
+      showModal('Invalid File', 'The selected file is not valid.', 'error');
       return;
     }
 
@@ -189,9 +259,9 @@ export default function Dashboard({ handleLogout, user }) {
     try {
       const fileId = parseInt(file.id);
       const submissionId = parseInt(assignmentSubmission.id);
-      const url = `http://localhost:5000/submissions/${submissionId}/code/${fileId}`;
+      const url = `http://localhost:5000/student/page/view-results/${submissionId}/code/${fileId}`;
       console.log("Fetching code from:", url);
-      
+
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -199,13 +269,13 @@ export default function Dashboard({ handleLogout, user }) {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Server error:", errorData);
-        alert("Failed to load code: " + (errorData.message || response.statusText));
+        showModal('Load Error', 'Failed to load code: ' + (errorData.message || response.statusText), 'error');
         return;
       }
 
       const data = await response.json();
       if (!data.fileContent) {
-        alert("No content found for this file");
+        showModal('No Content', 'No content found for this file.', 'warning');
         return;
       }
       setCodeContent(data.fileContent);
@@ -213,14 +283,14 @@ export default function Dashboard({ handleLogout, user }) {
       setSelectedFile(file);
     } catch (error) {
       console.error("Error fetching code:", error);
-      alert("Failed to load code: " + error.message);
+      showModal('Load Error', 'Failed to load code: ' + error.message, 'error');
     }
   };
 
   const handleDeleteFile = async (fileId) => {
     if (!assignmentSubmission || !fileId) {
       console.error("Invalid submission or file ID", { fileId, assignmentSubmission });
-      alert("Error: Invalid file");
+      showModal('Invalid File', 'The selected file is not valid.', 'error');
       return;
     }
 
@@ -234,9 +304,9 @@ export default function Dashboard({ handleLogout, user }) {
     try {
       const submissionId = parseInt(assignmentSubmission.id);
       const parsedFileId = parseInt(fileId);
-      const url = `http://localhost:5000/submissions/${submissionId}/file/${parsedFileId}`;
+      const url = `http://localhost:5000/student/page/submit-assignment/${submissionId}/file/${parsedFileId}/delete`;
       console.log("Deleting file from:", url);
-      
+
       const response = await fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -245,7 +315,7 @@ export default function Dashboard({ handleLogout, user }) {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Server error:", errorData);
-        alert("Failed to delete file: " + (errorData.message || "Unknown error"));
+        showModal('Delete Error', 'Failed to delete file: ' + (errorData.message || 'Unknown error'), 'error');
         setDeleting(false);
         return;
       }
@@ -262,16 +332,16 @@ export default function Dashboard({ handleLogout, user }) {
       }
 
       // Refresh submissions
-      const submissionsRes = await fetch("http://localhost:5000/submissions", {
+      const submissionsRes = await fetch("http://localhost:5000/student/page/dashboard/submissions", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const submissionsData = await submissionsRes.json();
       setSubmissions(submissionsData);
 
-      alert("File deleted successfully");
+      showModal('Success', 'File deleted successfully!', 'success');
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Failed to delete file: " + error.message);
+      showModal('Delete Error', 'Failed to delete file: ' + error.message, 'error');
     } finally {
       setDeleting(false);
     }
@@ -286,28 +356,21 @@ export default function Dashboard({ handleLogout, user }) {
   }
 
   return (
-    <div className="dashboard-container">
-      {/* Theme Toggle */}
-      <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle"
-        title="Toggle theme"
-      >
-        {darkMode ? "☀️" : "🌙"}
-      </button>
+    <div className="dashboard-container" style={{ outline: '40px solid red' }}>
 
       {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-content">
           <h1 className="brand">Autograder</h1>
           <div className="navbar-actions">
-            <span className="user-email">{user?.email || "User"}</span>
+            <span class="user-email" >{user?.email || "User"}</span>
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="btn-icon"
+              className="theme-toggle navbar-toggle"
               title="Toggle theme"
+              aria-label="Toggle theme"
             >
-              {darkMode ? "☀️" : "🌙"}
+              <span className="theme-icon">{darkMode ? '☀️' : '🌙'}</span>
             </button>
             <button onClick={handleLogout} className="btn-logout">
               Logout
@@ -324,88 +387,64 @@ export default function Dashboard({ handleLogout, user }) {
             <div className="view-header">
               <h2>Assignments</h2>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div className="assignments-table-wrapper">
               {assignments.length === 0 ? (
                 <p className="empty-state">No assignments available</p>
               ) : (
-                assignments.map((assignment) => {
-                  const submission = submissions.find(
-                    (s) => s.assignmentId === assignment.id
-                  );
-                  const dueDate = new Date(assignment.dueDate);
-                  const isOverdue = dueDate < new Date();
-                  
-                  return (
-                    <div
-                      key={assignment.id}
-                      onClick={() => handleAssignmentClick(assignment)}
-                      style={{
-                        padding: "12px 16px",
-                        background: "var(--bg-secondary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "16px",
-                        transition: "all 0.2s ease",
-                        hover: { background: "rgba(16, 185, 129, 0.1)" }
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h4 style={{ margin: "0 0 4px 0", color: "var(--primary)" }}>
-                          {assignment.title}
-                          {submission && (
-                            <span style={{ 
-                              marginLeft: "8px", 
-                              fontSize: "0.8rem", 
-                              color: "#10b981",
-                              fontWeight: "normal"
-                            }}>
-                              ✓
-                            </span>
-                          )}
-                        </h4>
-                        <div style={{ 
-                          fontSize: "0.85rem", 
-                          color: "var(--text-muted)",
-                          display: "flex",
-                          gap: "16px",
-                          alignItems: "center"
-                        }}>
-                          <span>📅 {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          {isOverdue ? (
-                            <span style={{ color: "#ef4444", fontWeight: "bold" }}>🔒 Closed</span>
-                          ) : (
-                            <span style={{ color: "#10b981" }}>✓ Open</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Show marks if allowed and submission exists */}
-                      {submission && (["evaluated","graded","compilation-error","no-code","no-tests","error"].includes(submission.status)) && (submission.viewMarks || assignment.canViewMarks) && (
-                        <div style={{
-                          textAlign: "right",
-                          minWidth: "80px"
-                        }}>
-                          <div style={{
-                            fontSize: "1.2rem",
-                            fontWeight: "bold",
-                            color: "var(--primary)"
-                          }}>
-                            {submission.marks}/{submission.totalMarks}
-                          </div>
-                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                            marks
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                <table className="assignments-table">
+                  <thead>
+                    <tr>
+                      <th className="col-assignment" style={{ textAlign: 'left' }}>Assignment</th>
+                      <th className="col-code" style={{ textAlign: 'center' }}>Code</th>
+                      <th className="col-grade" style={{ textAlign: 'center' }}>Grade</th>
+                      <th className="col-upload" style={{ textAlign: 'center' }}>Upload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignments.map((assignment) => {
+                      const submission = submissions.find(
+                        (s) => s.assignmentId === assignment.id
+                      );
+                      const dueDate = new Date(assignment.dueDate);
+                      const isOverdue = dueDate < new Date();
+
+                      return (
+                        <tr
+                          key={assignment.id}
+                          className="assignment-row"
+                        >
+                          <td className="assignment-cell" style={{ width: "35%" }}>
+                            <div className="assignment-title">{assignment.title}</div>
+                          </td>
+
+                          <td className="code-cell" style={{ textAlign: 'center' }}>
+                            {submission ? <span className="code-label">Uploaded</span> : <span className="code-empty">—</span>}
+                          </td>
+
+                          <td className="grade-cell" style={{ textAlign: 'center' }}>
+                            {submission && (["evaluated", "graded", "compilation-error", "no-code", "no-tests", "error"].includes(submission.status)) && (submission.viewMarks || assignment.canViewMarks) ? (
+                              <div className="grade-value">{submission.marks}/{submission.totalMarks}</div>
+                            ) : (
+                              <div className="grade-placeholder">Assignment not yet published</div>
+                            )}
+                          </td>
+
+                          <td className="upload-cell">
+                            <div className="upload-actions">
+                              <div className="due-text">Due: {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on {dueDate.toLocaleDateString()}</div>
+                              <button
+                                className="btn-upload-assignment"
+                                onClick={(e) => { e.stopPropagation(); navigate(`/student/submit/${assignment.id}`); }}
+                              >
+                                Upload assignment
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
@@ -444,9 +483,9 @@ export default function Dashboard({ handleLogout, user }) {
                       fontWeight: "500"
                     }}>
                       {isOverdue ? (
-                        <>🔒 Submission Closed • Due: {dueDate.toLocaleString()}</>
+                        <>Submission Closed <br></br> Due: {dueDate.toLocaleString()}</>
                       ) : (
-                        <>✓ Open • Due: {dueDate.toLocaleString()}</>
+                        <>Open <br></br> Due: {dueDate.toLocaleString()}</>
                       )}
                     </div>
                   );
@@ -465,15 +504,15 @@ export default function Dashboard({ handleLogout, user }) {
                         className="file-input-hidden"
                         disabled={new Date(selectedAssignment.dueDate) < new Date()}
                       />
-                      <label 
-                        htmlFor="file-input" 
+                      <label
+                        htmlFor="file-input"
                         className="btn-upload"
                         style={{
                           opacity: new Date(selectedAssignment.dueDate) < new Date() ? 0.5 : 1,
                           cursor: new Date(selectedAssignment.dueDate) < new Date() ? "not-allowed" : "pointer"
                         }}
                       >
-                        {new Date(selectedAssignment.dueDate) < new Date() ? "❌ Submission Closed" : "+ Select Files"}
+                        {new Date(selectedAssignment.dueDate) < new Date() ? "Submission Closed" : "+ Select Files"}
                       </label>
                     </div>
 
@@ -527,13 +566,11 @@ export default function Dashboard({ handleLogout, user }) {
                           className="file-row-container"
                         >
                           <div
-                            className={`file-view-container ${
-                              selectedFile?.id === file.id ? "active" : ""
-                            }`}
+                            className={`file-view-container ${selectedFile?.id === file.id ? "active" : ""
+                              }`}
                             onClick={() => handleViewCode(file)}
                             title="Click to view file"
                           >
-                            <span className="file-icon">📄</span>
                             <div style={{ minWidth: 0 }}>
                               <div className="file-name-text">{file.fileName}</div>
                               {file.uploadedAt && (
@@ -558,7 +595,7 @@ export default function Dashboard({ handleLogout, user }) {
                 )}
 
                 {/* Marks Section */}
-                {assignmentSubmission && (["evaluated","graded","compilation-error","no-code","no-tests","error"].includes(assignmentSubmission.status)) && (assignmentSubmission.viewMarks || (selectedAssignment && selectedAssignment.canViewMarks)) && (
+                {assignmentSubmission && (["evaluated", "graded", "compilation-error", "no-code", "no-tests", "error"].includes(assignmentSubmission.status)) && (assignmentSubmission.viewMarks || (selectedAssignment && selectedAssignment.canViewMarks)) && (
                   <div className="marks-box">
                     <div className="marks-label">Score</div>
                     <div className="marks-value">
@@ -566,7 +603,7 @@ export default function Dashboard({ handleLogout, user }) {
                     </div>
                     {(assignmentSubmission.viewMarks || (selectedAssignment && selectedAssignment.canViewMarks)) && (
                       <button
-                        onClick={handleViewResults}
+                        onClick={() => navigate(`/student/view-results/${assignmentSubmission.id}`)}
                         className="btn-results"
                       >
                         View Results
@@ -611,28 +648,28 @@ export default function Dashboard({ handleLogout, user }) {
               </button>
             </div>
 
-              <div className="modal-content">
-                <div className="score-display">
-                  <span className="score">
-                    {testResults.submission.marks}/{testResults.submission.totalMarks}
-                  </span>
-                </div>
-
-                <div className="results-list simple-list">
-                  {testResults.testResults.length === 0 ? (
-                    <div style={{ padding: '12px', color: 'var(--text-muted)' }}>No test results available</div>
-                  ) : (
-                    testResults.testResults.map((test) => (
-                      <div key={test.id} className={`result-item ${test.passed ? "pass" : "fail"}`}>
-                        <span className="result-badge">{test.passed ? "✓" : "✗"}</span>
-                        <div className="result-info">
-                          <p className="result-name">{test.testName}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+            <div className="modal-content">
+              <div className="score-display">
+                <span className="score">
+                  {testResults.submission.marks}/{testResults.submission.totalMarks}
+                </span>
               </div>
+
+              <div className="results-list simple-list">
+                {testResults.testResults.length === 0 ? (
+                  <div style={{ padding: '12px', color: 'var(--text-muted)' }}>No test results available</div>
+                ) : (
+                  testResults.testResults.map((test) => (
+                    <div key={test.id} className={`result-item ${test.passed ? "pass" : "fail"}`}>
+                      <span className="result-badge">{test.passed ? "✓" : "✗"}</span>
+                      <div className="result-info">
+                        <p className="result-name">{test.testName}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
             <div className="modal-footer">
               <button
@@ -645,6 +682,15 @@ export default function Dashboard({ handleLogout, user }) {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        actions={modalActions}
+      />
     </div>
   );
 }

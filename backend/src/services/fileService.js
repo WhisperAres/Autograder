@@ -79,8 +79,6 @@ class FileService {
         fileSizeKB: codeFile.fileSizeKB,
       };
     } catch (error) {
-      console.error('Error fetching file with content:', error);
-      throw new Error('Failed to fetch file content');
     }
   }
 }

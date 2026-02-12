@@ -4,6 +4,8 @@ const Submission = require("../models/submission");
 const CodeFile = require("../models/codeFile");
 const TestCase = require("../models/testCase");
 const TestResult = require("../models/testResult");
+const GraderSolution = require("../models/graderSolution");
+const GraderSolutionFile = require("../models/graderSolutionFile");
 const bcrypt = require("bcryptjs");
 const os = require("os");
 const path = require("path");
@@ -25,6 +27,84 @@ const getJavacExecutable = () => {
 
 const JAVA_CMD = getJavaExecutable();
 const JAVAC_CMD = getJavacExecutable();
+
+// Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
+const transformJUnitStyle = (code) => {
+  if (!code || typeof code !== 'string') return code;
+
+  const splitTopLevelArgs = (s) => {
+    const parts = [];
+    let cur = '';
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "'" && !inDouble) { inSingle = !inSingle; cur += ch; continue; }
+      if (ch === '"' && !inSingle) { inDouble = !inDouble; cur += ch; continue; }
+      if (!inSingle && !inDouble) {
+        if (ch === '(' || ch === '{' || ch === '[') { depth++; }
+        else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
+        else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; continue; }
+      }
+      cur += ch;
+    }
+    if (cur.trim() !== '') parts.push(cur.trim());
+    return parts;
+  };
+
+  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull'];
+  let i = 0;
+  let out = '';
+  while (i < code.length) {
+    let matched = false;
+    for (const kw of keywords) {
+      if (code.startsWith(kw, i)) {
+        let j = i + kw.length;
+        while (code[j] && /\s/.test(code[j])) j++;
+        if (code[j] !== '(') continue;
+
+        let depth = 0;
+        let k = j;
+        for (; k < code.length; k++) {
+          if (code[k] === '(') depth++;
+          else if (code[k] === ')') { depth--; if (depth === 0) break; }
+        }
+        if (k >= code.length) continue;
+
+        const argsStr = code.substring(j + 1, k);
+        let replacement = '';
+        if (kw === 'assertTrue') {
+          replacement = `if (!(${argsStr})) throw new AssertionError("assertTrue failed");`;
+        } else if (kw === 'assertFalse') {
+          replacement = `if ((${argsStr})) throw new AssertionError("assertFalse failed");`;
+        } else if (kw === 'assertNotNull') {
+          replacement = `if (${argsStr} == null) throw new AssertionError("assertNotNull failed");`;
+        } else if (kw === 'assertEquals') {
+          const parts = splitTopLevelArgs(argsStr);
+          const a = parts[0] || '';
+          const b = parts[1] || '';
+          replacement = `if (!String.valueOf(${a}).equals(String.valueOf(${b}))) throw new AssertionError("assertEquals failed: expected " + String.valueOf(${a}) + " got " + String.valueOf(${b}));`;
+        }
+
+        out += replacement;
+
+        i = k + 1;
+        while (code[i] && /\s/.test(code[i])) i++;
+        if (code[i] === ';') i++;
+
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      out += code[i];
+      i++;
+    }
+  }
+
+  return out;
+};
 
 // ==================== USER MANAGEMENT ====================
 
@@ -50,8 +130,8 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: "Email, name, and role required" });
     }
 
-    if (!['student', 'ta', 'admin'].includes(role)) {
-      return res.status(400).json({ message: "Invalid role. Must be: student, ta, or admin" });
+    if (!['student', 'grader', 'admin'].includes(role)) {
+      return res.status(400).json({ message: "Invalid role. Must be: student, grader, or admin" });
     }
 
     // Check if email already exists
@@ -93,7 +173,7 @@ exports.updateUserRole = async (req, res) => {
     const { userId } = req.params;
     const { role } = req.body;
 
-    if (!['student', 'ta', 'admin'].includes(role)) {
+    if (!['student', 'grader', 'admin'].includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
@@ -119,12 +199,51 @@ exports.updateUserRole = async (req, res) => {
   }
 };
 
+// Delete user and related data
+exports.deleteUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Delete submissions and their related data
+    const submissions = await Submission.findAll({ where: { studentId: userId } });
+    for (const submission of submissions) {
+      await TestResult.destroy({ where: { submissionId: submission.id } });
+      await CodeFile.destroy({ where: { submissionId: submission.id } });
+      await submission.destroy();
+    }
+
+    // Delete grader solutions uploaded by this user (and their files)
+    try {
+      const graderSolutions = await GraderSolution.findAll({ where: { graderId: userId } });
+      for (const sol of graderSolutions) {
+        await GraderSolutionFile.destroy({ where: { solutionId: sol.id } });
+      }
+      await GraderSolution.destroy({ where: { graderId: userId } });
+    } catch (e) {
+      console.warn('Warning deleting grader solutions for user', userId, e.message || e);
+    }
+
+    // Finally delete the user
+    await user.destroy();
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ message: 'Error deleting user' });
+  }
+};
+
 // Get users by role
 exports.getUsersByRole = async (req, res) => {
   try {
     const { role } = req.params;
 
-    if (!['student', 'ta', 'admin'].includes(role)) {
+    if (!['student', 'grader', 'admin'].includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
@@ -235,6 +354,17 @@ exports.deleteAssignment = async (req, res) => {
       await CodeFile.destroy({ where: { submissionId: submission.id } });
       await TestResult.destroy({ where: { submissionId: submission.id } });
       await submission.destroy();
+    }
+
+    // Delete grader solution files and grader solutions referencing this assignment
+    try {
+      const graderSolutions = await GraderSolution.findAll({ where: { assignmentId } });
+      for (const sol of graderSolutions) {
+        await GraderSolutionFile.destroy({ where: { solutionId: sol.id } });
+      }
+      await GraderSolution.destroy({ where: { assignmentId } });
+    } catch (e) {
+      console.warn('Warning: error deleting grader solutions for assignment', assignmentId, e.message || e);
     }
 
     await TestCase.destroy({ where: { assignmentId } });
@@ -458,7 +588,7 @@ exports.runSingleTest = async (req, res) => {
           const testCode = `public class ${testClassName} {
   public static void main(String[] args) {
     try {
-      ${testCase.testCode}
+      ${transformJUnitStyle(testCase.testCode)}
       System.out.println("PASS");
     } catch (AssertionError e) {
       System.out.println("FAIL: " + e.getMessage());
@@ -601,17 +731,17 @@ exports.runTestCases = async (req, res) => {
             const testFileName = `Test${uniqueId}.java`;
             const testClassName = `Test${uniqueId}`;
             const testCode = `public class ${testClassName} {
-    public static void main(String[] args) {
-        try {
-            ${testCase.testCode}
+        public static void main(String[] args) {
+          try {
+            ${transformJUnitStyle(testCase.testCode)}
             System.out.println("PASS");
-        } catch (AssertionError e) {
+          } catch (AssertionError e) {
             System.out.println("FAIL: " + e.getMessage());
-        } catch (Exception e) {
+          } catch (Exception e) {
             System.out.println("FAIL: " + e.getMessage());
+          }
         }
-    }
-}`;
+      }`;
             fs.writeFileSync(path.join(tempDir, testFileName), testCode);
             command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
             actualOutput = execSync(command, {
@@ -787,7 +917,7 @@ exports.getDashboardStats = async (req, res) => {
   try {
     const totalUsers = await User.count();
     const totalStudents = await User.count({ where: { role: 'student' } });
-    const totalGraders = await User.count({ where: { role: 'ta' } });
+    const totalGraders = await User.count({ where: { role: 'grader' } });
     const totalAdmins = await User.count({ where: { role: 'admin' } });
     const totalAssignments = await Assignment.count();
     const totalSubmissions = await Submission.count();
@@ -836,11 +966,39 @@ exports.createTestCase = async (req, res) => {
       return res.status(400).json({ message: "Test code is required" });
     }
     
+    // Validate that total marks don't exceed assignment's total marks
+    const assignment = await Assignment.findByPk(parseInt(assignmentId));
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    const newMarks = parseFloat(marks) || 1;
+    const assignmentTotalMarks = parseFloat(assignment.totalMarks) || 0;
+
+    // Calculate sum of existing test cases
+    const existingTestCases = await TestCase.findAll({
+      where: { assignmentId: parseInt(assignmentId) },
+      attributes: ['marks']
+    });
+
+    const existingMarksSum = existingTestCases.reduce((sum, tc) => sum + (parseFloat(tc.marks) || 0), 0);
+    const totalMarksAfterCreation = existingMarksSum + newMarks;
+
+    if (totalMarksAfterCreation > assignmentTotalMarks) {
+      return res.status(400).json({ 
+        message: `Total marks of test cases (${totalMarksAfterCreation.toFixed(2)}) cannot exceed assignment total marks (${assignmentTotalMarks.toFixed(2)})`,
+        existingMarksSum: existingMarksSum.toFixed(2),
+        newMarks: newMarks.toFixed(2),
+        totalMarksAfterCreation: totalMarksAfterCreation.toFixed(2),
+        assignmentTotalMarks: assignmentTotalMarks.toFixed(2)
+      });
+    }
+    
     const testCase = await TestCase.create({
       assignmentId: parseInt(assignmentId),
       testName,
       testCode,
-      marks: parseFloat(marks) || 1,
+      marks: newMarks,
       isHidden: isHidden === 'true' || isHidden === true,
     });
 
@@ -868,9 +1026,44 @@ exports.updateTestCase = async (req, res) => {
       return res.status(404).json({ message: "Test case not found" });
     }
 
+    // If marks are being updated, validate total marks
+    if (marks !== undefined) {
+      const newMarks = parseFloat(marks);
+      const oldMarks = parseFloat(testCase.marks) || 0;
+      const marksChange = newMarks - oldMarks;
+
+      // Get assignment to check total marks limit
+      const assignment = await Assignment.findByPk(testCase.assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      const assignmentTotalMarks = parseFloat(assignment.totalMarks) || 0;
+
+      // Calculate sum of all test cases except this one
+      const otherTestCases = await TestCase.findAll({
+        where: { assignmentId: testCase.assignmentId, id: { [require('sequelize').Op.ne]: testCaseId } },
+        attributes: ['marks']
+      });
+
+      const otherMarksSum = otherTestCases.reduce((sum, tc) => sum + (parseFloat(tc.marks) || 0), 0);
+      const totalMarksAfterUpdate = otherMarksSum + newMarks;
+
+      if (totalMarksAfterUpdate > assignmentTotalMarks) {
+        return res.status(400).json({ 
+          message: `Total marks of test cases (${totalMarksAfterUpdate.toFixed(2)}) cannot exceed assignment total marks (${assignmentTotalMarks.toFixed(2)})`,
+          otherMarksSum: otherMarksSum.toFixed(2),
+          newMarks: newMarks.toFixed(2),
+          totalMarksAfterUpdate: totalMarksAfterUpdate.toFixed(2),
+          assignmentTotalMarks: assignmentTotalMarks.toFixed(2)
+        });
+      }
+
+      testCase.marks = newMarks;
+    }
+
     if (testName) testCase.testName = testName;
     if (testCode) testCase.testCode = testCode;
-    if (marks !== undefined) testCase.marks = parseFloat(marks);
     if (isHidden !== undefined) testCase.isHidden = isHidden;
 
     await testCase.save();
@@ -1079,7 +1272,7 @@ exports.runBulkTests = async (req, res) => {
                       const uniqueId2 = Date.now() + Math.random().toString().slice(2);
                       const testFileName2 = `Test${uniqueId2}.java`;
                       const testClassName2 = `Test${uniqueId2}`;
-                      const testCode2 = `public class ${testClassName2} {\n    public static void main(String[] args) {\n        try {\n            ${testCase.testCode}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n        }\n    }\n}`;
+                      const testCode2 = `public class ${testClassName2} {\n    public static void main(String[] args) {\n        try {\n            ${transformJUnitStyle(testCase.testCode)}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n        }\n    }\n}`;
                       fs.writeFileSync(path.join(tempDir, testFileName2), testCode2);
                       const cmd2 = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName2} && ${JAVA_CMD} ${testClassName2}`;
                       try {
@@ -1193,20 +1386,20 @@ exports.runBulkTests = async (req, res) => {
                   const uniqueId = Date.now() + Math.random().toString().slice(2);
                   const testFileName = `Test${uniqueId}.java`;
                   const testClassName = `Test${uniqueId}`;
-                  const testCode = `public class ${testClassName} {
-    public static void main(String[] args) {
-        try {
-            ${testCase.testCode}
-            System.out.println("PASS");
-        } catch (AssertionError e) {
-            System.out.println("FAIL: " + e.getMessage());
-        } catch (Exception e) {
-            System.out.println("FAIL: " + e.getMessage());
-        }
-    }
-}`;
-                  
-                  fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+                    const testCode = `public class ${testClassName} {
+            public static void main(String[] args) {
+              try {
+                ${transformJUnitStyle(testCase.testCode)}
+                System.out.println("PASS");
+              } catch (AssertionError e) {
+                System.out.println("FAIL: " + e.getMessage());
+              } catch (Exception e) {
+                System.out.println("FAIL: " + e.getMessage());
+              }
+            }
+          }`;
+
+                    fs.writeFileSync(path.join(tempDir, testFileName), testCode);
                   
                   const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
                   actualOutput = execSync(cmd, {
@@ -1278,7 +1471,7 @@ exports.runBulkTests = async (req, res) => {
             } catch (testErr) {
               submissionFailCount++;
               totalFailedTests++;
-              const errorMsg = `${submission.student.name} - Test ${testCase.testName}: ${testErr.message}`;
+              const errorMsg = `${submission.student?.name || 'Unknown'}: ${testErr.message}`;
               errors.push(errorMsg);
               console.error(errorMsg);
             }
@@ -1388,10 +1581,13 @@ exports.runTestCasesForAll = async (req, res) => {
     const results = [];
 
     for (const submission of submissions) {
-      const result = await this.runTestCases({ params: { submissionId: submission.id } }, {
+      // call the module's runTestCases with a fake req/res to capture output
+      const fakeReq = { params: { submissionId: submission.id } };
+      const fakeRes = {
         json: (data) => results.push(data),
-        status: () => ({ json: () => {} })
-      });
+        status: (code) => ({ json: (data) => results.push({ status: code, data }) })
+      };
+      await exports.runTestCases(fakeReq, fakeRes);
     }
 
     res.json({

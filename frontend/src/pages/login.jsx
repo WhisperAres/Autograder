@@ -41,12 +41,15 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
             const data = await response.json();
 
             if (response.ok) {
+                // Normalize role 'ta' -> 'grader' for frontend routing
+                const normalizedRole = (data.user.role === 'ta' || data.user.role === 'TA') ? 'grader' : data.user.role;
+                const userToStore = { ...data.user, role: normalizedRole };
                 localStorage.setItem("token", data.token);
-                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("user", JSON.stringify(userToStore));
                 setIsAuthenticated(true);
-                setUserRole(data.user.role);
-                setUser(data.user);
-                navigate(`/${data.user.role}`);
+                setUserRole(normalizedRole);
+                setUser(userToStore);
+                navigate(`/${normalizedRole}`);
             } else {
                 setError(data.message || "Login failed");
             }

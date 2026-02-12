@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
 import "./admin.css";
 
@@ -7,13 +9,13 @@ export default function AdminDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [users, setUsers] = useState([]);
   const [submissions, setSubmissions] = useState([]);
-  
+
   const [activeTab, setActiveTab] = useState("assignments");
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [detailsTab, setDetailsTab] = useState("submissions");
   const [showStudentDetail, setShowStudentDetail] = useState(false);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [darkMode, setDarkMode] = useState(() => {
@@ -21,6 +23,22 @@ export default function AdminDashboard() {
     return saved ? JSON.parse(saved) : true;
   });
   const token = localStorage.getItem("token");
+  const params = useParams();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalType, setModalType] = useState("info");
+  const [modalActions, setModalActions] = useState([]);
+
+  const showModal = (title, message, type = "info", actions = []) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
+    setModalActions(actions.length > 0 ? actions : [{ label: 'OK', onClick: () => setIsModalOpen(false) }]);
+    setIsModalOpen(true);
+  };
+
 
   // Apply theme to document root
   useEffect(() => {
@@ -47,20 +65,51 @@ export default function AdminDashboard() {
     fetchAllData();
   }, [token]);
 
+  // Respond to route params: assignmentId -> open assignment, submissionId -> open student detail
+  useEffect(() => {
+    if (!params) return;
+    const { assignmentId, submissionId } = params;
+
+    if (assignmentId && assignments.length > 0) {
+      const found = assignments.find(a => String(a.id) === String(assignmentId));
+      if (found) setSelectedAssignment(found);
+    }
+
+    if (submissionId) {
+      (async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error('Failed to fetch submission');
+          const submission = await res.json();
+          // Ensure selected assignment is set (if possible)
+          if (submission.assignmentId && assignments.length > 0) {
+            const a = assignments.find(x => String(x.id) === String(submission.assignmentId));
+            if (a) setSelectedAssignment(a);
+          }
+          setSelectedSubmission(submission);
+          setShowStudentDetail(true);
+        } catch (err) {
+        }
+      })();
+    }
+  }, [params, assignments]);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
       const [statsRes, assignRes, usersRes, submissionsRes] = await Promise.all([
-        fetch("http://localhost:5000/admin/stats", {
+        fetch("http://localhost:5000/admin/page/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch("http://localhost:5000/admin/assignments", {
+        fetch("http://localhost:5000/admin/page/assignments-list", {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch("http://localhost:5000/admin/users", {
+        fetch("http://localhost:5000/admin/page/users-management", {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch("http://localhost:5000/admin/submissions", {
+        fetch("http://localhost:5000/admin/page/submissions-list", {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -85,7 +134,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/admin/assignments", {
+      const response = await fetch("http://localhost:5000/admin/page/assignments-list", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -100,7 +149,7 @@ export default function AdminDashboard() {
       setAssignments([...assignments, data.assignment]);
       setNewAssignment({ title: "", description: "", dueDate: "", totalMarks: 100 });
       setError("");
-      alert("Assignment created successfully!");
+      showModal("Success", "Assignment created successfully!", "success");
       fetchAllData();
     } catch (err) {
       setError("Error creating assignment: " + err.message);
@@ -120,7 +169,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/admin/assignments/${editingAssignment.id}`, {
+      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${editingAssignment.id}`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -141,7 +190,7 @@ export default function AdminDashboard() {
       setEditingAssignment(null);
       setSelectedAssignment(null);
       setError("");
-      alert("Assignment updated successfully!");
+      showModal("Success", "Assignment updated successfully!", "success");
       fetchAllData();
     } catch (err) {
       setError("Error updating assignment: " + err.message);
@@ -162,7 +211,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/admin/users", {
+      const response = await fetch("http://localhost:5000/admin/page/users-management", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -177,7 +226,7 @@ export default function AdminDashboard() {
       setUsers([...users, data.user]);
       setNewUser({ email: "", name: "", role: "student" });
       setError("");
-      alert(`User created! Temp password: ${data.user.tempPassword}`);
+      showModal("Success", `User created! Temp password: ${data.user.tempPassword}`, "success");
       fetchAllData();
     } catch (err) {
       setError("Error creating user: " + err.message);
@@ -187,7 +236,7 @@ export default function AdminDashboard() {
   // Update user role
   const handleUpdateUserRole = async (userId, role) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/users/${userId}/role`, {
+      const response = await fetch(`http://localhost:5000/admin/page/users-management/${userId}/role`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -200,17 +249,62 @@ export default function AdminDashboard() {
 
       const data = await response.json();
       setUsers(users.map(u => u.id === userId ? data.user : u));
-      alert("User role updated!");
+      showModal("User Role Updated", "The user's role has been successfully updated.", "success");
       fetchAllData();
     } catch (err) {
       setError("Error updating user: " + err.message);
     }
   };
 
+  const handleDeleteUser = (userId) => {
+    showModal(
+      "Confirm Deletion",
+      "Delete this user and all their data?",
+      "warning",
+      [
+        { label: "Cancel", onClick: () => setIsModalOpen(false) },
+        {
+          label: "Delete",
+          onClick: async () => {
+            setIsModalOpen(false);
+
+            try {
+              const response = await fetch(
+                `http://localhost:5000/admin/page/users-management/${userId}`,
+                {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                }
+              );
+
+              if (!response.ok) throw new Error("Failed to delete user");
+
+              setUsers(prev => prev.filter(u => u.id !== userId));
+
+              showModal(
+                "User Deleted",
+                "The user has been successfully deleted.",
+                "success"
+              );
+
+              fetchAllData();
+            } catch (err) {
+              showModal(
+                "Error",
+                "Failed to delete user: " + err.message,
+                "error"
+              );
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Update submission marks
   const handleUpdateMarks = async (submissionId, marks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/submissions/${submissionId}/marks`, {
+      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/marks`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -224,7 +318,7 @@ export default function AdminDashboard() {
       const data = await response.json();
       setSubmissions(submissions.map(s => s.id === submissionId ? data.submission : s));
       setSubmissionMarks("");
-      alert("Marks updated successfully!");
+      showModal("Success", "Marks updated successfully!", "success");
     } catch (err) {
       setError("Error updating marks: " + err.message);
     }
@@ -233,7 +327,7 @@ export default function AdminDashboard() {
   // Toggle allow students to view marks for an assignment
   const handleToggleCanViewMarks = async (assignmentId, canViewMarks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/assignments/${assignmentId}/view-marks`, {
+      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${assignmentId}/toggle-visibility`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -248,11 +342,11 @@ export default function AdminDashboard() {
       console.log("Toggle response:", data);
 
       // Update local state with server response
-      setAssignments(assignments.map(a => 
+      setAssignments(assignments.map(a =>
         a.id === assignmentId ? { ...a, ...data.assignment } : a
       ));
-      
-      alert(`Marks ${canViewMarks ? 'enabled' : 'disabled'} for students`);
+
+      showModal("Success", `Marks ${canViewMarks ? 'enabled' : 'disabled'} for students`, "success");
     } catch (err) {
       setError("Error toggling view marks: " + err.message);
       console.error("Toggle error:", err);
@@ -262,7 +356,7 @@ export default function AdminDashboard() {
   // Toggle allow students to view marks for a specific submission
   const handleToggleViewMarks = async (submissionId, currentViewMarks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/submissions/${submissionId}/view-marks`, {
+      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/visibility`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -274,7 +368,7 @@ export default function AdminDashboard() {
       if (!response.ok) throw new Error("Failed to toggle marks visibility");
 
       // Update local state
-      setSubmissions(submissions.map(s => 
+      setSubmissions(submissions.map(s =>
         s.id === submissionId ? { ...s, viewMarks: !currentViewMarks } : s
       ));
     } catch (err) {
@@ -285,7 +379,7 @@ export default function AdminDashboard() {
   // Run test cases
   const handleRunTests = async (submissionId) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/submissions/${submissionId}/run-tests`, {
+      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/run-tests`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -294,7 +388,7 @@ export default function AdminDashboard() {
 
       const data = await response.json();
       setTestResults(data.results);
-      alert(`Tests completed: ${data.passCount}/${data.totalCount} passed`);
+      showModal("Success", `Tests completed: ${data.passCount}/${data.totalCount} passed`, "success");
     } catch (err) {
       setError("Error running tests: " + err.message);
     }
@@ -310,7 +404,7 @@ export default function AdminDashboard() {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/admin/assignments/${selectedAssignment.id}/run-all-tests`,
+        `http://localhost:5000/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -332,7 +426,7 @@ export default function AdminDashboard() {
       } else {
         // Refresh submissions for this specific assignment
         const submissionsRes = await fetch(
-          `http://localhost:5000/admin/submissions/assignment/${selectedAssignment.id}`,
+          `http://localhost:5000/admin/page/submissions-list/${selectedAssignment.id}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -342,8 +436,8 @@ export default function AdminDashboard() {
           setSubmissions(allSubmissions);
         }
       }
-      
-      alert(`Tests completed! ${data.totalSubmissions} students processed.`);
+
+      showModal("Success", `Tests completed! ${data.totalSubmissions} students processed.`);
     } catch (err) {
       setError("Error running bulk tests: " + err.message);
     } finally {
@@ -354,7 +448,7 @@ export default function AdminDashboard() {
   // Download marks CSV
   const handleDownloadCSV = async (assignmentId) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/assignments/${assignmentId}/export-csv`, {
+      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${assignmentId}/export`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -375,25 +469,51 @@ export default function AdminDashboard() {
   };
 
   // Delete assignment
-  const handleDeleteAssignment = async (assignmentId) => {
-    if (!window.confirm("Delete this assignment and all submissions?")) return;
+  const handleDeleteAssignment = (assignmentId) => {
+    showModal(
+      "Confirm Deletion",
+      "Delete this assignment and all submissions?",
+      "warning",
+      [
+        { label: "Cancel", onClick: () => setIsModalOpen(false) },
+        {
+          label: "Delete",
+          onClick: async () => {
+            setIsModalOpen(false);
+            try {
+              const response = await fetch(
+                `http://localhost:5000/admin/page/assignments-list/${assignmentId}`,
+                {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                }
+              );
 
-    try {
-      const response = await fetch(`http://localhost:5000/admin/assignments/${assignmentId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+              if (!response.ok) throw new Error("Failed to delete assignment");
 
-      if (!response.ok) throw new Error("Failed to delete assignment");
+              setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+              setSelectedAssignment(null);
 
-      setAssignments(assignments.filter(a => a.id !== assignmentId));
-      setSelectedAssignment(null);
-      alert("Assignment deleted!");
-      fetchAllData();
-    } catch (err) {
-      setError("Error deleting assignment: " + err.message);
-    }
+              showModal(
+                "Assignment Deleted",
+                "The assignment has been successfully deleted.",
+                "success"
+              );
+
+              fetchAllData();
+            } catch (err) {
+              showModal(
+                "Error",
+                "Error deleting assignment: " + err.message,
+                "error"
+              );
+            }
+          }
+        }
+      ]
+    );
   };
+
 
   if (loading) {
     return <div className="admin-dashboard"><div className="loading">Loading admin dashboard...</div></div>;
@@ -405,8 +525,8 @@ export default function AdminDashboard() {
 
   // If showing student detail, render that view
   if (showStudentDetail && selectedAssignment && selectedSubmission) {
-    const submission = assignmentSubmissions.find(s => s.id === selectedSubmission.id) || 
-                       assignmentSubmissions.find(s => s.id === selectedSubmission);
+    const submission = assignmentSubmissions.find(s => s.id === selectedSubmission.id) ||
+      assignmentSubmissions.find(s => s.id === selectedSubmission);
     if (submission) {
       return (
         <StudentDetail
@@ -422,10 +542,11 @@ export default function AdminDashboard() {
   }
 
   const studentUsers = users.filter(u => u.role === "student");
-  const taUsers = users.filter(u => u.role === "ta");
+  const taUsers = users.filter(u => u.role === "grader");
 
   return (
-    <div className="admin-dashboard">
+    <div className="
+    ">
       {/* Theme Toggle */}
       <button
         onClick={() => setDarkMode(!darkMode)}
@@ -451,13 +572,13 @@ export default function AdminDashboard() {
               className={`tab-btn ${activeTab === "assignments" ? "active" : ""}`}
               onClick={() => { setActiveTab("assignments"); setSelectedAssignment(null); }}
             >
-              📋 Assignments
+              Assignments
             </button>
             <button
               className={`tab-btn ${activeTab === "users" ? "active" : ""}`}
               onClick={() => { setActiveTab("users"); setSelectedUserRole("student"); }}
             >
-              👥 Users
+              Users
             </button>
           </div>
         </>
@@ -472,22 +593,24 @@ export default function AdminDashboard() {
             marginBottom: "20px",
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between", // Ensures equal spacing between elements
             gap: "20px",
-            flexWrap: "wrap"
+            flexWrap: "wrap",
+            marginRight: "67px",
+            marginLeft: "70px",
+            marginTop: "20px"
           }}>
-            <button 
-              className="btn-back" 
+            <button
+              className="btn-back"
               onClick={() => setSelectedAssignment(null)}
-              style={{ fontSize: "1rem", padding: "8px 16px" }}
+              style={{ fontSize: "1rem", padding: "8px 16px", height: "37.6px", width: "194.56px", alignContent: "center" }}
             >
               ← Back to Assignments
             </button>
-            <h1 style={{ margin: 0, flex: 1, minWidth: "200px" }}>
-              {selectedAssignment.title}
-            </h1>
-            <button className="btn btn-danger" onClick={() => {
+            <span style={{ textAlign: "center", flex: 1, fontSize: "1.5rem", fontWeight: "bold" }}>{selectedAssignment.title}</span>
+            <button className="btn btn-danger" style={{ height: "37.6px", width: "100px", alignContent: "center" }} onClick={() => {
               handleDeleteAssignment(selectedAssignment.id);
-            }}>🗑️ Delete</button>
+            }}>Delete</button>
           </div>
         </>
       )}
@@ -501,21 +624,21 @@ export default function AdminDashboard() {
               <div className="assignments-section">
                 <div className="section-header">
                   <h2>Assignments</h2>
-                  <button className="btn btn-primary" onClick={() => document.getElementById("createAssignmentForm").style.display = 
+                  <button className="btn btn-primary" onClick={() => document.getElementById("createAssignmentForm").style.display =
                     document.getElementById("createAssignmentForm").style.display === "none" ? "block" : "none"}>
                     + New Assignment
                   </button>
                 </div>
 
                 {/* Create Assignment Form */}
-                <form id="createAssignmentForm" onSubmit={handleCreateAssignment} className="form-panel" style={{display: "none"}}>
+                <form id="createAssignmentForm" onSubmit={handleCreateAssignment} className="form-panel" style={{ display: "none" }}>
                   <h3>Create New Assignment</h3>
                   <div className="form-group">
                     <label>Title *</label>
                     <input
                       type="text"
                       value={newAssignment.title}
-                      onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
                       placeholder="Assignment title"
                     />
                   </div>
@@ -523,7 +646,7 @@ export default function AdminDashboard() {
                     <label>Description</label>
                     <textarea
                       value={newAssignment.description}
-                      onChange={(e) => setNewAssignment({...newAssignment, description: e.target.value})}
+                      onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
                       placeholder="Assignment description"
                       rows="3"
                     ></textarea>
@@ -538,7 +661,7 @@ export default function AdminDashboard() {
                           onChange={(e) => {
                             const dateStr = e.target.value;
                             const time = newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
-                            setNewAssignment({...newAssignment, dueDate: `${dateStr}T${time}`});
+                            setNewAssignment({ ...newAssignment, dueDate: `${dateStr}T${time}` });
                           }}
                           style={{
                             padding: "8px 12px",
@@ -556,7 +679,7 @@ export default function AdminDashboard() {
                           value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
                           onChange={(e) => {
                             const dateStr = newAssignment.dueDate ? newAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
-                            setNewAssignment({...newAssignment, dueDate: `${dateStr}T${e.target.value}`});
+                            setNewAssignment({ ...newAssignment, dueDate: `${dateStr}T${e.target.value}` });
                           }}
                           style={{
                             padding: "8px 12px",
@@ -581,7 +704,7 @@ export default function AdminDashboard() {
                       <input
                         type="number"
                         value={newAssignment.totalMarks}
-                        onChange={(e) => setNewAssignment({...newAssignment, totalMarks: parseFloat(e.target.value)})}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, totalMarks: parseFloat(e.target.value) })}
                         min="1"
                       />
                     </div>
@@ -617,22 +740,22 @@ export default function AdminDashboard() {
                           <h4 style={{ margin: "0 0 4px 0", color: "var(--primary)" }}>
                             {assignment.title}
                           </h4>
-                          <div style={{ 
-                            fontSize: "0.85rem", 
+                          <div style={{
+                            fontSize: "0.85rem",
                             color: "var(--text-muted)",
                             display: "flex",
                             gap: "16px",
                             alignItems: "center"
                           }}>
-                            <span>📌 {assignment.totalMarks} marks</span>
-                            <span>📅 {new Date(assignment.dueDate).toLocaleDateString()}</span>
+                            <span>{assignment.totalMarks} marks</span>
+                            <span>{new Date(assignment.dueDate).toLocaleDateString()}</span>
                           </div>
                         </div>
 
                         {/* View Marks Toggle & Edit Button */}
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           {/* Animated Toggle Switch */}
-                          <div 
+                          <div
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleCanViewMarks(assignment.id, !assignment.canViewMarks);
@@ -674,9 +797,9 @@ export default function AdminDashboard() {
                               handleEditAssignment(assignment);
                             }}
                             title="Edit assignment"
-                            style={{ padding: "4px 8px" }}
+                            style={{ fontSize: "1rem", padding: "4px 8px" }}
                           >
-                            ✏️
+                            Edit
                           </button>
                           <button
                             className="btn-icon"
@@ -685,9 +808,9 @@ export default function AdminDashboard() {
                               handleDownloadCSV(assignment.id);
                             }}
                             title="Download marks as CSV"
-                            style={{ padding: "4px 8px" }}
+                            style={{ fontSize: "1rem", padding: "4px 8px" }}
                           >
-                            ⬇️
+                            Download Marks
                           </button>
                         </div>
                       </div>
@@ -705,13 +828,13 @@ export default function AdminDashboard() {
                     className={`tab-btn ${detailsTab === "submissions" ? "active" : ""}`}
                     onClick={() => setDetailsTab("submissions")}
                   >
-                    📝 Submissions ({assignmentSubmissions.length})
+                    Submissions ({assignmentSubmissions.length})
                   </button>
                   <button
                     className={`tab-btn ${detailsTab === "marks" ? "active" : ""}`}
                     onClick={() => setDetailsTab("marks")}
                   >
-                    ✏️ Edit Marks
+                    Edit Marks
                   </button>
                   <button
                     className="btn btn-primary"
@@ -719,7 +842,7 @@ export default function AdminDashboard() {
                     disabled={bulkTestsRunning || assignmentSubmissions.length === 0}
                     style={{ marginLeft: "auto" }}
                   >
-                    {bulkTestsRunning ? "⏳ Running..." : "🧪 Run Tests for All"}
+                    {bulkTestsRunning ? "⏳ Running..." : " ▶ Run Tests"}
                   </button>
                 </div>
 
@@ -1048,13 +1171,13 @@ export default function AdminDashboard() {
                 overflowY: "auto"
               }} onClick={(e) => e.stopPropagation()}>
                 <h2 style={{ marginTop: 0, color: "var(--primary)" }}>✏️ Edit Assignment</h2>
-                
+
                 <div className="form-group">
                   <label>Title *</label>
                   <input
                     type="text"
                     value={editingAssignment.title}
-                    onChange={(e) => setEditingAssignment({...editingAssignment, title: e.target.value})}
+                    onChange={(e) => setEditingAssignment({ ...editingAssignment, title: e.target.value })}
                     placeholder="Assignment title"
                   />
                 </div>
@@ -1063,7 +1186,7 @@ export default function AdminDashboard() {
                   <label>Description</label>
                   <textarea
                     value={editingAssignment.description || ""}
-                    onChange={(e) => setEditingAssignment({...editingAssignment, description: e.target.value})}
+                    onChange={(e) => setEditingAssignment({ ...editingAssignment, description: e.target.value })}
                     placeholder="Assignment description"
                     rows="3"
                   ></textarea>
@@ -1079,7 +1202,7 @@ export default function AdminDashboard() {
                         onChange={(e) => {
                           const dateStr = e.target.value;
                           const time = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
-                          setEditingAssignment({...editingAssignment, dueDate: `${dateStr}T${time}`});
+                          setEditingAssignment({ ...editingAssignment, dueDate: `${dateStr}T${time}` });
                         }}
                         style={{
                           padding: "8px 12px",
@@ -1097,7 +1220,7 @@ export default function AdminDashboard() {
                         value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
                         onChange={(e) => {
                           const dateStr = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
-                          setEditingAssignment({...editingAssignment, dueDate: `${dateStr}T${e.target.value}`});
+                          setEditingAssignment({ ...editingAssignment, dueDate: `${dateStr}T${e.target.value}` });
                         }}
                         style={{
                           padding: "8px 12px",
@@ -1117,7 +1240,7 @@ export default function AdminDashboard() {
                     <input
                       type="number"
                       value={editingAssignment.totalMarks}
-                      onChange={(e) => setEditingAssignment({...editingAssignment, totalMarks: parseFloat(e.target.value)})}
+                      onChange={(e) => setEditingAssignment({ ...editingAssignment, totalMarks: parseFloat(e.target.value) })}
                       min="1"
                       step="0.01"
                     />
@@ -1157,14 +1280,14 @@ export default function AdminDashboard() {
         <div className="users-section">
           <div className="section-header">
             <h2>User Management</h2>
-            <button className="btn btn-primary" onClick={() => document.getElementById("createUserForm").style.display = 
+            <button className="btn btn-primary" onClick={() => document.getElementById("createUserForm").style.display =
               document.getElementById("createUserForm").style.display === "none" ? "block" : "none"}>
               + Add User
             </button>
           </div>
 
           {/* Create User Form */}
-          <form id="createUserForm" onSubmit={handleCreateUser} className="form-panel" style={{display: "none"}}>
+          <form id="createUserForm" onSubmit={handleCreateUser} className="form-panel" style={{ display: "none" }}>
             <h3>Add New User</h3>
             <div className="form-row">
               <div className="form-group">
@@ -1172,7 +1295,7 @@ export default function AdminDashboard() {
                 <input
                   type="email"
                   value={newUser.email}
-                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   placeholder="user@example.com"
                 />
               </div>
@@ -1181,7 +1304,7 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={newUser.name}
-                  onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                   placeholder="Full name"
                 />
               </div>
@@ -1189,10 +1312,10 @@ export default function AdminDashboard() {
                 <label>Role</label>
                 <select
                   value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                 >
                   <option value="student">Student</option>
-                  <option value="ta">Grader (TA)</option>
+                  <option value="grader">Grader</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -1203,7 +1326,7 @@ export default function AdminDashboard() {
           {/* Users Grid by Role */}
           <div className="users-grid">
             <div className="users-category">
-              <h3>👨‍🎓 Students ({studentUsers.length})</h3>
+              <h3>Students ({studentUsers.length})</h3>
               <div className="users-list">
                 {studentUsers.map(user => (
                   <div key={user.id} className="user-card">
@@ -1218,9 +1341,10 @@ export default function AdminDashboard() {
                         className="role-select"
                       >
                         <option value="student">Student</option>
-                        <option value="ta">Grader</option>
+                        <option value="grader">Grader</option>
                         <option value="admin">Admin</option>
                       </select>
+                      <button className="btn btn-danger" onClick={() => handleDeleteUser(user.id)} style={{ marginLeft: '8px' }}>Delete</button>
                     </div>
                   </div>
                 ))}
@@ -1228,7 +1352,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="users-category">
-              <h3>👨‍🏫 Graders ({taUsers.length})</h3>
+              <h3>Graders ({taUsers.length})</h3>
               <div className="users-list">
                 {taUsers.map(user => (
                   <div key={user.id} className="user-card">
@@ -1243,9 +1367,10 @@ export default function AdminDashboard() {
                         className="role-select"
                       >
                         <option value="student">Student</option>
-                        <option value="ta">Grader</option>
+                        <option value="grader">Grader</option>
                         <option value="admin">Admin</option>
                       </select>
+                      <button className="btn btn-danger" onClick={() => handleDeleteUser(user.id)} style={{ marginLeft: '8px' }}>Delete</button>
                     </div>
                   </div>
                 ))}
@@ -1254,28 +1379,15 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        actions={modalActions}
+      />
 
-      {/* Dashboard Stats */}
-      {stats && (
-        <div className="dashboard-stats">
-          <div className="stat-card">
-            <h4>📚 Assignments</h4>
-            <p className="stat-number">{stats.totalAssignments}</p>
-          </div>
-          <div className="stat-card">
-            <h4>👥 Total Users</h4>
-            <p className="stat-number">{stats.totalUsers}</p>
-          </div>
-          <div className="stat-card">
-            <h4>📝 Submissions</h4>
-            <p className="stat-number">{stats.totalSubmissions}</p>
-          </div>
-          <div className="stat-card">
-            <h4>⏳ Pending</h4>
-            <p className="stat-number">{stats.pendingGrading}</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

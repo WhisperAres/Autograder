@@ -5,7 +5,11 @@ const checkRole = (...allowedRoles) => {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    // Normalize legacy TA role to 'grader' for compatibility
+    const userRole = req.user.role;
+    const normalizedRole = (userRole === 'ta' || userRole === 'TA') ? 'grader' : userRole;
+
+    if (!allowedRoles.includes(normalizedRole) && !allowedRoles.includes(userRole)) {
       return res.status(403).json({ 
         message: "Access denied. Required roles: " + allowedRoles.join(", ") 
       });

@@ -7,24 +7,26 @@
 }
 
 /* Theme Toggle */
+.tcm-header { position: relative; }
+
 .theme-toggle {
-  position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
+  position: absolute;
+  top: 18px;
+  right: 18px;
   background: var(--primary);
   border: 2px solid var(--primary);
   color: white;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
-  z-index: 1000;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+  z-index: 50;
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.18);
   font-weight: 600;
 }
 
@@ -41,16 +43,15 @@
 
 /* Header */
 .tcm-header {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: white;
-  padding: 2rem;
-  border-bottom: 3px solid var(--primary-dark);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tcm-header .btn-back {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: rgb(255, 255, 255);
+  color: rgb(0, 0, 0);
   border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 0.6rem 1.2rem;
   border-radius: 0.375rem;
@@ -82,11 +83,11 @@
 /* Content Layout */
 .tcm-content {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 2rem;
-  max-width: 1400px;
+  grid-template-columns: 360px 1fr;
+  gap: 1.5rem;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1.5rem;
 }
 
 /* Main Section */
@@ -246,9 +247,29 @@
 /* Test Cases List */
 .test-cases-list {
   display: flex;
-  flex-direction: column;
   gap: 1.5rem;
 }
+
+.names-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.name-item {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.name-item:hover { background: var(--primary-accent); }
+
+.name-item.active { background: var(--primary-light); color: var(--primary-dark); }
 
 .test-case-card {
   background: var(--bg-primary);
@@ -334,9 +355,18 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow-x: auto;
+  /* Allow long unbroken lines to wrap instead of pushing layout */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
   color: var(--text-secondary);
-  max-height: 150px;
+  min-height: 300px;
   overflow-y: auto;
+}
+
+.tc-content {
+  font-size: 0.95rem;
 }
 
 .tc-hidden-badge {
@@ -379,7 +409,6 @@
 
 .info-box h3,
 .stats-box h3 {
-  margin: 0 0 1rem 0;
   font-size: 1.1rem;
   color: var(--primary);
   font-weight: 700;

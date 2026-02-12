@@ -26,6 +26,88 @@ const getJavacExecutable = () => {
 const JAVA_CMD = getJavaExecutable();
 const JAVAC_CMD = getJavacExecutable();
 
+// Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
+const transformJUnitStyle = (code) => {
+  if (!code || typeof code !== 'string') return code;
+
+  const splitTopLevelArgs = (s) => {
+    const parts = [];
+    let cur = '';
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "'" && !inDouble) { inSingle = !inSingle; cur += ch; continue; }
+      if (ch === '"' && !inSingle) { inDouble = !inDouble; cur += ch; continue; }
+      if (!inSingle && !inDouble) {
+        if (ch === '(' || ch === '{' || ch === '[') { depth++; }
+        else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
+        else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; continue; }
+      }
+      cur += ch;
+    }
+    if (cur.trim() !== '') parts.push(cur.trim());
+    return parts;
+  };
+
+  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull'];
+  let i = 0;
+  let out = '';
+  while (i < code.length) {
+    let matched = false;
+    for (const kw of keywords) {
+      if (code.startsWith(kw, i)) {
+        let j = i + kw.length;
+        // skip whitespace
+        while (code[j] && /\s/.test(code[j])) j++;
+        if (code[j] !== '(') continue;
+
+        // find matching closing parenthesis
+        let depth = 0;
+        let k = j;
+        for (; k < code.length; k++) {
+          if (code[k] === '(') depth++;
+          else if (code[k] === ')') { depth--; if (depth === 0) break; }
+        }
+        if (k >= code.length) continue; // unmatched, skip
+
+        const argsStr = code.substring(j + 1, k);
+        let replacement = '';
+        if (kw === 'assertTrue') {
+          replacement = `if (!(${argsStr})) throw new AssertionError("assertTrue failed");`;
+        } else if (kw === 'assertFalse') {
+          replacement = `if ((${argsStr})) throw new AssertionError("assertFalse failed");`;
+        } else if (kw === 'assertNotNull') {
+          replacement = `if (${argsStr} == null) throw new AssertionError("assertNotNull failed");`;
+        } else if (kw === 'assertEquals') {
+          const parts = splitTopLevelArgs(argsStr);
+          const a = parts[0] || '';
+          const b = parts[1] || '';
+          replacement = `if (!String.valueOf(${a}).equals(String.valueOf(${b}))) throw new AssertionError("assertEquals failed: expected " + String.valueOf(${a}) + " got " + String.valueOf(${b}));`;
+        }
+
+        out += replacement;
+
+        // advance i to after closing parenthesis
+        i = k + 1;
+        // skip optional semicolon
+        while (code[i] && /\s/.test(code[i])) i++;
+        if (code[i] === ';') i++;
+
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      out += code[i];
+      i++;
+    }
+  }
+
+  return out;
+};
+
 // Get all assignments (for grader to select from)
 exports.getAssignments = async (req, res) => {
   try {
@@ -134,10 +216,18 @@ exports.runTestCases = async (req, res) => {
           // Determine how to execute based on file type
           let command = "";
           if (mainFile.fileName.endsWith(".java")) {
-            // For Java - compile all .java files together to handle dependencies
-            const className = mainFile.fileName.replace(".java", "");
+            // For Java - compile all .java files together and create a test wrapper per test case
             const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java")).map(f => f.fileName).join(" ");
-            command = `cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles} && ${JAVA_CMD} ${className}`;
+            // compile original files first
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles}`, { timeout: 5000 });
+            // create test wrapper class
+            const uniqueId = Date.now();
+            const testFileName = `Test${uniqueId}.java`;
+            const className = `Test${uniqueId}`;
+            const transformed = transformJUnitStyle(testCase.testCode);
+            const testCode = `public class ${className} {\n    public static void main(String[] args) {\n        try {\n            ${transformed}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n            e.printStackTrace();\n        }\n    }\n}`;
+            fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+            command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${className}`;
           } else if (mainFile.fileName.endsWith(".js")) {
             // For JavaScript/Node
             command = `cd "${tempDir}" && node ${mainFile.fileName}`;
@@ -482,7 +572,7 @@ exports.runGraderTests = async (req, res) => {
           let output = '';
 
           try {
-            if (fileExt === '.java') {
+              if (fileExt === '.java') {
               // Compile all Java files together
               const javaFiles = files.filter(f => f.fileName.endsWith('.java')).map(f => f.fileName).join(' ');
               execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles}`, { timeout: 5000 });
@@ -491,19 +581,9 @@ exports.runGraderTests = async (req, res) => {
               const uniqueId = Date.now();
               const testFileName = `Test${uniqueId}.java`;
               const className = `Test${uniqueId}`;
-              const testCode = `public class ${className} {
-    public static void main(String[] args) {
-        try {
-            ${testCase.testCode}
-            System.out.println("PASS");
-        } catch (AssertionError e) {
-            System.out.println("FAIL: " + e.getMessage());
-        } catch (Exception e) {
-            System.out.println("FAIL: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-}`;
+              // transform junit-like assertions to plain Java checks
+              const transformed = transformJUnitStyle(testCase.testCode);
+              const testCode = `public class ${className} {\n    public static void main(String[] args) {\n        try {\n            ${transformed}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n            e.printStackTrace();\n        }\n    }\n}`;
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
               
               // Compile and run test
@@ -518,14 +598,7 @@ exports.runGraderTests = async (req, res) => {
               // For Python, create test file
               const uniqueId = Date.now();
               const testFileName = `test${uniqueId}.py`;
-              const testCode = `try:
-    ${testCase.testCode}
-    print("PASS")
-except AssertionError as e:
-    print("FAIL: " + str(e))
-except Exception as e:
-    print("FAIL: " + str(e))
-`;
+                const testCode = `try:\n    ${testCase.testCode.replace(/\n/g, '\\n')}\n    print("PASS")\nexcept AssertionError as e:\n    print("FAIL: " + str(e))\nexcept Exception as e:\n    print("FAIL: " + str(e))\n`;
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
               
               output = execSync(`cd "${tempDir}" && python ${testFileName}`, { 
@@ -539,13 +612,7 @@ except Exception as e:
               // For JavaScript, create test file
               const uniqueId = Date.now();
               const testFileName = `test${uniqueId}.js`;
-              const testCode = `try {
-    ${testCase.testCode}
-    console.log("PASS");
-} catch (e) {
-    console.log("FAIL: " + e.message);
-}
-`;
+                const testCode = `try {\n    ${testCase.testCode.replace(/\n/g, '\\n')}\n    console.log("PASS");\n} catch (e) {\n    console.log("FAIL: " + e.message);\n}\n`;
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
               
               output = execSync(`cd "${tempDir}" && node ${testFileName}`, { 
