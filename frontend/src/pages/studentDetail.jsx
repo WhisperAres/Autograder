@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import api from "../services/auth"; // Updated import
 import "./studentDetail.css";
 
-export default function StudentDetail({ submission, assignment, token, onBack, darkMode, setDarkMode }) {
+export default function StudentDetail({ submission, assignment, onBack, darkMode, setDarkMode }) {
   const [codeFiles, setCodeFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [codeContent, setCodeContent] = useState("");
@@ -18,28 +19,18 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Get code files for this submission
-      const filesRes = await fetch(
-        `http://localhost:5000/admin/page/grade-submission/${submission.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (filesRes.ok) {
-        const files = await filesRes.json();
-        setCodeFiles(files || []);
-        if (files && files.length > 0) {
-          setSelectedFile(files[0]);
-          setCodeContent(files[0].fileContent || "");
-        }
+      // Get code files for this submission using the automated 'api' service
+      const filesRes = await api.get(`/admin/page/grade-submission/${submission.id}`);
+      const files = filesRes.data;
+      setCodeFiles(files || []);
+      if (files && files.length > 0) {
+        setSelectedFile(files[0]);
+        setCodeContent(files[0].fileContent || "");
       }
 
       // Get test cases for this assignment
-      const testsRes = await fetch(
-        `http://localhost:5000/admin/page/test-cases-management/${assignment.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (testsRes.ok) {
-        setTestCases(await testsRes.json() || []);
-      }
+      const testsRes = await api.get(`/admin/page/test-cases-management/${assignment.id}`);
+      setTestCases(testsRes.data || []);
 
       setError("");
     } catch (err) {
@@ -59,22 +50,10 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
     setError("");
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/admin/page/grade-submission/${submission.id}/run-single-test`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ testCaseId }),
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to run test");
-
-      const data = await response.json();
-      setTestResults([data]);
+      const response = await api.post(`/admin/page/grade-submission/${submission.id}/run-single-test`, {
+        testCaseId
+      });
+      setTestResults([response.data]);
       setError("");
     } catch (err) {
       setError("Error running test: " + err.message);
@@ -161,7 +140,7 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
                     textAlign: "left",
                     background: selectedFile?.id === file.id ? "var(--primary)" : "transparent",
                     color: selectedFile?.id === file.id ? "white" : "var(--text)",
-                    border: "1px solid" + (selectedFile?.id === file.id ? "var(--primary)" : "var(--border)"),
+                    border: "1px solid " + (selectedFile?.id === file.id ? "var(--primary)" : "var(--border)"),
                     borderRadius: "6px",
                     cursor: "pointer",
                     fontSize: "0.85rem",
@@ -198,7 +177,7 @@ export default function StudentDetail({ submission, assignment, token, onBack, d
                     cursor: "pointer",
                     fontSize: "0.85rem",
                     fontWeight: "500",
-                    disabled: "opacity 0.5",
+                    opacity: runningTests ? 0.5 : 1,
                     transition: "all 0.2s"
                   }}
                 >

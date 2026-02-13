@@ -1,5 +1,4 @@
 const jwt = require("jsonwebtoken");
-require('dotenv').config();
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -9,15 +8,19 @@ const authMiddleware = (req, res, next) => {
       return res.status(401).json({ message: "No token provided" });
     }
 
-    const secret = process.env.JWT_SECRET || "SECRET_KEY";
+    const secret = (process.env.JWT_SECRET || '').trim();
+    
+    if (!secret) {
+      console.error("JWT_SECRET is not configured");
+      return res.status(500).json({ message: "Server configuration error" });
+    }
+
     // Decode header to inspect algorithm without verifying
     const decodedHeader = jwt.decode(token, { complete: true });
 
-    // Log presence of secret (masked) and token preview for debugging
-    const hasSecret = !!process.env.JWT_SECRET;
-    const maskedSecret = hasSecret ? process.env.JWT_SECRET.replace(/.(?=.{4})/g, '*') : '(default)';
-    const tokenPreview = token ? `${token.slice(0,8)}...${token.slice(-8)}` : '(none)';
-  
+    if (!decodedHeader) {
+      return res.status(403).json({ message: "Invalid token format" });
+    }
 
     // Support RSA-signed tokens if a public key is provided
     let decoded;
@@ -34,7 +37,9 @@ const authMiddleware = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
-    console.error("Token verification error:", error);
+    if (error.message.includes('signature')) {
+      console.error("Signature mismatch - check JWT_SECRET");
+    }
     return res.status(403).json({ message: "Invalid or expired token" });
   }
 };

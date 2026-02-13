@@ -58,10 +58,10 @@
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* Reduce base font size for denser UI */
+
 .grader-dashboard, html, body { font-size: 15px; }
 
-/* Theme Toggle */
+
 .dashboard-header { position: relative; }
 
 .theme-toggle {
@@ -96,7 +96,7 @@
   transform: scale(0.98);
 }
 
-/* Header */
+
 .dashboard-header {
   display: block;
   background: var(--bg-secondary);
@@ -134,7 +134,6 @@
 
 .btn-back:hover { transform: translateX(-2px); }
 
-/* Grid Layout */
 .grader-container {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -150,7 +149,6 @@ div.assignments-grid {
   gap: 1rem;
 }
 
-/* Narrow the grader main container to add side space */
 .grader-dashboard > .dashboard-header + div,
 .grader-dashboard > div[class*="maxWidth"] {
   max-width: 1200px;
@@ -221,7 +219,6 @@ div.assignments-grid {
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
-  /* flex: 2; */
   margin-left: auto;
   transition: all 0.2s ease;
 }
@@ -246,7 +243,6 @@ div.assignments-grid {
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
-  /* flex: 2; */
   transition: all 0.2s ease;
 }
 
@@ -254,18 +250,6 @@ div.assignments-grid {
   background: #4f46e5;
   transform: translateY(-2px);
 }
-
-/* Submissions List Panel */
-/* .submissions-list-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  height: fit-content;
-  max-height: calc(100vh - 300px);
-  overflow-y: auto;
-  box-shadow: var(--shadow);
-} */
 
 .submission-details-panel {
   background: var(--bg-secondary);
@@ -276,13 +260,6 @@ div.assignments-grid {
   max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
-
-/* .submissions-list-panel h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-} */
 
 .submissions-list {
   display: flex;
@@ -368,7 +345,6 @@ div.assignments-grid {
   color: var(--text-secondary);
 }
 
-/* Submission Details Panel */
 .submission-details-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -401,7 +377,6 @@ div.assignments-grid {
   color: var(--text-secondary);
 }
 
-/* Tabs */
 .tabs {
   display: flex;
   gap: 0.5rem;
@@ -434,7 +409,6 @@ div.assignments-grid {
   flex: 1;
 }
 
-/* Tab Content */
 .detail-item {
   display: flex;
   justify-content: space-between;
@@ -453,7 +427,6 @@ div.assignments-grid {
   font-weight: 500;
 }
 
-/* Code Viewer */
 .code-viewer {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -488,7 +461,7 @@ div.assignments-grid {
   overflow-y: auto;
 }
 
-/* Test Results */
+
 .test-results {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -606,7 +579,6 @@ div.assignments-grid {
   resize: vertical;
 }
 
-/* Buttons */
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
@@ -645,7 +617,6 @@ div.assignments-grid {
   box-shadow: var(--shadow-lg);
 }
 
-/* Messages */
 .error-banner {
   background: #fee2e2;
   border-left: 4px solid var(--danger);
@@ -672,8 +643,6 @@ div.assignments-grid {
   color: var(--text-secondary);
   font-size: 1.1rem;
 }
-
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -692,15 +661,11 @@ div.assignments-grid {
   background: var(--primary-dark);
 }
 
-/* Responsive */
 @media (max-width: 1024px) {
   .grader-container {
     grid-template-columns: 1fr;
   }
 
-  /* .submissions-list-panel {
-    max-height: none;
-  } */
 }
 
 @media (max-width: 768px) {
@@ -720,10 +685,6 @@ div.assignments-grid {
   .submission-details-panel {
     padding: 1.5rem;
   }
-
-  /* .submissions-list-panel {
-    padding: 1rem;
-  } */
 
   .tabs {
     flex-wrap: wrap;
@@ -757,7 +718,6 @@ div.assignments-grid {
     padding: 0.75rem;
   }
 
-  /* .submissions-list-panel, */
   .submission-details-panel {
     padding: 1rem;
   }
@@ -1012,6 +972,11 @@ div.assignments-grid {
   color: white;
 }
 
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-dark);
   box-shadow: var(--shadow-lg);
@@ -1202,7 +1167,6 @@ div.assignments-grid {
   color: var(--text-secondary);
 }
 
-/* Test Management */
 .test-management {
   padding: 1rem 0;
 }
@@ -1266,7 +1230,6 @@ div.assignments-grid {
   border-color: var(--primary);
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1284,8 +1247,6 @@ div.assignments-grid {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-dark);
 }
-
-/* Responsive Design */
 @media (max-width: 1024px) {
   .grader-container {
     grid-template-columns: 1fr;
@@ -1326,6 +1287,7 @@ div.assignments-grid {
 
   .details-panel {
     padding: 1.5rem;
+    margin-bottom: 0px;
   }
 
   .submissions-panel {

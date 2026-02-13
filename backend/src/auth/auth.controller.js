@@ -3,36 +3,42 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/user");
 require('dotenv').config();
 
+// Updated Login: Issues two tokens
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Find user in database
     const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Compare password with hashed password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    // Access Token: Short-lived (e.g., 15 minutes)
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRATION || "1800s" } // Match expiration with .env
+      { expiresIn: "15m" } 
+    );
+
+    // Refresh Token: Long-lived (7 days)
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.REFRESH_SECRET || "your_refresh_secret_key",
+      { expiresIn: "7d" }
     );
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -46,20 +52,38 @@ exports.login = async (req, res) => {
   }
 };
 
-// Get all users (for admin)
+// New Refresh Function: Generates a new Access Token automatically
+exports.refreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(401).json({ message: "Refresh Token Required" });
+
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET || "your_refresh_secret_key");
+    const user = await User.findByPk(decoded.id);
+    
+    if (!user) return res.status(403).json({ message: "User not found" });
+
+    const newAccessToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    res.json({ token: newAccessToken });
+  } catch (err) {
+    res.status(403).json({ message: "Invalid or expired refresh token" });
+  }
+};
+
 exports.getAllUsers = async (req, res) => {
   try {
-    const userList = await User.findAll({
-      attributes: { exclude: ['password'] }
-    });
+    const userList = await User.findAll({ attributes: { exclude: ['password'] } });
     res.json(userList);
   } catch (error) {
-    console.error("Error fetching users:", error);
     res.status(500).json({ message: "Error fetching users" });
   }
 };
 
-// Get users by role
 exports.getUsersByRole = async (req, res) => {
   try {
     const { role } = req.params;
@@ -69,7 +93,6 @@ exports.getUsersByRole = async (req, res) => {
     });
     res.json(userList);
   } catch (error) {
-    console.error("Error fetching users:", error);
     res.status(500).json({ message: "Error fetching users" });
   }
 };

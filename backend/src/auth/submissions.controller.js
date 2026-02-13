@@ -6,13 +6,9 @@ const FileService = require('../services/fileService');
 exports.uploadSubmission = async (req, res) => {
   try {
     const assignmentId = req.params.assignmentId;
-    console.log("Params:", req.params);
-console.log("Body:", req.body);
 
     const studentId = req.user.id;
     const studentEmail = req.user.email;
-
-    console.log('Request body:', req.body);
 
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });

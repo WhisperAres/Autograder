@@ -44,8 +44,14 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                 // Normalize role 'ta' -> 'grader' for frontend routing
                 const normalizedRole = (data.user.role === 'ta' || data.user.role === 'TA') ? 'grader' : data.user.role;
                 const userToStore = { ...data.user, role: normalizedRole };
+
+                // SAVE BOTH TOKENS HERE
+                // 'token' is the short-lived key for requests
+                // 'refreshToken' is the long-lived key for automation
                 localStorage.setItem("token", data.token);
+                localStorage.setItem("refreshToken", data.refreshToken);
                 localStorage.setItem("user", JSON.stringify(userToStore));
+
                 setIsAuthenticated(true);
                 setUserRole(normalizedRole);
                 setUser(userToStore);
@@ -61,17 +67,13 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
         }
     };
 
-    const quickLogin = (credentials) => {
-        setEmail(credentials.email);
-        setPassword(credentials.password);
-    };
-
     return (
         <div className="login-container">
             {/* Theme Toggle */}
             <button
                 onClick={() => setDarkMode(!darkMode)}
                 className="theme-toggle"
+                style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
                 title="Toggle theme"
             >
                 {darkMode ? "☀️" : "🌙"}

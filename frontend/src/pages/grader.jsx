@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import TestCaseManager from "./testCaseManager";
 import Modal from "../components/Modal";
+import api from "../services/auth";
 import "./grader.css";
-import axios from 'axios';
 
 export default function GraderDashboard() {
   const [assignments, setAssignments] = useState([]);
@@ -18,24 +18,24 @@ export default function GraderDashboard() {
   const [codeName, setCodeName] = useState("");
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [uploadFiles, setUploadFiles] = useState([]);
-  const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [runningTests, setRunningTests] = useState(false);
-  const [testResults, setTestResults] = useState([]);
+  const [testResults, setTestResults] = useState([]); 
   const [showTestCaseManager, setShowTestCaseManager] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("darkMode");
     return saved ? JSON.parse(saved) : true;
   });
 
-  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState('info');
   const [modalActions, setModalActions] = useState([]);
 
-  // Helper function to show modal
+  const params = useParams();
+  const navigate = useNavigate();
+
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
     setModalMessage(message);
@@ -44,9 +44,25 @@ export default function GraderDashboard() {
     setIsModalOpen(true);
   };
 
-  const token = localStorage.getItem("token");
-  const params = useParams();
-  const navigate = useNavigate();
+  useEffect(() => {
+    let timeout;
+    const resetTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => { handleLogout(); }, 30 * 60 * 1000); 
+    };
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    resetTimer();
+    return () => {
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!localStorage.getItem('token')) { navigate('/login', { replace: true }); }
+  }, [navigate]);
 
   useEffect(() => {
     if (darkMode) document.documentElement.setAttribute("data-theme", "dark");
@@ -58,43 +74,33 @@ export default function GraderDashboard() {
     const fetchAssignments = async () => {
       setLoading(true);
       try {
-        const res = await fetch("http://localhost:5000/grader/page/dashboard", { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) throw new Error("Failed to fetch assignments");
-        const data = await res.json();
-        setAssignments(data || []);
+        const res = await api.get("/grader/page/dashboard");
+        setAssignments(res.data || []);
       } catch (err) {
         showModal('Error', "Error loading assignments: " + err.message, 'error');
       } finally {
         setLoading(false);
       }
     };
+    fetchAssignments();
+  }, []);
 
-    if (token) fetchAssignments();
-  }, [token]);
-
-  // Respond to route params (assignmentId -> open test manager, submissionId -> load submission)
   useEffect(() => {
     const { assignmentId, submissionId } = params || {};
     if (assignmentId && assignments.length > 0) {
       const found = assignments.find((a) => String(a.id) === String(assignmentId));
-      if (found) {
-        setSelectedAssignment(found);
-        setShowTestCaseManager(true);
-      }
+      if (found) { setSelectedAssignment(found); setShowTestCaseManager(true); }
     } else if (submissionId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/grader/page/grade-submissions/${submissionId}`, { headers: { Authorization: `Bearer ${token}` } });
-          if (!res.ok) throw new Error("Failed to fetch submission");
-          const submission = await res.json();
+          const res = await api.get(`/grader/page/grade-submissions/${submissionId}`);
+          const submission = res.data;
           setSelectedAssignment({ id: submission.assignmentId, title: submission.assignmentTitle, totalMarks: submission.totalMarks });
           setSelectedSubmission(submission);
           await fetchCodeForSubmission(submission.id);
-        } catch (err) {
-        }
+        } catch (err) { console.error(err); }
       })();
     } else {
-      // No route params - reset to dashboard view
       setSelectedAssignment(null);
       setSelectedSubmission(null);
       setSubmissions([]);
@@ -103,17 +109,13 @@ export default function GraderDashboard() {
       setTestResults([]);
       setShowTestCaseManager(false);
     }
-  }, [params, assignments, token]);
+  }, [params, assignments]);
 
   const fetchSubmissionsForAssignment = async (assignmentId) => {
     try {
-      const res = await fetch(`http://localhost:5000/grader/page/submissions/${assignmentId}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return setSubmissions([]);
-      const data = await res.json();
-      setSubmissions(data || []);
-    } catch (err) {
-      setSubmissions([]);
-    }
+      const res = await api.get(`/grader/page/submissions/${assignmentId}`);
+      setSubmissions(res.data || []);
+    } catch (err) { setSubmissions([]); }
   };
 
   const handleAssignmentClick = (assignment) => {
@@ -123,9 +125,7 @@ export default function GraderDashboard() {
     setCodeContent("");
     setTestResults([]);
     setUploadFiles([]);
-    // navigate to assignment-specific grader URL
     navigate(`/grader/grade-submissions/${assignment.id}`);
-    // also fetch submissions
     fetchSubmissionsForAssignment(assignment.id);
   };
 
@@ -141,96 +141,55 @@ export default function GraderDashboard() {
 
   const fetchCodeForSubmission = async (submissionId) => {
     try {
-      const res = await fetch(`http://localhost:5000/grader/page/grade-submissions/${submissionId}/code`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error("Failed to fetch code");
-      const files = await res.json();
+      const res = await api.get(`/grader/page/grade-submissions/${submissionId}/code`);
+      const files = res.data;
       setCodeFiles(files || []);
       if (files && files.length > 0) {
         setSelectedFileId(0);
         setCodeContent(files[0].fileContent || "");
         setCodeName(files[0].fileName || "Code");
       }
-    } catch (err) {
-      showModal('Error', "Failed to fetch code: " + err.message, 'error');
-    }
+    } catch (err) { showModal('Error', "Failed to fetch code: " + err.message, 'error'); }
   };
 
   const handleViewCode = async (submission) => {
     setSelectedSubmission(submission);
+    setTestResults([]); 
     await fetchCodeForSubmission(submission.id);
   };
 
   const handleFileUpload = async () => {
-    if ((uploadFiles.length === 0 && !uploadFile) || !selectedAssignment) {
+    if (uploadFiles.length === 0 || !selectedAssignment) {
       showModal('Error', "Please select files and an assignment", 'error');
       return;
     }
     setUploading(true);
     try {
       const form = new FormData();
-      if (uploadFiles.length > 0) uploadFiles.forEach((f) => form.append("files", f));
-      else form.append("files", uploadFile);
-
-      const res = await fetch(`http://localhost:5000/grader/page/test-solutions/${selectedAssignment.id}/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-      if (!res.ok) throw new Error("Failed to upload files");
-      const data = await res.json();
-      showModal('Success', `${data.fileCount || 1} file(s) uploaded`, 'success');
-      if (data.files) {
-        setCodeFiles(data.files);
+      uploadFiles.forEach((f) => form.append("files", f));
+      const res = await api.post(`/grader/page/test-solutions/${selectedAssignment.id}/upload`, form);
+      if (res.data.files) {
+        setCodeFiles(res.data.files);
         setSelectedFileId(0);
-        setCodeContent(data.files[0].fileContent || "");
-        setCodeName(data.files[0].fileName || "Code");
+        setCodeContent(res.data.files[0].fileContent || "");
+        setCodeName(res.data.files[0].fileName || "Code");
       }
       setUploadFiles([]);
-      setUploadFile(null);
-      // refresh submissions
       fetchSubmissionsForAssignment(selectedAssignment.id);
-    } catch (err) {
-      showModal('Error', "Error uploading files: " + err.message, 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteFile = async (fileId) => {
-    if (!fileId) return;
-    try {
-      const res = await fetch(`http://localhost:5000/grader/page/test-solutions/${fileId}/file/${fileId}/delete`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error("Failed to delete file");
-      setCodeFiles((prev) => prev.filter((f) => f.id !== fileId));
-      showModal('Success', "File deleted", 'success');
-    } catch (err) {
-      showModal('Error', "Error deleting file: " + err.message, 'error');
-    }
+    } catch (err) { showModal('Error', "Error uploading files: " + err.message, 'error'); }
+    finally { setUploading(false); }
   };
 
   const handleRunTests = async (assignment) => {
     setRunningTests(true);
     try {
-      // Build payload with actual file contents
       const payload = {
-        solutionFiles: codeFiles.map(f => ({
-          fileName: f.fileName,
-          fileContent: f.fileContent
-        }))
+        solutionFiles: codeFiles.map(f => ({ fileName: f.fileName, fileContent: f.fileContent }))
       };
-
-      if (!payload.solutionFiles || payload.solutionFiles.length === 0) {
-        throw new Error("No solution files to test");
-      }
-
-      const res = await fetch(`http://localhost:5000/grader/page/test-solutions/${assignment.id}/run-tests`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error("Failed to run tests");
-      const data = await res.json();
-      setTestResults(data.results || []);
-      showModal('Success', `Tests: ${data.passCount || 0}/${data.totalCount || 0}`, 'success');
+      if (!payload.solutionFiles || payload.solutionFiles.length === 0) throw new Error("No solution files to test");
+      const res = await api.post(`/grader/page/test-solutions/${assignment.id}/run-tests`, payload);
+      setTestResults(res.data.results || []);
+      showModal('Success', `Tests: ${res.data.passCount || 0}/${res.data.totalCount || 0}`, 'success');
     } catch (err) {
       showModal('Error', "Error running tests: " + err.message, 'error');
     } finally {
@@ -238,54 +197,17 @@ export default function GraderDashboard() {
     }
   };
 
-  // Inactivity logout (30 minutes)
-  useEffect(() => {
-    let timeout;
-
-    const resetTimer = () => {
-      if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        // Perform logout after 30 minutes of inactivity
-        handleLogout();
-      }, 30 * 60 * 1000); // 30 minutes
-    };
-
-    // Add event listeners for user activity
-    window.addEventListener('mousemove', resetTimer);
-    window.addEventListener('keydown', resetTimer);
-
-    // Start timer
-    resetTimer();
-
-    // Cleanup event listeners on component unmount
-    return () => {
-      window.removeEventListener('mousemove', resetTimer);
-      window.removeEventListener('keydown', resetTimer);
-      if (timeout) clearTimeout(timeout);
-    };
-  }, [navigate]);
-
   const handleLogout = () => {
-    // Clear localStorage token/user and navigate to login without full reload
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     navigate('/login', { replace: true });
   };
 
-  // Ensure component respects SPA auth state (use localStorage)
-  useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      // if no token present, send the user to login
-      navigate('/login', { replace: true });
-    }
-  }, [navigate]);
-
-  // Render
   if (showTestCaseManager && selectedAssignment) {
     return (
       <TestCaseManager
         assignment={selectedAssignment}
-        token={token}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         onBack={() => {
@@ -305,17 +227,11 @@ export default function GraderDashboard() {
     );
   }
 
-  // Assignment list view
   if (!selectedAssignment) {
     return (
       <div className="grader-dashboard">
-        <div className="dashboard-header">
-          <h1>✅ Grader Dashboard</h1>
-          <p>Select an assignment to manage</p>
-          <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle">{darkMode ? '☀️' : '🌙'}</button>
-        </div>
-
-        {error && <div className="error-banner">{error}</div>}
+          <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle"style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
+>{darkMode ? '☀️' : '🌙'}</button>
 
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
           {assignments.length === 0 ? (
@@ -341,29 +257,23 @@ export default function GraderDashboard() {
     );
   }
 
-  // Selected assignment view
   return (
     <div className="grader-dashboard">
-      <div className="dashboard-header">
         <button className="btn-back" onClick={handleBackToAssignments}>← Back to Assignments</button>
-        <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle">{darkMode ? '☀️' : '🌙'}</button>
-      </div>
+        <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle"style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
+>{darkMode ? '☀️' : '🌙'}</button>
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
-        {/* only show error if a submission is actively selected */}
-        {selectedSubmission && error && <div className="error-banner">{error}</div>}
-        {successMessage && <div className="success-banner">{successMessage}</div>}
-
         <div style={{ display: 'flex', gap: 20 }}>
           {submissions.length > 0 && (
             <div style={{ width: 320 }} className="submissions-list-panel">
               <h2>Submissions</h2>
               <div className="submissions-list">
                 {submissions.map((sub) => (
-                  <div key={sub.id} className={`submission-item ${selectedSubmission && selectedSubmission.id === sub.id ? 'active' : ''}`} onClick={() => { handleViewCode(sub); navigate(`/grader/grade-submissions/${sub.id}`); }}>
+                  <div key={sub.id} className={`submission-item ${selectedSubmission && selectedSubmission.id === sub.id ? 'active' : ''}`} onClick={() => handleViewCode(sub)}>
                     <div className="submission-top">
                       <div>
-                        <div className="student-id">{sub.studentName || sub.studentId || 'Student'}</div>
+                        <div className="student-id">{sub.studentName || 'Student'}</div>
                         <div className="submitted-date">{sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : ''}</div>
                       </div>
                       <div className={`status-badge ${sub.status ? 'status-' + sub.status : ''}`}>{sub.status || 'pending'}</div>
@@ -374,80 +284,86 @@ export default function GraderDashboard() {
             </div>
           )}
 
-          <div style={{ flex: 1 }} className="submission-details-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ flex: 1, padding: '24px', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', overflow: 'hidden' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
               <div>
-                <h1 style={{ margin: 0 }}>{selectedAssignment.title}</h1>
-                <div style={{ color: 'var(--text-muted)' }}>Total Marks: <strong style={{ color: 'var(--primary)' }}>{selectedAssignment.totalMarks || 100}</strong></div>
+                <h1 style={{ fontSize: '24px', fontWeight: '600', margin: 0 }}>{selectedAssignment.title}</h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+                  Total Marks: <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{selectedAssignment.totalMarks || 100}</span>
+                </p>
               </div>
-              <div />
-            </div>
+              <button className="btn-back" onClick={handleBackToAssignments} style={{ padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}>Back</button>
+            </header>
 
-            <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h2 style={{ margin: 0, color: 'var(--primary)' }}>📤 Upload Your Solution</h2>
-                <button className="btn-back" onClick={handleBackToAssignments}>[ Back ]</button>
-              </div>
-
-              <div style={{ border: '2px dashed var(--primary)', borderRadius: 8, padding: 30, textAlign: 'center', background: 'rgba(16,185,129,0.05)', marginBottom: 12 }}>
-                <input id="grader-file-input" type="file" style={{ display: 'none' }} accept=".java,.py,.js,.cpp,.c,.txt" multiple onChange={(e) => { const files = Array.from(e.target.files || []); setUploadFiles(files); setUploadFile(files[0] || null); }} />
-                <label htmlFor="grader-file-input" style={{ cursor: 'pointer' }}>
-                  <p style={{ margin: 0 }}>📁 Click to upload</p>
-                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>or drag and drop files (.java, .py, .js, .cpp, .c, .txt)</p>
-                </label>
-              </div>
-
-              {uploadFiles.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <p style={{ color: 'var(--primary)', margin: 0, marginBottom: 6 }}>✓ Selected Files ({uploadFiles.length})</p>
-                  <ul style={{ margin: 0, paddingLeft: 20 }}>{uploadFiles.map((f, i) => <li key={i}>{f.name}</li>)}</ul>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingBottom: '20px' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} />
+                    <label htmlFor="grader-file-input" style={{ display: 'block', padding: '20px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
+                      <span style={{ fontSize: '14px' }}>📁 {uploadFiles.length > 0 ? `${uploadFiles.length} files selected` : 'Click to select files'}</span>
+                    </label>
+                  </div>
+                  <button className="btn btn-success" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0} style={{ height: '60px', padding: '0 30px', borderRadius: '12px', fontWeight: '600' }}>
+                    {uploading ? '⏳...' : 'Upload'}
+                  </button>
                 </div>
-              )}
+              </div>
 
-              <button className="btn btn-success" onClick={handleFileUpload} disabled={uploading || (uploadFiles.length === 0 && !uploadFile)} style={{ width: '100%' }}>{uploading ? '⏳ Uploading...' : 'Upload Solution(s)'}</button>
-            </div>
-
-            {/* Code viewer + tests */}
-            {codeFiles.length > 0 && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 12, marginBottom: 12 }}>
-                  <div style={{ borderRight: '1px solid var(--border)', padding: 12 }}>
+              {codeFiles.length > 0 && (
+                <div style={{ display: 'flex', minHeight: '500px', flex: 1, background: '#0d1117', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>
+                  <aside style={{ width: '200px', background: 'rgba(0,0,0,0.2)', borderRight: '1px solid var(--border)', padding: '12px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 'bold' }}>Files</p>
                     {codeFiles.map((f, i) => (
-                      <button key={i} onClick={() => { setSelectedFileId(i); setCodeContent(f.fileContent || ''); setCodeName(f.fileName || 'Code'); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', marginBottom: 8 }}>{f.fileName}</button>
-                    ))}
-                  </div>
-                  <div style={{ padding: 12 }}>
-                    <h3 style={{ marginTop: 0 }}>💻 {codeName}</h3>
-                    <pre style={{ background: 'var(--dark-secondary)', padding: 12, borderRadius: 8, maxHeight: 400, overflow: 'auto' }}><code>{codeContent}</code></pre>
-                  </div>
-                </div>
-
-                <button className="btn btn-primary" onClick={() => handleRunTests(selectedAssignment)} disabled={runningTests} style={{ width: '100%' }}>{runningTests ? '⏳ Running...' : '▶ Run Tests'}</button>
-
-                {testResults.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    {testResults.map((r, idx) => (
-                      <div key={idx} style={{ padding: 10, borderRadius: 6, marginBottom: 8, background: r.passed ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${r.passed ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}` }}>
-                        <strong>{r.passed ? '✅' : '❌'} {r.testName}</strong>
-                        {r.errorMessage && <p style={{ margin: 6, color: '#fca5a5' }}>{r.errorMessage}</p>}
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: '4px', gap: '4px' }}>
+                        <button onClick={() => { setSelectedFileId(i); setCodeContent(f.fileContent || ''); setCodeName(f.fileName || 'Code'); }} style={{ flex: 1, textAlign: 'left', padding: '10px', borderRadius: '6px', border: 'none', background: selectedFileId === i ? 'var(--primary)' : 'transparent', color: selectedFileId === i ? '#000' : '#fff', cursor: 'pointer' }}>
+                          {f.fileName}
+                        </button>
                       </div>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
+                  </aside>
+                  <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', height: '50px' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--primary)', fontWeight: '600' }}>{codeName}</span>
+                      <button className="btn btn-primary" onClick={() => handleRunTests(selectedAssignment)} disabled={runningTests} style={{ padding: '8px 20px', fontSize: '13px', width: 'auto', minWidth: '120px', borderRadius: '6px' }}>
+                        {runningTests ? '⏳ Running...' : '▶ Run Tests'}
+                      </button>
+                    </div>
+                    
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+                      <pre style={{ flex: 1, margin: 0, padding: '24px', overflow: 'auto', fontSize: '14px', lineHeight: '1.6', background: 'var(--bg-code, #1e1e1e)', color: 'var(--text-code, #d4d4d4)' }}>
+                        <code style={{ fontFamily: '"SF Mono", "Fira Code", monospace' }}>{codeContent}</code>
+                      </pre>
+
+                      {/* Detailed Output Panel at the bottom of the editor */}
+                      {testResults.length > 0 && (
+                        <div style={{ height: '220px', background: '#161b22', borderTop: '2px solid var(--border)', padding: '20px', overflowY: 'auto' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                            <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Test Results Output</h4>
+                            <button onClick={() => setTestResults([])} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>✕</button>
+                          </div>
+                          {testResults.map((res, index) => (
+                            <div key={index} style={{ padding: '12px', borderRadius: '8px', marginBottom: '10px', background: res.passed ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', borderLeft: `4px solid ${res.passed ? '#10b981' : '#ef4444'}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ fontWeight: '600', color: res.passed ? '#10b981' : '#f87171' }}>{res.passed ? '✓' : '✗'} {res.testName}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{res.passed ? `+${res.marks} marks` : '0 marks'}</span>
+                              </div>
+                              {!res.passed && res.errorMessage && (
+                                <div style={{ marginTop: '8px', fontSize: '12px', color: '#fca5a5', fontFamily: 'monospace' }}>Error: {res.errorMessage}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </main>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        actions={modalActions}
-      />
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle} message={modalMessage} type={modalType} actions={modalActions} />
     </div>
   );
 }
-

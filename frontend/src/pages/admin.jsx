@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
+import api from "../services/auth"; // Updated import
 import "./admin.css";
 
 export default function AdminDashboard() {
@@ -78,11 +79,8 @@ export default function AdminDashboard() {
     if (submissionId) {
       (async () => {
         try {
-          const res = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) throw new Error('Failed to fetch submission');
-          const submission = await res.json();
+          const res = await api.get(`/admin/page/grade-submission/${submissionId}`);
+          const submission = res.data;
           // Ensure selected assignment is set (if possible)
           if (submission.assignmentId && assignments.length > 0) {
             const a = assignments.find(x => String(x.id) === String(submission.assignmentId));
@@ -91,6 +89,7 @@ export default function AdminDashboard() {
           setSelectedSubmission(submission);
           setShowStudentDetail(true);
         } catch (err) {
+          console.error("Error fetching submission by param", err);
         }
       })();
     }
@@ -100,24 +99,16 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const [statsRes, assignRes, usersRes, submissionsRes] = await Promise.all([
-        fetch("http://localhost:5000/admin/page/dashboard", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("http://localhost:5000/admin/page/assignments-list", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("http://localhost:5000/admin/page/users-management", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("http://localhost:5000/admin/page/submissions-list", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+        api.get("/admin/page/dashboard"),
+        api.get("/admin/page/assignments-list"),
+        api.get("/admin/page/users-management"),
+        api.get("/admin/page/submissions-list"),
       ]);
 
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (assignRes.ok) setAssignments(await assignRes.json());
-      if (usersRes.ok) setUsers(await usersRes.json());
-      if (submissionsRes.ok) setSubmissions(await submissionsRes.json());
+      setStats(statsRes.data);
+      setAssignments(assignRes.data);
+      setUsers(usersRes.data);
+      setSubmissions(submissionsRes.data);
     } catch (err) {
       setError("Error loading data: " + err.message);
     } finally {
@@ -134,18 +125,8 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/admin/page/assignments-list", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newAssignment),
-      });
-
-      if (!response.ok) throw new Error("Failed to create assignment");
-
-      const data = await response.json();
+      const response = await api.post("/admin/page/assignments-list", newAssignment);
+      const data = response.data;
       setAssignments([...assignments, data.assignment]);
       setNewAssignment({ title: "", description: "", dueDate: "", totalMarks: 100 });
       setError("");
@@ -169,23 +150,14 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${editingAssignment.id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: editingAssignment.title,
-          description: editingAssignment.description,
-          dueDate: editingAssignment.dueDate,
-          totalMarks: editingAssignment.totalMarks
-        }),
+      const response = await api.patch(`/admin/page/assignments-list/${editingAssignment.id}`, {
+        title: editingAssignment.title,
+        description: editingAssignment.description,
+        dueDate: editingAssignment.dueDate,
+        totalMarks: editingAssignment.totalMarks
       });
 
-      if (!response.ok) throw new Error("Failed to update assignment");
-
-      const data = await response.json();
+      const data = response.data;
       setAssignments(assignments.map(a => a.id === editingAssignment.id ? data.assignment : a));
       setEditingAssignment(null);
       setSelectedAssignment(null);
@@ -211,18 +183,8 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/admin/page/users-management", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newUser),
-      });
-
-      if (!response.ok) throw new Error("Failed to create user");
-
-      const data = await response.json();
+      const response = await api.post("/admin/page/users-management", newUser);
+      const data = response.data;
       setUsers([...users, data.user]);
       setNewUser({ email: "", name: "", role: "student" });
       setError("");
@@ -236,18 +198,8 @@ export default function AdminDashboard() {
   // Update user role
   const handleUpdateUserRole = async (userId, role) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/users-management/${userId}/role`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ role }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update role");
-
-      const data = await response.json();
+      const response = await api.patch(`/admin/page/users-management/${userId}/role`, { role });
+      const data = response.data;
       setUsers(users.map(u => u.id === userId ? data.user : u));
       showModal("User Role Updated", "The user's role has been successfully updated.", "success");
       fetchAllData();
@@ -269,16 +221,7 @@ export default function AdminDashboard() {
             setIsModalOpen(false);
 
             try {
-              const response = await fetch(
-                `http://localhost:5000/admin/page/users-management/${userId}`,
-                {
-                  method: "DELETE",
-                  headers: { Authorization: `Bearer ${token}` },
-                }
-              );
-
-              if (!response.ok) throw new Error("Failed to delete user");
-
+              await api.delete(`/admin/page/users-management/${userId}`);
               setUsers(prev => prev.filter(u => u.id !== userId));
 
               showModal(
@@ -304,18 +247,8 @@ export default function AdminDashboard() {
   // Update submission marks
   const handleUpdateMarks = async (submissionId, marks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/marks`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ marks: parseFloat(marks) }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update marks");
-
-      const data = await response.json();
+      const response = await api.patch(`/admin/page/grade-submission/${submissionId}/marks`, { marks: parseFloat(marks) });
+      const data = response.data;
       setSubmissions(submissions.map(s => s.id === submissionId ? data.submission : s));
       setSubmissionMarks("");
       showModal("Success", "Marks updated successfully!", "success");
@@ -327,46 +260,22 @@ export default function AdminDashboard() {
   // Toggle allow students to view marks for an assignment
   const handleToggleCanViewMarks = async (assignmentId, canViewMarks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${assignmentId}/toggle-visibility`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ canViewMarks }),
-      });
-
-      if (!response.ok) throw new Error("Failed to toggle view marks");
-
-      const data = await response.json();
-      console.log("Toggle response:", data);
-
+      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/toggle-visibility`, { canViewMarks });
+      const data = response.data;
       // Update local state with server response
       setAssignments(assignments.map(a =>
         a.id === assignmentId ? { ...a, ...data.assignment } : a
       ));
-
       showModal("Success", `Marks ${canViewMarks ? 'enabled' : 'disabled'} for students`, "success");
     } catch (err) {
       setError("Error toggling view marks: " + err.message);
-      console.error("Toggle error:", err);
     }
   };
 
   // Toggle allow students to view marks for a specific submission
   const handleToggleViewMarks = async (submissionId, currentViewMarks) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/visibility`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ canView: !currentViewMarks }),
-      });
-
-      if (!response.ok) throw new Error("Failed to toggle marks visibility");
-
+      await api.patch(`/admin/page/grade-submission/${submissionId}/visibility`, { canView: !currentViewMarks });
       // Update local state
       setSubmissions(submissions.map(s =>
         s.id === submissionId ? { ...s, viewMarks: !currentViewMarks } : s
@@ -379,14 +288,8 @@ export default function AdminDashboard() {
   // Run test cases
   const handleRunTests = async (submissionId) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/grade-submission/${submissionId}/run-tests`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) throw new Error("Failed to run tests");
-
-      const data = await response.json();
+      const response = await api.post(`/admin/page/grade-submission/${submissionId}/run-tests`);
+      const data = response.data;
       setTestResults(data.results);
       showModal("Success", `Tests completed: ${data.passCount}/${data.totalCount} passed`, "success");
     } catch (err) {
@@ -403,17 +306,8 @@ export default function AdminDashboard() {
     setBulkTestResults(null);
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to run tests");
-
-      const data = await response.json();
+      const response = await api.post(`/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`);
+      const data = response.data;
       setBulkTestResults(data);
       setError("");
 
@@ -425,15 +319,9 @@ export default function AdminDashboard() {
         setSubmissions(data.updatedSubmissions);
       } else {
         // Refresh submissions for this specific assignment
-        const submissionsRes = await fetch(
-          `http://localhost:5000/admin/page/submissions-list/${selectedAssignment.id}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (submissionsRes.ok) {
-          const allSubmissions = await submissionsRes.json();
-          setSubmissions(allSubmissions);
+        const submissionsRes = await api.get(`/admin/page/submissions-list/${selectedAssignment.id}`);
+        if (submissionsRes.status === 200) {
+          setSubmissions(submissionsRes.data);
         }
       }
 
@@ -448,14 +336,11 @@ export default function AdminDashboard() {
   // Download marks CSV
   const handleDownloadCSV = async (assignmentId) => {
     try {
-      const response = await fetch(`http://localhost:5000/admin/page/assignments-list/${assignmentId}/export`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await api.get(`/admin/page/assignments-list/${assignmentId}/export`, {
+        responseType: 'blob'
       });
 
-      if (!response.ok) throw new Error("Failed to download CSV");
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const a = document.createElement("a");
       a.href = url;
       a.download = `marks_${assignmentId}.csv`;
@@ -481,16 +366,7 @@ export default function AdminDashboard() {
           onClick: async () => {
             setIsModalOpen(false);
             try {
-              const response = await fetch(
-                `http://localhost:5000/admin/page/assignments-list/${assignmentId}`,
-                {
-                  method: "DELETE",
-                  headers: { Authorization: `Bearer ${token}` },
-                }
-              );
-
-              if (!response.ok) throw new Error("Failed to delete assignment");
-
+              await api.delete(`/admin/page/assignments-list/${assignmentId}`);
               setAssignments(prev => prev.filter(a => a.id !== assignmentId));
               setSelectedAssignment(null);
 
@@ -543,6 +419,7 @@ export default function AdminDashboard() {
 
   const studentUsers = users.filter(u => u.role === "student");
   const taUsers = users.filter(u => u.role === "grader");
+  const adminUsers = users.filter(u => u.role === "admin");
 
   return (
     <div className="
@@ -550,7 +427,7 @@ export default function AdminDashboard() {
       {/* Theme Toggle */}
       <button
         onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle"
+        className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
         title="Toggle theme"
       >
         {darkMode ? "☀️" : "🌙"}
@@ -797,7 +674,7 @@ export default function AdminDashboard() {
                               handleEditAssignment(assignment);
                             }}
                             title="Edit assignment"
-                            style={{ fontSize: "1rem", padding: "4px 8px" }}
+                            style={{ fontSize: "1rem", padding: "4px 8px", color: "#ffffff" }}
                           >
                             Edit
                           </button>
@@ -808,7 +685,7 @@ export default function AdminDashboard() {
                               handleDownloadCSV(assignment.id);
                             }}
                             title="Download marks as CSV"
-                            style={{ fontSize: "1rem", padding: "4px 8px" }}
+                            style={{ fontSize: "1rem", padding: "4px 8px", color: "#ffffff" }}
                           >
                             Download Marks
                           </button>
@@ -1325,9 +1202,17 @@ export default function AdminDashboard() {
 
           {/* Users Grid by Role */}
           <div className="users-grid">
-            <div className="users-category">
-              <h3>Students ({studentUsers.length})</h3>
-              <div className="users-list">
+            <div className="users-category" style={{ height: '100%' }}>
+              <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Students ({studentUsers.length})</h3>
+              <div style={{
+                maxHeight: '400px',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'rgba(0,0,0,0.02)'
+              }}>
                 {studentUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
@@ -1338,7 +1223,7 @@ export default function AdminDashboard() {
                       <select
                         value={user.role}
                         onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
-                        className="role-select"
+                        className="role-select" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text)' }}
                       >
                         <option value="student">Student</option>
                         <option value="grader">Grader</option>
@@ -1352,8 +1237,16 @@ export default function AdminDashboard() {
             </div>
 
             <div className="users-category">
-              <h3>Graders ({taUsers.length})</h3>
-              <div className="users-list">
+              <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Graders ({taUsers.length})</h3>
+              <div style={{
+                maxHeight: '400px',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'rgba(0,0,0,0.02)'
+              }}>
                 {taUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
@@ -1364,7 +1257,7 @@ export default function AdminDashboard() {
                       <select
                         value={user.role}
                         onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
-                        className="role-select"
+                        className="role-select" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text)' }}
                       >
                         <option value="student">Student</option>
                         <option value="grader">Grader</option>
@@ -1376,8 +1269,46 @@ export default function AdminDashboard() {
                 ))}
               </div>
             </div>
+
+            <div className="users-category">
+              <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Admins ({adminUsers?.length || 0})</h3>
+              <div style={{
+                maxHeight: '400px',
+                overflowY: 'auto',
+                paddingRight: '10px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'rgba(0,0,0,0.02)'
+              }}>
+                {adminUsers.map(user => (
+                  <div key={user.id} className="user-card">
+                    <div className="user-info">
+                      <h4>{user.name}</h4>
+                      <p>{user.email}</p>
+                    </div>
+                    <div className="user-actions">
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
+                        className="role-select" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text)' }}
+                      >
+                        <option value="student">Student</option>
+                        <option value="grader">Grader</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <button className="btn btn-danger" onClick={() => handleDeleteUser(user.id)} style={{ marginLeft: '8px' }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+            </div>
           </div>
         </div>
+
+
+
       )}
       <Modal
         isOpen={isModalOpen}
