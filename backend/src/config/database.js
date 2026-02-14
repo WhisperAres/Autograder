@@ -2,10 +2,8 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// Get password
 const dbPassword = process.env.DB_PASSWORD || 'postgres';
 
-// Create connection to PostgreSQL
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'autograder_db',
   process.env.DB_USER || 'postgres',
@@ -15,6 +13,12 @@ const sequelize = new Sequelize(
     port: process.env.DB_PORT || 5432,
     dialect: 'postgres',
     logging: false,
+    dialectOptions: {
+      ssl: process.env.NODE_ENV === 'production' ? {
+        require: true,
+        rejectUnauthorized: false 
+      } : false
+    },
     pool: {
       max: 5,
       min: 0,
@@ -24,13 +28,9 @@ const sequelize = new Sequelize(
   }
 );
 
-// Test the connection
+// ... keep your authentication test code below ...
 sequelize.authenticate()
-  .then(() => {
-    console.log('✅ PostgreSQL Connected Successfully');
-  })
-  .catch(err => {
-    console.error('❌ PostgreSQL Connection Error:', err.message);
-  });
+  .then(() => console.log('✅ PostgreSQL Connected Successfully'))
+  .catch(err => console.error('❌ PostgreSQL Connection Error:', err.message));
 
 module.exports = sequelize;

@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const authRoutes = require("./auth/auth.routes");
 const assignmentRoutes = require("./auth/assignments.routes");
 const submissionRoutes = require("./auth/submissions.routes");
@@ -50,16 +51,23 @@ app.get("/", (req, res) => {
     res.send("Backend is running");
 });
 
-app.use("/auth", authRoutes);
-app.use("/assignments", verifyToken, assignmentRoutes);
-app.use("/submissions", verifyToken, submissionRoutes);
-app.use("/grader", graderRoutes);
-app.use("/admin", adminRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/assignments", verifyToken, assignmentRoutes);
+app.use("/api/submissions", verifyToken, submissionRoutes);
+app.use("/api/grader", graderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/page", verifyToken, adminPagesRoutes);
+app.use("/api/grader/page", verifyToken, graderPagesRoutes);
+app.use("/api/student/page", verifyToken, studentPagesRoutes);
 
-app.use("/admin/page", verifyToken, adminPagesRoutes);
+// --- SERVE REACT FRONTEND ---
+// Serve static files from the React app build directory
+app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
-app.use("/grader/page", verifyToken, graderPagesRoutes);
-
-app.use("/student/page", verifyToken, studentPagesRoutes);
+// The "catch-all" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../../frontend/dist", "index.html"));
+});
 
 module.exports = app;

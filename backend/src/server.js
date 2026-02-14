@@ -14,10 +14,11 @@ const startServer = async () => {
     console.log("✅ Database tables synchronized");
 
     // Start server
-    const server = app.listen(5000, () => {
-      console.log("✅ Server running on port 5000");
+    const PORT = process.env.PORT || 5000;
+    const server = app.listen(PORT, () => {
+      console.log(`✅ Server running on port ${PORT}`);
     });
-    
+
     // Handle server errors
     server.on('error', (err) => {
       console.error('Server error:', err);
@@ -26,14 +27,14 @@ const startServer = async () => {
   } catch (error) {
     console.error("❌ Server initialization error:", error.message);
     console.error("Full error:", error);
-  
+
     if (error.message.includes('password authentication failed')) {
       console.error("\n Troubleshooting:");
       console.error("   - Check your PostgreSQL is running");
       console.error("   - Verify DB_PASSWORD in .env file");
       console.error("   - Default credentials: user=postgres, password='' (empty)");
     }
-    
+
     process.exit(1);
   }
 };
