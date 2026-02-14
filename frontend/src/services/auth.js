@@ -1,6 +1,15 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// ============================================================
+// 🚀 RUNTIME URL DETECTION (The "Nuclear" Fix)
+// This ignores Vercel settings and checks the browser URL directly.
+// ============================================================
+const API_URL = window.location.hostname.includes("localhost")
+  ? "http://localhost:5000/api"
+  : "https://autograder-wjcc.onrender.com/api";
+
+console.log("🌐 Frontend connected to:", API_URL);
+// ============================================================
 
 const api = axios.create({
     baseURL: API_URL
