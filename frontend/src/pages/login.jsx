@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { login } from "../services/auth"; // <--- Now importing the correct service
 import "./login.css";
 
 export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
@@ -29,39 +30,22 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
         setLoading(true);
 
         try {
-            const response = await fetch(
-                "http://localhost:5000/auth/login",
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, password }),
-                }
-            );
+            const data = await login(email, password);
 
-            const data = await response.json();
+            // Normalize role 'ta' -> 'grader' for frontend routing
+            const normalizedRole = (data.user.role === 'ta' || data.user.role === 'TA') ? 'grader' : data.user.role;
+            const userToStore = { ...data.user, role: normalizedRole };
 
-            if (response.ok) {
-                // Normalize role 'ta' -> 'grader' for frontend routing
-                const normalizedRole = (data.user.role === 'ta' || data.user.role === 'TA') ? 'grader' : data.user.role;
-                const userToStore = { ...data.user, role: normalizedRole };
+            setIsAuthenticated(true);
+            setUserRole(normalizedRole);
+            setUser(userToStore);
+            navigate(`/${normalizedRole}`);
 
-                // SAVE BOTH TOKENS HERE
-                // 'token' is the short-lived key for requests
-                // 'refreshToken' is the long-lived key for automation
-                localStorage.setItem("token", data.token);
-                localStorage.setItem("refreshToken", data.refreshToken);
-                localStorage.setItem("user", JSON.stringify(userToStore));
-
-                setIsAuthenticated(true);
-                setUserRole(normalizedRole);
-                setUser(userToStore);
-                navigate(`/${normalizedRole}`);
-            } else {
-                setError(data.message || "Login failed");
-            }
-        } catch (error) {
-            console.error("Login error:", error);
-            setError("Connection error. Please try again.");
+        } catch (err) {
+            console.error("Login error:", err);
+            // Handle error response from axios
+            const msg = err.response?.data?.message || "Login failed";
+            setError(msg);
         } finally {
             setLoading(false);
         }
