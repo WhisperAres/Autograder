@@ -12,7 +12,7 @@ const path = require("path");
 const fs = require("fs");
 const { execSync } = require("child_process");
 
-// Detect Java executable path (handle both Windows and Unix)
+// Detect Java executable path
 const getJavaExecutable = () => {
   const isWindows = os.platform() === 'win32';
   const javaCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\java.exe"` : 'java';
@@ -608,7 +608,6 @@ exports.runSingleTest = async (req, res) => {
           
           passed = actualOutput.includes("PASS");
         } else {
-          // For JavaScript/Python
           const mainFile = codeFiles[0];
           const fileExt = path.extname(mainFile.fileName);
           let command = '';

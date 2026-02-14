@@ -2,7 +2,7 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// Get password - use 'postgres' as default if not set
+// Get password
 const dbPassword = process.env.DB_PASSWORD || 'postgres';
 
 // Create connection to PostgreSQL
@@ -14,7 +14,7 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
     dialect: 'postgres',
-    logging: false, // Set to console.log to debug SQL queries
+    logging: false,
     pool: {
       max: 5,
       min: 0,

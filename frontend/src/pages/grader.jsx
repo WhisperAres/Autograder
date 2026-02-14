@@ -259,7 +259,7 @@ export default function GraderDashboard() {
 
   return (
     <div className="grader-dashboard">
-        <button className="btn-back" onClick={handleBackToAssignments}>← Back to Assignments</button>
+        <button className="btn-back" style={{marginTop: '20px', marginLeft: '20px'}} onClick={handleBackToAssignments}>← Back to Assignments</button>
         <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle"style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
 >{darkMode ? '☀️' : '🌙'}</button>
 
@@ -292,7 +292,6 @@ export default function GraderDashboard() {
                   Total Marks: <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{selectedAssignment.totalMarks || 100}</span>
                 </p>
               </div>
-              <button className="btn-back" onClick={handleBackToAssignments} style={{ padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}>Back</button>
             </header>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingBottom: '20px' }}>

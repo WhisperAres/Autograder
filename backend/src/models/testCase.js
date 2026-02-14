@@ -25,10 +25,6 @@ const TestCase = sequelize.define('TestCase', {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 1,
   },
-  isHidden: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
 }, {
   tableName: 'test_cases',
   timestamps: false,

@@ -22,14 +22,14 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Access Token: Short-lived (e.g., 15 minutes)
+    // Access Token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       process.env.JWT_SECRET,
       { expiresIn: "15m" } 
     );
 
-    // Refresh Token: Long-lived (7 days)
+    // Refresh Token
     const refreshToken = jwt.sign(
       { id: user.id },
       process.env.REFRESH_SECRET || "your_refresh_secret_key",

@@ -10,7 +10,6 @@ const graderPagesRoutes = require("./auth/grader-pages.routes");
 const studentPagesRoutes = require("./auth/student-pages.routes");
 const verifyToken = require("./middlewares/verify.middleware");
 
-// Import all models for association setup
 const User = require("./models/user");
 const Assignment = require("./models/assignment");
 const Submission = require("./models/submission");
@@ -22,7 +21,6 @@ const GraderSolutionFile = require("./models/graderSolutionFile");
 
 const app = express();
 
-// Setup model associations (must be done before routes are used)
 Submission.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
 Submission.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 Submission.hasMany(CodeFile, { foreignKey: 'submissionId', as: 'codeFiles' });
@@ -37,7 +35,6 @@ TestResult.belongsTo(TestCase, { foreignKey: 'testCaseId', as: 'testCase' });
 Assignment.hasMany(TestCase, { foreignKey: 'assignmentId', as: 'testCases' });
 Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
 
-// Grader Solution associations
 GraderSolution.hasMany(GraderSolutionFile, { foreignKey: 'solutionId', as: 'files' });
 GraderSolutionFile.belongsTo(GraderSolution, { foreignKey: 'solutionId' });
 GraderSolution.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
@@ -59,14 +56,10 @@ app.use("/submissions", verifyToken, submissionRoutes);
 app.use("/grader", graderRoutes);
 app.use("/admin", adminRoutes);
 
-// ==================== PAGE-SPECIFIC ROUTES ====================
-// Admin dashboard pages (with verify middleware)
 app.use("/admin/page", verifyToken, adminPagesRoutes);
 
-// Grader dashboard pages (with verify middleware)
 app.use("/grader/page", verifyToken, graderPagesRoutes);
 
-// Student dashboard pages (with verify middleware)
 app.use("/student/page", verifyToken, studentPagesRoutes);
 
 module.exports = app;
