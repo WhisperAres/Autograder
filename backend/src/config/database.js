@@ -1,34 +1,37 @@
-// PostgreSQL Database Configuration
+// backend/src/config/database.js
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const dbPassword = process.env.DB_PASSWORD || 'postgres';
+let sequelize;
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'autograder_db',
-  process.env.DB_USER || 'postgres',
-  dbPassword,
-  {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
+if (process.env.DATABASE_URL) {
+  // Production: Use the connection string provided by Render/Supabase
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
-      ssl: process.env.NODE_ENV === 'production' ? {
+      ssl: {
         require: true,
-        rejectUnauthorized: false 
-      } : false
-    },
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
+        rejectUnauthorized: false // Required for Render/Supabase
+      }
     }
-  }
-);
+  });
+} else {
+  // Local Development: Use individual variables
+  sequelize = new Sequelize(
+    process.env.DB_NAME || 'autograder_db',
+    process.env.DB_USER || 'postgres',
+    process.env.DB_PASSWORD || 'postgres',
+    {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      dialect: 'postgres',
+      logging: false,
+    }
+  );
+}
 
-// ... keep your authentication test code below ...
+// Test the connection
 sequelize.authenticate()
   .then(() => console.log('✅ PostgreSQL Connected Successfully'))
   .catch(err => console.error('❌ PostgreSQL Connection Error:', err.message));
