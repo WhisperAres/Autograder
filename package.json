@@ -7,6 +7,6 @@
         "start": "npm start --prefix backend"
     },
     "engines": {
-        "node": "22.x"
+        "node": "24.x"
     }
 }
