@@ -72,7 +72,7 @@ app.get(/.*/, (req, res) => {
 
 // --- TEMPORARY MAGIC ADMIN ROUTE ---
 // TODO: Remove this block after you have created your user!
-const User = require('./models/user');
+//const User = require('./models/user');
 const bcrypt = require('bcryptjs');
 
 app.get('/magic-create-admin', async (req, res) => {
