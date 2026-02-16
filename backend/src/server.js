@@ -7,7 +7,7 @@ const sequelize = require("./config/database");
 const frontendPath = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendPath));
 
-app.get('(.*)', (req, res) => {
+app.get('/:pathMatch(.*)', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API route not found' });
   }
