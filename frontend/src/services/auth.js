@@ -6,7 +6,7 @@ import axios from "axios";
 // ============================================================
 const API_URL = window.location.hostname.includes("localhost")
   ? "http://localhost:5000/api"
-  : "https://autograder-wjcc.onrender.com/api";
+  : "https://autograder-4usv.onrender.com/api";
 
 console.log("🌐 Frontend connected to:", API_URL);
 // ============================================================
