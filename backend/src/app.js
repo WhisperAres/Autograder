@@ -51,47 +51,6 @@ app.use(express.json());
 //     res.send("Backend is running");
 // });
 
-const bcrypt = require('bcryptjs');
-
-app.get('/magic-create-admin', async (req, res) => {
-  try {
-    // Use ONE consistent email for the check and the creation
-    const adminEmail = 'f20220490@goa.bits-pilani.ac.in';
-
-    // 1. Check if user already exists
-    const existing = await User.findOne({ where: { email: adminEmail } });
-    if (existing) {
-      return res.status(200).send(`<h1>Admin already exists!</h1><p>User ${adminEmail} is already in the database.</p>`);
-    }
-
-    // 2. Hash the password
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-
-    // 3. Create the user (using AWAIT to ensure it saves)
-    const newUser = await User.create({
-      email: adminEmail,
-      name: 'Khush Jain',
-      role: 'admin',
-      password: hashedPassword
-    });
-
-    console.log("✅ Created Admin User:", newUser.toJSON());
-
-    res.send(`
-      <h1>🎉 Real Success!</h1>
-      <p>Admin user created and SAVED to database.</p>
-      <ul>
-        <li><strong>Email:</strong> ${adminEmail}</li>
-        <li><strong>Password:</strong> admin123</li>
-      </ul>
-      <p>Now go to your login page at the main URL and sign in.</p>
-    `);
-  } catch (error) {
-    console.error("❌ Magic Route Error:", error);
-    res.status(500).send(`<h1>❌ Database Error</h1><p>${error.message}</p><p>Check your Render logs for details.</p>`);
-  }
-});
-
 app.use("/api/auth", authRoutes);
 app.use("/api/assignments", verifyToken, assignmentRoutes);
 app.use("/api/submissions", verifyToken, submissionRoutes);
