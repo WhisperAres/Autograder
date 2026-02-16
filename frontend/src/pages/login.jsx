@@ -32,7 +32,6 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
         try {
             const data = await login(email, password);
 
-            // Normalize role 'ta' -> 'grader' for frontend routing
             const normalizedRole = (data.user.role === 'ta' || data.user.role === 'TA') ? 'grader' : data.user.role;
             const userToStore = { ...data.user, role: normalizedRole };
 

@@ -5,7 +5,6 @@ require('dotenv').config();
 let sequelize;
 
 if (process.env.DATABASE_URL) {
-  // Production: Use the connection string provided by Render/Supabase
   sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
     logging: false,

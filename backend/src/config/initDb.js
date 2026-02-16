@@ -49,7 +49,7 @@ const initializeDatabase = async () => {
     Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolutions' });
     
     console.log('🔄 Syncing database models...');
-    await sequelize.sync({ alter: false });
+    await sequelize.sync();
     console.log('✅ All tables created/updated');
 
     // Check if data already exists
