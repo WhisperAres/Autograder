@@ -77,16 +77,18 @@ const bcrypt = require('bcryptjs');
 
 app.get('/magic-create-admin', async (req, res) => {
   try {
-    // 1. Check if user already exists
-    const existing = await User.findOne({ where: { email: 'admin@uni.edu' } });
-    if (existing) return res.send("User 'admin@uni.edu' already exists!");
+    const adminEmail = 'f20220490@goa.bits-pilani.ac.in'; // Define it once here
+
+    // 1. Check if user already exists using the correct variable
+    const existing = await User.findOne({ where: { email: adminEmail } });
+    if (existing) return res.send(`User '${adminEmail}' already exists!`);
 
     // 2. Hash the password
     const hashedPassword = await bcrypt.hash('admin123', 10);
 
     // 3. Create the user
-    const user = await User.create({
-      email: 'f20220490@goa.bits-pilani.ac.in',
+    await User.create({
+      email: adminEmail,
       name: 'Khush Jain',
       role: 'admin',
       password: hashedPassword
@@ -96,12 +98,14 @@ app.get('/magic-create-admin', async (req, res) => {
       <h1>🎉 Success!</h1>
       <p>Admin user created successfully.</p>
       <ul>
-        <li><strong>Email:</strong> admin@uni.edu</li>
+        <li><strong>Email:</strong> ${adminEmail}</li>
         <li><strong>Password:</strong> admin123</li>
       </ul>
-      <p>You can now go to your frontend and login.</p>
+      <p>Go to your login page and use these credentials.</p>
     `);
   } catch (error) {
+    // This will print the actual error (like a database connection issue) to your Render logs
+    console.error("Magic Route Error:", error);
     res.status(500).send(`<h1>❌ Error</h1><p>${error.message}</p>`);
   }
 });
