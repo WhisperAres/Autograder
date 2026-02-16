@@ -51,28 +51,6 @@ app.use(express.json());
 //     res.send("Backend is running");
 // });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/assignments", verifyToken, assignmentRoutes);
-app.use("/api/submissions", verifyToken, submissionRoutes);
-app.use("/api/grader", graderRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/admin/page", verifyToken, adminPagesRoutes);
-app.use("/api/grader/page", verifyToken, graderPagesRoutes);
-app.use("/api/student/page", verifyToken, studentPagesRoutes);
-
-// --- SERVE REACT FRONTEND ---
-// Serve static files from the React app build directory
-app.use(express.static(path.join(__dirname, "../../frontend/dist")));
-
-// The "catch-all" handler: for any request that doesn't
-// match one above, send back React's index.html file.
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../../frontend/dist", "index.html"));
-});
-
-// --- TEMPORARY MAGIC ADMIN ROUTE ---
-// TODO: Remove this block after you have created your user!
-//const User = require('./models/user');
 const bcrypt = require('bcryptjs');
 
 app.get('/magic-create-admin', async (req, res) => {
@@ -113,6 +91,30 @@ app.get('/magic-create-admin', async (req, res) => {
     res.status(500).send(`<h1>❌ Database Error</h1><p>${error.message}</p><p>Check your Render logs for details.</p>`);
   }
 });
+
+app.use("/api/auth", authRoutes);
+app.use("/api/assignments", verifyToken, assignmentRoutes);
+app.use("/api/submissions", verifyToken, submissionRoutes);
+app.use("/api/grader", graderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/page", verifyToken, adminPagesRoutes);
+app.use("/api/grader/page", verifyToken, graderPagesRoutes);
+app.use("/api/student/page", verifyToken, studentPagesRoutes);
+
+// --- SERVE REACT FRONTEND ---
+// Serve static files from the React app build directory
+app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+
+// The "catch-all" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, "../../frontend/dist", "index.html"));
+});
+
+// --- TEMPORARY MAGIC ADMIN ROUTE ---
+// TODO: Remove this block after you have created your user!
+//const User = require('./models/user');
+
 // -----------------------------------
 
 module.exports = app;
