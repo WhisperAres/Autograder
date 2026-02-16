@@ -7,8 +7,7 @@ const sequelize = require("./config/database");
 const frontendPath = path.join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendPath));
 
-app.get('*', (req, res) => {
-  // Check if the request is for an API to avoid sending HTML for failed API calls
+app.get('(.*)', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API route not found' });
   }
