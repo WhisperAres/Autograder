@@ -147,10 +147,10 @@ exports.getSubmissionsByAssignment = async (req, res) => {
       ],
       order: [["id", "DESC"]]
     });
-    res.json(submissions);
+    res.json(submissions || []);
   } catch (error) {
     console.error("Error fetching submissions:", error);
-    res.status(500).json({ message: "Error fetching submissions" });
+    res.json([]);
   }
 };
 

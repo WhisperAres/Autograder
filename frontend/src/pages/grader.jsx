@@ -184,7 +184,7 @@ export default function GraderDashboard() {
     setRunningTests(true);
     try {
       const payload = {
-        solutionFiles: codeFiles.map(f => ({ fileName: f.fileName, fileContent: f.fileContent }))
+        solutionFiles: Array.isArray(codeFiles) ? codeFiles.map(f => ({ fileName: f.fileName, fileContent: f.fileContent })) : []
       };
       if (!payload.solutionFiles || payload.solutionFiles.length === 0) throw new Error("No solution files to test");
       const res = await api.post(`/grader/page/test-solutions/${assignment.id}/run-tests`, payload);
