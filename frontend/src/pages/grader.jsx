@@ -85,26 +85,33 @@ export default function GraderDashboard() {
     fetchAssignments();
   }, []);
 
+  // frontend/src/pages/grader.jsx
+
   useEffect(() => {
     const { assignmentId, submissionId } = params || {};
+    const path = window.location.pathname;
 
-    const isTestSolutionsPath = window.location.pathname.includes('test-solutions');
-    const isGradeSubmissionsPath = window.location.pathname.includes('grade-submissions');
+    // 1. Determine which "mode" we are in based on the URL
+    const isTestSolutions = path.includes('test-solutions');
+    const isGradeSubmissions = path.includes('grade-submissions');
 
     if (assignmentId && assignments.length > 0) {
       const found = assignments.find((a) => String(a.id) === String(assignmentId));
       if (found) {
         setSelectedAssignment(found);
 
-        if (isTestSolutionsPath) {
+        if (isTestSolutions) {
+          // Mode: Uploading/Testing Grader Solutions
           setShowTestCaseManager(true);
           setSubmissions([]);
-        } else if (isGradeSubmissionsPath) {
+        } else if (isGradeSubmissions) {
+          // Mode: Viewing Student Submissions
           setShowTestCaseManager(false);
           fetchSubmissionsForAssignment(assignmentId);
         }
       }
     } else if (submissionId) {
+      // Mode: Deep link to a specific student submission
       (async () => {
         try {
           const res = await api.get(`/grader/page/grade-submissions/${submissionId}`);
@@ -118,16 +125,14 @@ export default function GraderDashboard() {
           setShowTestCaseManager(false);
           await fetchCodeForSubmission(submission.id);
         } catch (err) {
-          console.error("Error fetching submission:", err);
+          console.error(err);
         }
       })();
     } else {
+      // Reset state for Dashboard
       setSelectedAssignment(null);
       setSelectedSubmission(null);
       setSubmissions([]);
-      setCodeFiles([]);
-      setCodeContent("");
-      setTestResults([]);
       setShowTestCaseManager(false);
     }
   }, [params, assignments]);
