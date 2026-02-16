@@ -70,10 +70,4 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, "../../frontend/dist", "index.html"));
 });
 
-// --- TEMPORARY MAGIC ADMIN ROUTE ---
-// TODO: Remove this block after you have created your user!
-//const User = require('./models/user');
-
-// -----------------------------------
-
 module.exports = app;
