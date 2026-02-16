@@ -17,10 +17,8 @@ function App() {
     
     if (token && storedUser) {
       const parsed = JSON.parse(storedUser)
-      // Normalize legacy 'ta' role to 'grader'
       const normalizedRole = (parsed.role === 'ta' || parsed.role === 'TA') ? 'grader' : parsed.role;
       const userData = { ...parsed, role: normalizedRole };
-      // Ensure localStorage stays normalized
       localStorage.setItem('user', JSON.stringify(userData));
       setIsAuthenticated(true)
       setUserRole(userData.role)
@@ -47,8 +45,6 @@ function App() {
             <Login setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} setUser={setUser} />
           } 
         />
-
-        {/* Student routes: keep backward compatible /student -> dashboard */}
         <Route
           path="/student"
           element={
@@ -141,7 +137,7 @@ function App() {
         />
 
         <Route
-          path="/grader/grade-submissions/:submissionId"
+          path="/grader/grade-submissions/:assignmentId"
           element={
             isAuthenticated && userRole === 'grader' ? (
               <div className="with-navbar">
