@@ -20,7 +20,7 @@ export default function GraderDashboard() {
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [runningTests, setRunningTests] = useState(false);
-  const [testResults, setTestResults] = useState([]); 
+  const [testResults, setTestResults] = useState([]);
   const [showTestCaseManager, setShowTestCaseManager] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("darkMode");
@@ -48,7 +48,7 @@ export default function GraderDashboard() {
     let timeout;
     const resetTimer = () => {
       if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => { handleLogout(); }, 30 * 60 * 1000); 
+      timeout = setTimeout(() => { handleLogout(); }, 30 * 60 * 1000);
     };
     window.addEventListener('mousemove', resetTimer);
     window.addEventListener('keydown', resetTimer);
@@ -87,18 +87,39 @@ export default function GraderDashboard() {
 
   useEffect(() => {
     const { assignmentId, submissionId } = params || {};
+
+    const isTestSolutionsPath = window.location.pathname.includes('test-solutions');
+    const isGradeSubmissionsPath = window.location.pathname.includes('grade-submissions');
+
     if (assignmentId && assignments.length > 0) {
       const found = assignments.find((a) => String(a.id) === String(assignmentId));
-      if (found) { setSelectedAssignment(found); setShowTestCaseManager(true); }
+      if (found) {
+        setSelectedAssignment(found);
+
+        if (isTestSolutionsPath) {
+          setShowTestCaseManager(true);
+          setSubmissions([]);
+        } else if (isGradeSubmissionsPath) {
+          setShowTestCaseManager(false);
+          fetchSubmissionsForAssignment(assignmentId);
+        }
+      }
     } else if (submissionId) {
       (async () => {
         try {
           const res = await api.get(`/grader/page/grade-submissions/${submissionId}`);
           const submission = res.data;
-          setSelectedAssignment({ id: submission.assignmentId, title: submission.assignmentTitle, totalMarks: submission.totalMarks });
+          setSelectedAssignment({
+            id: submission.assignmentId,
+            title: submission.assignmentTitle,
+            totalMarks: submission.totalMarks
+          });
           setSelectedSubmission(submission);
+          setShowTestCaseManager(false);
           await fetchCodeForSubmission(submission.id);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+          console.error("Error fetching submission:", err);
+        }
       })();
     } else {
       setSelectedAssignment(null);
@@ -113,7 +134,7 @@ export default function GraderDashboard() {
 
   const fetchSubmissionsForAssignment = async (assignmentId) => {
     try {
-      const res = await api.get(`/grader/page/submissions/${assignmentId}`);
+      const res = await api.get(`/grader/page/submissions/${assignmentId}/list`);
       setSubmissions(res.data || []);
     } catch (err) { setSubmissions([]); }
   };
@@ -154,7 +175,7 @@ export default function GraderDashboard() {
 
   const handleViewCode = async (submission) => {
     setSelectedSubmission(submission);
-    setTestResults([]); 
+    setTestResults([]);
     await fetchCodeForSubmission(submission.id);
   };
 
@@ -230,8 +251,8 @@ export default function GraderDashboard() {
   if (!selectedAssignment) {
     return (
       <div className="grader-dashboard">
-          <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle"style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
->{darkMode ? '☀️' : '🌙'}</button>
+        <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
+        >{darkMode ? '☀️' : '🌙'}</button>
 
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
           {assignments.length === 0 ? (
@@ -259,9 +280,9 @@ export default function GraderDashboard() {
 
   return (
     <div className="grader-dashboard">
-        <button className="btn-back" style={{marginTop: '20px', marginLeft: '20px'}} onClick={handleBackToAssignments}>← Back to Assignments</button>
-        <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle"style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
->{darkMode ? '☀️' : '🌙'}</button>
+      <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>
+      <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
+      >{darkMode ? '☀️' : '🌙'}</button>
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
         <div style={{ display: 'flex', gap: 20 }}>
@@ -328,7 +349,7 @@ export default function GraderDashboard() {
                         {runningTests ? '⏳ Running...' : '▶ Run Tests'}
                       </button>
                     </div>
-                    
+
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
                       <pre style={{ flex: 1, margin: 0, padding: '24px', overflow: 'auto', fontSize: '14px', lineHeight: '1.6', background: 'var(--bg-code, #1e1e1e)', color: 'var(--text-code, #d4d4d4)' }}>
                         <code style={{ fontFamily: '"SF Mono", "Fira Code", monospace' }}>{codeContent}</code>
