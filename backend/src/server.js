@@ -20,7 +20,6 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    // Consider using { alter: false } in production to prevent accidental data loss
     await sequelize.sync(); 
     console.log("✅ Database tables synchronized");
 

@@ -46,10 +46,10 @@ Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolu
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.get("/", (req, res) => {
-    res.send("Backend is running");
-});
+// // Routes
+// app.get("/", (req, res) => {
+//     res.send("Backend is running");
+// });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/assignments", verifyToken, assignmentRoutes);
