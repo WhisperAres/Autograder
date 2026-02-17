@@ -156,6 +156,7 @@ exports.getSubmissionsByAssignment = async (req, res) => {
 };
 
 // Run test cases on a submission
+// Run test cases on a submission
 exports.runTestCases = async (req, res) => {
   try {
     const { submissionId } = req.params;
@@ -178,19 +179,14 @@ exports.runTestCases = async (req, res) => {
       return res.json({ message: "No test cases defined for this assignment", results: [] });
     }
 
-    // Fetch code files
-    const codeFiles = await CodeFile.findAll({
-      where: { submissionId }
-    });
-
-    if (codeFiles.length === 0) {
+    const codeFiles = submission.codeFiles;
+    if (!codeFiles || codeFiles.length === 0) {
       return res.status(404).json({ message: "No code files found in submission" });
     }
 
     const results = [];
     const tempDir = path.join(__dirname, "../../temp", `submission_${submissionId}`);
 
-    // Create temp directory if it doesn't exist
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
@@ -202,116 +198,93 @@ exports.runTestCases = async (req, res) => {
         fs.writeFileSync(filePath, codeFile.fileContent, "utf8");
       }
 
-      // Run each test case
+      // [FIX] Find the main file and handle Java Compilation specifically
+      const mainFile = codeFiles.find(f => 
+        f.fileName.endsWith(".java") || f.fileName.endsWith(".js")
+      ) || codeFiles[0];
+
+      if (mainFile.fileName.endsWith(".java")) {
+        const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java")).map(f => f.fileName).join(" ");
+        
+        try {
+          // [FIX] Compile with piped stdio to capture student errors instead of crashing
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles}`, { 
+            timeout: 10000, 
+            stdio: ['pipe', 'pipe', 'pipe'] 
+          });
+        } catch (compileErr) {
+          // [FIX] Catch the error and return it to the UI gracefully
+          const errorMsg = compileErr.stderr ? compileErr.stderr.toString() : compileErr.message;
+          return res.json({ 
+            message: "Compilation failed", 
+            results: [],
+            error: errorMsg,
+            submissionId
+          });
+        }
+      }
+
+      // Run each test case (now that compilation is confirmed)
       for (const testCase of testCases) {
         let passed = false;
         let actualOutput = "";
         let errorMessage = "";
 
         try {
-          // Get the main code file (assuming first file or .java/.js file)
-          const mainFile = codeFiles.find(f => 
-            f.fileName.endsWith(".java") || f.fileName.endsWith(".js")
-          ) || codeFiles[0];
-
-          // Determine how to execute based on file type
           let command = "";
           if (mainFile.fileName.endsWith(".java")) {
-            // For Java - compile all .java files together and create a test wrapper per test case
-            const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java")).map(f => f.fileName).join(" ");
-            // compile original files first
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFiles}`, { timeout: 5000 });
-            // create test wrapper class
             const uniqueId = Date.now();
             const testFileName = `Test${uniqueId}.java`;
             const className = `Test${uniqueId}`;
             const transformed = transformJUnitStyle(testCase.testCode);
-            const testCode = `public class ${className} {\n    public static void main(String[] args) {\n        try {\n            ${transformed}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n            e.printStackTrace();\n        }\n    }\n}`;
+            const testCode = `public class ${className} {\n    public static void main(String[] args) {\n        try {\n            ${transformed}\n            System.out.println("PASS");\n        } catch (AssertionError e) {\n            System.out.println("FAIL: " + e.getMessage());\n        } catch (Exception e) {\n            System.out.println("FAIL: " + e.getMessage());\n        }\n    }\n}`;
             fs.writeFileSync(path.join(tempDir, testFileName), testCode);
             command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${className}`;
           } else if (mainFile.fileName.endsWith(".js")) {
-            // For JavaScript/Node
             command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-          } else if (mainFile.fileName.endsWith(".py")) {
-            // For Python
-            command = `cd "${tempDir}" && python ${mainFile.fileName}`;
           }
 
           if (command) {
-            // Execute with input and capture output
-            if (testCase.input) {
-              actualOutput = execSync(command, {
-                input: testCase.input,
-                encoding: "utf8",
-                stdio: ["pipe", "pipe", "pipe"],
-                timeout: 5000
-              }).trim();
-            } else {
-              actualOutput = execSync(command, {
-                encoding: "utf8",
-                timeout: 5000
-              }).trim();
-            }
-
-            // Compare output
-            passed = actualOutput === testCase.expectedOutput.trim();
+            actualOutput = execSync(command, {
+              input: testCase.input || "",
+              encoding: "utf8",
+              stdio: ["pipe", "pipe", "pipe"],
+              timeout: 5000
+            }).trim();
+            passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
           }
         } catch (execError) {
-          errorMessage = execError.message || "Execution failed";
+          errorMessage = execError.stderr ? execError.stderr.toString() : execError.message;
           passed = false;
         }
-
-        // Save test result to database
-        const testResult = await TestResult.create({
-          submissionId,
-          testCaseId: testCase.id,
-          passed,
-          actualOutput: passed ? actualOutput : "",
-          errorMessage: !passed ? errorMessage : null
-        });
 
         results.push({
           testName: testCase.testName,
           passed,
-          actualOutput: passed ? actualOutput : "",
+          actualOutput,
           expectedOutput: testCase.expectedOutput,
           errorMessage
         });
       }
 
-      // Calculate marks based on passed tests
+      // Update marks and status in DB
       let totalMarksEarned = 0;
-      for (let i = 0; i < results.length; i++) {
-        if (results[i].passed) {
-          totalMarksEarned += parseFloat(testCases[i].marks) || 0;
-        }
-      }
-
-      // Update submission with calculated marks and status
-      await submission.update({ 
-        marks: totalMarksEarned,
-        status: "evaluated" 
-      });
+      results.forEach((r, idx) => { if (r.passed) totalMarksEarned += parseFloat(testCases[idx].marks) || 0; });
+      await submission.update({ marks: totalMarksEarned, status: "evaluated" });
 
       res.json({
-        message: "Test cases executed",
+        message: "Tests completed",
         results,
         submissionId,
-        passCount: results.filter(r => r.passed).length,
-        totalCount: results.length,
-        marksObtained: totalMarksEarned,
-        totalMarks: submission.totalMarks
+        marksObtained: totalMarksEarned
       });
+
     } finally {
-      // Clean up temp directory
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
-      }
+      // Cleanup temp directory
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) {}
     }
   } catch (error) {
-    console.error("Error running tests:", error);
+    console.error("Grader Error:", error);
     res.status(500).json({ message: "Error running tests: " + error.message });
   }
 };
