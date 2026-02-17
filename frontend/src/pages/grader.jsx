@@ -138,11 +138,19 @@ export default function GraderDashboard() {
   }, [params, assignments]);
 
   const fetchSubmissionsForAssignment = async (assignmentId) => {
-    try {
-      const res = await api.get(`/grader/page/submissions/${assignmentId}/list`);
-      setSubmissions(res.data || []);
-    } catch (err) { setSubmissions([]); }
-  };
+  try {
+    const res = await api.get(`/grader/page/submissions/${assignmentId}`);
+    
+    if (res.data && Array.isArray(res.data)) {
+      setSubmissions(res.data);
+    } else {
+      setSubmissions([]);
+    }
+  } catch (err) {
+    console.error("Fetch error:", err);
+    setSubmissions([]); 
+  }
+};
 
   const handleAssignmentClick = (assignment) => {
     setSelectedAssignment(assignment);
