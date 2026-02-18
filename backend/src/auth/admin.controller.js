@@ -189,7 +189,7 @@ const fastBulkInsertResults = async (testResults) => {
     values.push(r.submissionId, r.testCaseId, r.passed, r.actualOutput || '', r.errorMessage || null, now, now);
   }
   
-  const query = `INSERT INTO TestResults (${cols.join(',')}) VALUES ${placeholders}`;
+  const query = `INSERT INTO testresults (${cols.join(',')}) VALUES ${placeholders}`;
   
   try {
     await sequelize.query(query, {
@@ -722,7 +722,6 @@ exports.runTestCases = async (req, res) => {
       return res.status(404).json({ message: "No code files found in submission" });
     }
 
-    const results = [];
     const tempDir = path.join(__dirname, "../../temp", `submission_${submissionId}`);
 
     if (!fs.existsSync(tempDir)) {
@@ -761,6 +760,10 @@ exports.runTestCases = async (req, res) => {
           });
         }
       }
+
+      const results = [];
+      const testResultsToSave = [];
+      let totalMarksEarned = 0;
 
       for (const testCase of testCases) {
         let passed = false;
