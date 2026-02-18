@@ -531,8 +531,6 @@ exports.getSubmissionCodeFiles = async (req, res) => {
   }
 };
 
-// backend/src/auth/admin.controller.js
-
 exports.runSingleTest = async (req, res) => {
   try {
     const { submissionId } = req.params;
@@ -542,111 +540,54 @@ exports.runSingleTest = async (req, res) => {
       include: [{ model: CodeFile, as: "codeFiles" }]
     });
 
-    if (!submission) {
-      return res.status(404).json({ message: "Submission not found" });
-    }
+    if (!submission) return res.status(404).json({ message: "Submission not found" });
 
     const testCase = await TestCase.findByPk(testCaseId);
-    if (!testCase) {
-      return res.status(404).json({ message: "Test case not found" });
-    }
+    if (!testCase) return res.status(404).json({ message: "Test case not found" });
 
     const codeFiles = submission.codeFiles;
-    if (!codeFiles || codeFiles.length === 0) {
-      return res.status(404).json({ message: "No code files found" });
-    }
+    const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+    if (javaFiles.length === 0) return res.status(404).json({ message: "No Java files found" });
 
-    const tempDir = path.join(__dirname, "../../temp", `test_${submissionId}_${testCaseId}_${Date.now()}`);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    const tempDir = path.join(__dirname, "../../temp", `test_${submissionId}_${Date.now()}`);
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
     try {
-      // Write code files to temp directory
-      for (const codeFile of codeFiles) {
+      for (const codeFile of javaFiles) {
         fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
       }
 
-      let passed = false;
-      let actualOutput = "";
-      let errorMessage = "";
-
-      const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-
-      if (javaFiles.length > 0) {
-        // [FIX] Isolated try-catch for student code compilation
-        try {
-          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-            timeout: 10000, // Increased timeout for stability
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
-        } catch (compileErr) {
-          // If compilation fails, return the error immediately without crashing server
-          return res.json({
-            testName: testCase.testName,
-            testCaseId: testCase.id,
-            passed: false,
-            actualOutput: "",
-            errorMessage: `Compilation Failed: ${compileErr.stderr?.toString() || compileErr.message}`,
-            marks: 0
-          });
-        }
-
-        // Create test harness
-        const uniqueId = Date.now() + Math.random().toString().replace('.', '');
-        const testFileName = `Test${uniqueId}.java`;
-        const testClassName = `Test${uniqueId}`;
-        const testCode = `public class ${testClassName} {
-  public static void main(String[] args) {
-    try {
-      ${transformJUnitStyle(testCase.testCode)}
-      System.out.println("PASS");
-    } catch (AssertionError e) {
-      System.out.println("FAIL: " + e.getMessage());
-    } catch (Exception e) {
-      System.out.println("FAIL: " + e.getMessage());
-    }
-  }
-}`;
-        fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-
-        try {
-          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
-          actualOutput = execSync(cmd, {
-            encoding: "utf8",
-            timeout: 5000,
-            stdio: ['pipe', 'pipe', 'pipe']
-          }).trim();
-          passed = actualOutput.includes("PASS");
-        } catch (execError) {
-          passed = false;
-          errorMessage = execError.stderr?.toString() || execError.message;
-        }
-      } else {
-        // ... Logic for .js and .py remains the same but add stdio: ['pipe', 'pipe', 'pipe'] ...
-      }
-
-      res.json({
-        testName: testCase.testName,
-        testCaseId: testCase.id,
-        passed,
-        actualOutput: passed ? actualOutput : "",
-        errorMessage: passed ? null : errorMessage,
-        marks: testCase.marks || 0
-      });
-    } finally {
-      // Clean up temp directory
       try {
-        if (fs.existsSync(tempDir)) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-        }
-      } catch (cleanupErr) {
-        console.error("Cleanup error:", cleanupErr);
+        const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+          timeout: 10000,
+          stdio: ['pipe', 'pipe', 'pipe'] 
+        });
+      } catch (compileErr) {
+        return res.json({
+          testName: testCase.testName,
+          passed: false,
+          errorMessage: `Compilation Failed: ${compileErr.stderr?.toString() || compileErr.message}`
+        });
       }
+
+      const uniqueId = Date.now() + Math.random().toString().replace('.', '');
+      const testClassName = `Test${uniqueId}`;
+      const testCode = `public class ${testClassName} {\n  public static void main(String[] args) {\n    try {\n      ${transformJUnitStyle(testCase.testCode)}\n      System.out.println("PASS");\n    } catch (AssertionError e) {\n      System.out.println("FAIL: " + e.getMessage());\n    } catch (Exception e) {\n      System.out.println("FAIL: " + e.getMessage());\n    }\n  }\n}`;
+      fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
+
+      try {
+        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+        const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        const passed = actualOutput.includes("PASS");
+        res.json({ testName: testCase.testName, testCaseId: testCase.id, passed, actualOutput: passed ? actualOutput : "", errorMessage: passed ? null : "Assertion failed", marks: testCase.marks || 0 });
+      } catch (execError) {
+        res.json({ testName: testCase.testName, passed: false, errorMessage: execError.stderr?.toString() || execError.message, marks: 0 });
+      }
+    } finally {
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     }
   } catch (error) {
-    console.error("Error running single test:", error);
     res.status(500).json({ message: "Error running test: " + error.message });
   }
 };
@@ -1097,61 +1038,128 @@ exports.deleteTestCase = async (req, res) => {
 exports.runBulkTests = async (req, res) => {
   try {
     const { assignmentId } = req.params;
+    
+    // 1. Fetch all submissions and the test cases for this assignment
     const submissions = await Submission.findAll({
       where: { assignmentId },
-      include: [
-        { model: Assignment, as: "assignment" },
-        { model: User, as: "student", attributes: ['id', 'name', 'email'] }
-      ]
+      include: [{ model: User, as: "student", attributes: ['name'] }]
+    });
+
+    const testCases = await TestCase.findAll({ 
+      where: { assignmentId },
+      order: [['id', 'ASC']] 
     });
 
     if (submissions.length === 0) {
       return res.json({ message: "No submissions found", results: [] });
     }
 
-    const testCases = await TestCase.findAll({ where: { assignmentId } });
     const studentResults = [];
 
+    // 2. Process each student submission one by one
     for (const submission of submissions) {
-      const tempDir = path.join(__dirname, `../../temp/submission_${submission.id}_${Date.now()}`);
+      const tempDir = path.join(__dirname, `../../temp/bulk_${submission.id}_${Date.now()}`);
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       try {
         await submission.update({ status: 'grading' });
         const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
+        const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+        
+        if (javaFiles.length === 0) {
+          studentResults.push({ studentName: submission.student.name, status: 'no-java-files' });
+          continue;
+        }
 
-        for (const file of codeFiles) {
+        // Write student files to disk
+        for (const file of javaFiles) {
           fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
         }
 
-        const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-        if (javaFiles.length > 0) {
-          try {
-            const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            // [FIX] Capture stderr and use a timeout to prevent site hangs
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-              timeout: 10000,
-              stdio: ['pipe', 'pipe', 'pipe']
-            });
-          } catch (compileErr) {
-            const errorMsg = compileErr.stderr ? compileErr.stderr.toString() : compileErr.message;
-
-            // [FIX] Update status and move to next student instead of crashing loop
-            await submission.update({ marks: 0, status: 'compilation-error' });
-            await TestResult.create({
-              submissionId: submission.id,
-              passed: false,
-              errorMessage: `Compilation Failed: ${errorMsg}`
-            });
-            studentResults.push({ studentName: submission.student.name, status: 'compilation-error' });
-            continue;
-          }
+        // 3. Compile Student Java Files
+        try {
+          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
+            timeout: 10000, 
+            stdio: ['pipe', 'pipe', 'pipe'] 
+          });
+        } catch (compileErr) {
+          const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
+          await submission.update({ marks: 0, status: 'compilation-error' });
+          await TestResult.create({ 
+            submissionId: submission.id, 
+            passed: false, 
+            errorMessage: `Compilation Failed: ${errorMsg}` 
+          });
+          studentResults.push({ studentName: submission.student.name, status: 'compilation-error' });
+          continue; 
         }
 
-        // ... (rest of your testing logic for running the compiled classes) ...
+        // 4. Execution Logic: Run each test case
+        let totalMarksEarned = 0;
+        await TestResult.destroy({ where: { submissionId: submission.id } }); // Clear old results
+
+        for (const testCase of testCases) {
+          let passed = false;
+          let errorMessage = "";
+
+          try {
+            const uniqueId = Date.now() + Math.random().toString().replace('.', '');
+            const testClassName = `Test${uniqueId}`;
+            const testCode = `public class ${testClassName} {
+              public static void main(String[] args) {
+                try {
+                  ${transformJUnitStyle(testCase.testCode)}
+                  System.out.println("PASS");
+                } catch (AssertionError e) {
+                  System.out.println("FAIL: " + e.getMessage());
+                } catch (Exception e) {
+                  System.out.println("FAIL: " + e.getMessage());
+                }
+              }
+            }`;
+            
+            fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
+
+            // Compile and Run the test harness
+            const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+            const output = execSync(cmd, { 
+              encoding: "utf8", 
+              timeout: 5000, 
+              stdio: ['pipe', 'pipe', 'pipe'] 
+            }).trim();
+
+            passed = output.includes("PASS");
+            if (passed) {
+              totalMarksEarned += parseFloat(testCase.marks) || 0;
+            }
+          } catch (execError) {
+            errorMessage = execError.stderr?.toString() || execError.message;
+          }
+
+          // Save individual test case result
+          await TestResult.create({
+            submissionId: submission.id,
+            testCaseId: testCase.id,
+            passed,
+            errorMessage: passed ? null : errorMessage
+          });
+        }
+
+        // 5. Final Update for this student
+        await submission.update({ 
+          marks: totalMarksEarned, 
+          status: 'evaluated' 
+        });
+
+        studentResults.push({ 
+          studentName: submission.student.name, 
+          status: 'evaluated', 
+          marks: totalMarksEarned 
+        });
 
       } catch (err) {
-        console.error(`Error with submission ${submission.id}:`, err);
+        console.error(`Error processing submission ${submission.id}:`, err);
       } finally {
         if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       }
@@ -1159,7 +1167,8 @@ exports.runBulkTests = async (req, res) => {
 
     res.json({ message: "Bulk tests completed", results: studentResults });
   } catch (error) {
-    res.status(500).json({ message: "Error running bulk tests" });
+    console.error("Bulk testing critical failure:", error);
+    res.status(500).json({ message: "Bulk testing failed" });
   }
 };
 
