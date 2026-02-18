@@ -1190,19 +1190,23 @@ exports.runBulkTests = async (req, res) => {
     console.log(`[BULK TEST] Processing ${submissions.length} submissions with ${testCases.length} test cases each`);
 
     // 2. Process submissions in parallel
+    const submissionUpdates = [];
+    const tempDirsToClean = [];
+    
     const studentResults = await Promise.all(submissions.map(async (submission, index) => {
       const studentStartTime = Date.now();
       console.log(`[BULK TEST] [${index + 1}/${submissions.length}] Processing ${submission.student.name} (ID: ${submission.id})`);
 
       const tempDir = path.join(__dirname, `../../temp/bulk_${submission.id}_${Date.now()}`);
+      tempDirsToClean.push(tempDir);
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       try {
-        await submission.update({ status: 'grading' });
         const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
         const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
 
         if (javaFiles.length === 0) {
+          submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-java-files' });
           return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
         }
 
@@ -1223,7 +1227,7 @@ exports.runBulkTests = async (req, res) => {
           console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
-          await submission.update({ marks: 0, status: 'compilation-error' });
+          submissionUpdates.push({ id: submission.id, marks: 0, status: 'compilation-error' });
           return { studentName: submission.student.name, status: 'compilation-error', error: errorMsg, passCount: 0, totalCount: testCases.length };
         }
 
@@ -1328,22 +1332,44 @@ exports.runBulkTests = async (req, res) => {
           }
         }
 
-        await submission.update({ marks: totalMarksEarned, status: 'evaluated' });
-
         const passCount = results.filter(r => r.passed).length;
         console.log(`  ✓ ${submission.student.name}: ${passCount}/${results.length} tests passed (${Date.now() - studentStartTime}ms)`);
+
+        // Store update info for bulk update later
+        submissionUpdates.push({ id: submission.id, marks: totalMarksEarned, status: 'evaluated' });
 
         return { studentName: submission.student.name, status: 'success', passCount, totalCount: results.length, marksObtained: totalMarksEarned };
       } catch (err) {
         console.error(`Error processing submission ${submission.id}:`, err);
+        submissionUpdates.push({ id: submission.id, marks: 0, status: 'error' });
         return { studentName: submission.student.name, status: 'error', error: err.message, passCount: 0, totalCount: testCases.length };
-      } finally {
-        safeDeletedir(tempDir);
       }
     }));
 
-    console.log(`[BULK TEST] Completed bulk tests in ${Date.now() - bulkStartTime}ms`);
-    res.json({ message: "Bulk tests completed", results: studentResults });
+    // BULK UPDATE all submissions at once (much faster than individual updates)
+    if (submissionUpdates.length > 0) {
+      const { sequelize } = Submission;
+      const { QueryTypes } = require('sequelize');
+      
+      for (const update of submissionUpdates) {
+        await Submission.update(
+          { marks: update.marks, status: update.status },
+          { where: { id: update.id } }
+        );
+      }
+    }
+
+    const totalTime = Date.now() - bulkStartTime;
+    console.log(`[BULK TEST] Completed bulk tests in ${totalTime}ms`);
+    
+    res.json({ message: "Bulk tests completed", results: studentResults, totalTime: `${totalTime}ms` });
+
+    // Clean up temp directories ASYNCHRONOUSLY after response is sent
+    setImmediate(() => {
+      tempDirsToClean.forEach(dir => {
+        try { safeDeletedir(dir); } catch (e) { console.warn(`Cleanup error for ${dir}:`, e.message); }
+      });
+    });
   } catch (error) {
     console.error("Error during bulk tests:", error);
     res.status(500).json({ message: "Error during bulk tests" });
