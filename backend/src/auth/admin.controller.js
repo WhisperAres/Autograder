@@ -1264,7 +1264,19 @@ exports.runBulkTests = async (req, res) => {
           console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
+          console.log(`  ✗ Compilation error for ${submission.student.name}: ${errorMsg.substring(0, 100)}`);
           submissionUpdates.push({ id: submission.id, marks: 0, status: 'compilation-error' });
+          // Mark all test results as failed compilation
+          const failedResults = testCases.map(tc => ({
+            submissionId: submission.id,
+            testCaseId: tc.id,
+            passed: false,
+            actualOutput: "",
+            errorMessage: "Code compilation failed"
+          }));
+          if (failedResults.length > 0) {
+            await fastBulkInsertResults(failedResults);
+          }
           return { studentName: submission.student.name, status: 'compilation-error', error: errorMsg, passCount: 0, totalCount: testCases.length };
         }
 
@@ -1401,9 +1413,18 @@ exports.runBulkTests = async (req, res) => {
     const totalTime = Date.now() - bulkStartTime;
     console.log(`[BULK TEST] Completed bulk tests in ${totalTime}ms`);
 
-    res.json({ message: "Bulk tests completed", results: studentResults, totalTime: `${totalTime}ms` });
+    // IMPORTANT: Clear the running tests flag BEFORE sending response
+    // This prevents 409 errors on page refresh
+    runningTests.delete(assignmentId);
 
-    // Clean up temp directories ASYNCHRONOUSLY after response is sent
+    res.json({ 
+      message: "Bulk tests completed", 
+      results: studentResults, 
+      totalTime: `${totalTime}ms`,
+      success: true 
+    });
+
+    // Clean up temp directories ASYNCHRONOUSLY after response is sent (non-blocking)
     setImmediate(() => {
       tempDirsToClean.forEach(dir => {
         try { safeDeletedir(dir); } catch (e) { console.warn(`Cleanup error for ${dir}:`, e.message); }
@@ -1411,10 +1432,9 @@ exports.runBulkTests = async (req, res) => {
     });
   } catch (error) {
     console.error("Error during bulk tests:", error);
-    res.status(500).json({ message: "Error during bulk tests" });
-  } finally {
-    // Remove from running tests to allow new runs
+    // Always clear the running flag on error
     runningTests.delete(assignmentId);
+    res.status(500).json({ message: "Error during bulk tests", error: error.message });
   }
 };
 
