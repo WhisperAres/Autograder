@@ -196,7 +196,7 @@ exports.runTestCases = async (req, res) => {
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-          timeout: 10000, 
+          timeout: 30000, 
           stdio: ['pipe', 'pipe', 'pipe'] 
         });
       } catch (compileErr) {
@@ -238,7 +238,7 @@ exports.runTestCases = async (req, res) => {
           actualOutput = execSync(cmd, {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
-            timeout: 5000
+            timeout: 30000
           }).trim();
 
           passed = actualOutput.includes("PASS");
@@ -516,7 +516,7 @@ exports.runGraderTests = async (req, res) => {
         try {
           // Compile all solution files
           execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-            timeout: 10000, 
+            timeout: 30000, 
             stdio: ['pipe', 'pipe', 'pipe'] 
           });
         } catch (compileErr) {
@@ -559,7 +559,7 @@ exports.runGraderTests = async (req, res) => {
 
             // Compile and Run only the harness (linking to pre-compiled solution)
             output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, { 
-              timeout: 5000,
+              timeout: 30000,
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe']
             }).trim();
@@ -573,7 +573,7 @@ exports.runGraderTests = async (req, res) => {
              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
              
              output = execSync(`cd "${tempDir}" && python ${testFileName}`, { 
-               timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+               timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
              }).trim();
              testPassed = output.includes("PASS");
 
@@ -584,7 +584,7 @@ exports.runGraderTests = async (req, res) => {
              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
              
              output = execSync(`cd "${tempDir}" && node ${testFileName}`, { 
-               timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+               timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
              }).trim();
              testPassed = output.includes("PASS");
           }

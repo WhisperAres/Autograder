@@ -561,7 +561,7 @@ exports.runSingleTest = async (req, res) => {
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-          timeout: 10000,
+          timeout: 30000,
           stdio: ['pipe', 'pipe', 'pipe']
         });
       } catch (compileErr) {
@@ -579,7 +579,7 @@ exports.runSingleTest = async (req, res) => {
 
       try {
         const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
-        const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
         const passed = actualOutput.includes("PASS");
         res.json({ testName: testCase.testName, testCaseId: testCase.id, passed, actualOutput: passed ? actualOutput : "", errorMessage: passed ? null : "Assertion failed", marks: testCase.marks || 0 });
       } catch (execError) {
@@ -641,6 +641,29 @@ exports.runTestCases = async (req, res) => {
       // Remove any previous test results for this submission to avoid duplicates
       await TestResult.destroy({ where: { submissionId } });
 
+      // Compile all Java files ONCE before test loop
+      const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+      if (javaFiles.length > 0) {
+        try {
+          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+            timeout: 30000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+        } catch (compileErr) {
+          await submission.update({ marks: 0, status: 'compilation-error' });
+          return res.json({ 
+            message: "Compilation Failed", 
+            results: [], 
+            passCount: 0, 
+            totalCount: testCases.length,
+            marksObtained: 0,
+            totalMarks: submission.totalMarks,
+            errorMessage: compileErr.stderr?.toString() || compileErr.message 
+          });
+        }
+      }
+
       for (const testCase of testCases) {
         let passed = false;
         let actualOutput = "";
@@ -649,16 +672,6 @@ exports.runTestCases = async (req, res) => {
         try {
           const codeFileExtensions = codeFiles.map(f => path.extname(f.fileName))[0];
           let command = "";
-
-          // Compile all Java files first if there are any
-          const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-          if (javaFiles.length > 0) {
-            const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-              timeout: 5000,
-              stdio: ['pipe', 'pipe', 'pipe']
-            });
-          }
 
           if (codeFileExtensions === ".java" || javaFiles.length > 0) {
             // For Java, create a test file that runs the test code as a harness
@@ -681,7 +694,7 @@ exports.runTestCases = async (req, res) => {
             command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
             actualOutput = execSync(command, {
               encoding: "utf8",
-              timeout: 5000,
+              timeout: 30000,
               stdio: ['pipe', 'pipe', 'pipe']
             }).trim();
           } else {
@@ -701,12 +714,12 @@ exports.runTestCases = async (req, res) => {
                   input: testCase.input,
                   encoding: "utf8",
                   stdio: ["pipe", "pipe", "pipe"],
-                  timeout: 5000
+                  timeout: 30000
                 }).trim();
               } else {
                 actualOutput = execSync(command, {
                   encoding: "utf8",
-                  timeout: 5000
+                  timeout: 30000
                 }).trim();
               }
             }
@@ -1134,7 +1147,7 @@ exports.runBulkTests = async (req, res) => {
             const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
             const output = execSync(cmd, {
               encoding: "utf8",
-              timeout: 5000,
+              timeout: 30000,
               stdio: ['pipe', 'pipe', 'pipe']
             }).trim();
 
