@@ -1226,70 +1226,72 @@ exports.runBulkTests = async (req, res) => {
 
     console.log(`[BULK TEST] Processing ${submissions.length} submissions with ${testCases.length} test cases each`);
 
-    // 2. Process submissions in parallel
+    // DELETE all previous test results UPFRONT (before parallel execution) to avoid connection timeouts
+    console.log(`[BULK TEST] Clearing previous test results for ${submissions.length} submissions...`);
+    for (const submission of submissions) {
+      await TestResult.destroy({ where: { submissionId: submission.id } });
+    }
+    console.log(`[BULK TEST] Test results cleared`);
+
+    // 2. Process submissions in parallel (max 2-3 at a time to avoid connection pool exhaustion)
     const submissionUpdates = [];
     const tempDirsToClean = [];
+    const submissionLimiter = pLimit(2); // Limit to 2 concurrent submissions
 
-    const studentResults = await Promise.all(submissions.map(async (submission, index) => {
-      const studentStartTime = Date.now();
-      console.log(`[BULK TEST] [${index + 1}/${submissions.length}] Processing ${submission.student.name} (ID: ${submission.id})`);
+    const studentResults = await Promise.all(submissions.map((submission, index) =>
+      submissionLimiter(async () => {
+        const studentStartTime = Date.now();
+        console.log(`[BULK TEST] [${index + 1}/${submissions.length}] Processing ${submission.student.name} (ID: ${submission.id})`);
 
-      const tempDir = path.join(__dirname, `../../temp/bulk_${submission.id}_${Date.now()}`);
-      tempDirsToClean.push(tempDir);
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        const tempDir = path.join(__dirname, `../../temp/bulk_${submission.id}_${Date.now()}`);
+        tempDirsToClean.push(tempDir);
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      try {
-        const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
-        const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-
-        if (javaFiles.length === 0) {
-          submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-java-files' });
-          return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
-        }
-
-        // Write all code files to disk
-        for (const file of codeFiles) {
-          fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
-        }
-
-        // Compile all Java files ONCE before test loop
         try {
-          const compileStart = Date.now();
-          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-            timeout: 20000,
-            stdio: ['pipe', 'pipe', 'pipe'],
-            maxBuffer: 1 * 1024 * 1024
-          });
-          console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
-        } catch (compileErr) {
-          const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
-          console.log(`  ✗ Compilation error for ${submission.student.name}: ${errorMsg.substring(0, 100)}`);
-          submissionUpdates.push({ id: submission.id, marks: 0, status: 'compilation-error' });
-          // Mark all test results as failed compilation
-          const failedResults = testCases.map(tc => ({
-            submissionId: submission.id,
-            testCaseId: tc.id,
-            passed: false,
-            actualOutput: "",
-            errorMessage: "Code compilation failed"
-          }));
-          if (failedResults.length > 0) {
-            await fastBulkInsertResults(failedResults);
+          const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
+          const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
+
+          if (javaFiles.length === 0) {
+            submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-java-files' });
+            return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
           }
-          return { studentName: submission.student.name, status: 'compilation-error', error: errorMsg, passCount: 0, totalCount: testCases.length };
-        }
 
-        // Remove previous test results
-        await TestResult.destroy({ where: { submissionId: submission.id } });
+          // Write all code files to disk
+          for (const file of codeFiles) {
+            fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
+          }
 
-        // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
-        const testResultsToSave = [];
-        const limiter = pLimit(5);
+          // Compile all Java files ONCE before test loop
+          let compileSuccess = true;
+          try {
+            const compileStart = Date.now();
+            const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+              timeout: 20000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+              maxBuffer: 1 * 1024 * 1024
+            });
+            console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
+          } catch (compileErr) {
+            const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
+            console.log(`  ✗ ${submission.student.name}: Compilation failed - giving 0 marks`);
+            submissionUpdates.push({ id: submission.id, marks: 0, status: 'compilation-error' });
+            compileSuccess = false;
+            // Continue to next submission instead of returning - don't block others
+          }
 
-        const results = await Promise.all(testCases.map((testCase, caseIndex) =>
-          limiter(async () => {
-            let passed = false;
+          // If compilation failed, skip tests for this student and move on
+          if (!compileSuccess) {
+            return { studentName: submission.student.name, status: 'compilation-error', passCount: 0, totalCount: testCases.length };
+          }
+
+          // Run test cases with limited concurrency (max 3 at a time)
+          const testResultsToSave = [];
+          const limiter = pLimit(3);
+
+          const results = await Promise.all(testCases.map((testCase, caseIndex) =>
+            limiter(async () => {
+              let passed = false;
             let actualOutput = "";
             let errorMessage = "";
 
@@ -1317,9 +1319,9 @@ exports.runBulkTests = async (req, res) => {
                 command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
                 actualOutput = execSync(command, {
                   encoding: "utf8",
-                  timeout: 15000,
+                  timeout: 10000,
                   stdio: ['pipe', 'pipe', 'pipe'],
-                  maxBuffer: 2 * 1024 * 1024
+                  maxBuffer: 1 * 1024 * 1024
                 }).trim();
               } else {
                 const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
@@ -1335,14 +1337,14 @@ exports.runBulkTests = async (req, res) => {
                       input: testCase.input,
                       encoding: "utf8",
                       stdio: ["pipe", "pipe", "pipe"],
-                      timeout: 20000,
-                      maxBuffer: 5 * 1024 * 1024
+                      timeout: 10000,
+                      maxBuffer: 1 * 1024 * 1024
                     }).trim();
                   } else {
                     actualOutput = execSync(command, {
                       encoding: "utf8",
-                      timeout: 20000,
-                      maxBuffer: 5 * 1024 * 1024
+                      timeout: 10000,
+                      maxBuffer: 1 * 1024 * 1024
                     }).trim();
                   }
                 }
@@ -1395,7 +1397,8 @@ exports.runBulkTests = async (req, res) => {
         submissionUpdates.push({ id: submission.id, marks: 0, status: 'error' });
         return { studentName: submission.student.name, status: 'error', error: err.message, passCount: 0, totalCount: testCases.length };
       }
-    }));
+      })
+    ));
 
     // BULK UPDATE all submissions at once (much faster than individual updates)
     if (submissionUpdates.length > 0) {
@@ -1413,18 +1416,9 @@ exports.runBulkTests = async (req, res) => {
     const totalTime = Date.now() - bulkStartTime;
     console.log(`[BULK TEST] Completed bulk tests in ${totalTime}ms`);
 
-    // IMPORTANT: Clear the running tests flag BEFORE sending response
-    // This prevents 409 errors on page refresh
-    runningTests.delete(assignmentId);
+    res.json({ message: "Bulk tests completed", results: studentResults, totalTime: `${totalTime}ms` });
 
-    res.json({ 
-      message: "Bulk tests completed", 
-      results: studentResults, 
-      totalTime: `${totalTime}ms`,
-      success: true 
-    });
-
-    // Clean up temp directories ASYNCHRONOUSLY after response is sent (non-blocking)
+    // Clean up temp directories ASYNCHRONOUSLY after response is sent
     setImmediate(() => {
       tempDirsToClean.forEach(dir => {
         try { safeDeletedir(dir); } catch (e) { console.warn(`Cleanup error for ${dir}:`, e.message); }
@@ -1432,9 +1426,10 @@ exports.runBulkTests = async (req, res) => {
     });
   } catch (error) {
     console.error("Error during bulk tests:", error);
-    // Always clear the running flag on error
+    res.status(500).json({ message: "Error during bulk tests" });
+  } finally {
+    // Remove from running tests to allow new runs
     runningTests.delete(assignmentId);
-    res.status(500).json({ message: "Error during bulk tests", error: error.message });
   }
 };
 
