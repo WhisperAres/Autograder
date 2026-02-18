@@ -12,12 +12,16 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 const { execSync, spawn } = require("child_process");
+const { promisify } = require("util");
+const exec = promisify(require("child_process").exec);
 
-// Safe execution with proper timeout handling
-const execWithTimeout = (command, timeoutMs = 30000) => {
+// Safe execution with proper timeout handling that actually kills processes
+const execWithRealTimeout = (command, timeoutMs = 20000) => {
   return new Promise((resolve, reject) => {
+    let isResolved = false;
     const timeout = setTimeout(() => {
-      reject(new Error(`Command timeout exceeded (${timeoutMs}ms): ${command}`));
+      isResolved = true;
+      reject(new Error(`Command timeout exceeded (${timeoutMs}ms)`));
     }, timeoutMs);
 
     try {
@@ -25,13 +29,20 @@ const execWithTimeout = (command, timeoutMs = 30000) => {
         encoding: "utf8",
         timeout: timeoutMs,
         stdio: ['pipe', 'pipe', 'pipe'],
-        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+        maxBuffer: 1 * 1024 * 1024
       });
-      clearTimeout(timeout);
-      resolve(result.trim());
+      
+      if (!isResolved) {
+        clearTimeout(timeout);
+        isResolved = true;
+        resolve(result.trim());
+      }
     } catch (error) {
-      clearTimeout(timeout);
-      reject(error);
+      if (!isResolved) {
+        clearTimeout(timeout);
+        isResolved = true;
+        reject(error);
+      }
     }
   });
 };
@@ -158,6 +169,37 @@ const safeDeletedir = (dirpath) => {
     }
   } catch (e) {
     console.warn(`Failed to cleanup ${dirpath}:`, e.message);
+  }
+};
+
+// Fast bulk insert for test results (used instead of bulkCreate for better performance)
+const fastBulkInsertResults = async (testResults) => {
+  if (!testResults || testResults.length === 0) return;
+  
+  const { sequelize } = TestResult;
+  const { QueryTypes } = require('sequelize');
+  const now = new Date();
+  
+  // Build a single INSERT statement with all values
+  const cols = ['submissionId', 'testCaseId', 'passed', 'actualOutput', 'errorMessage', 'createdAt', 'updatedAt'];
+  const placeholders = testResults.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(',');
+  
+  const values = [];
+  for (const r of testResults) {
+    values.push(r.submissionId, r.testCaseId, r.passed, r.actualOutput || '', r.errorMessage || null, now, now);
+  }
+  
+  const query = `INSERT INTO TestResults (${cols.join(',')}) VALUES ${placeholders}`;
+  
+  try {
+    await sequelize.query(query, {
+      replacements: values,
+      type: QueryTypes.INSERT
+    });
+  } catch (err) {
+    console.warn('Raw SQL insert failed, falling back to bulkCreate:', err.message);
+    // Fallback to bulkCreate if raw SQL fails
+    await TestResult.bulkCreate(testResults, { individualHooks: false, timestamps: false });
   }
 };
 
@@ -790,7 +832,8 @@ exports.runTestCases = async (req, res) => {
           passed = false;
         }
 
-        const testResult = await TestResult.create({
+        // Collect result for batch insert (don't save yet)
+        testResultsToSave.push({
           submissionId,
           testCaseId: testCase.id,
           passed,
@@ -807,8 +850,13 @@ exports.runTestCases = async (req, res) => {
         });
       }
 
+      // Batch save all test results at once using raw SQL (much faster than ORM)
+      if (testResultsToSave.length > 0) {
+        await fastBulkInsertResults(testResultsToSave);
+      }
+
       // Calculate marks based on passed tests
-      let totalMarksEarned = 0;
+      totalMarksEarned = 0;
       for (let i = 0; i < results.length; i++) {
         if (results[i].passed) {
           totalMarksEarned += parseFloat(testCases[i].marks) || 0;
@@ -1104,8 +1152,10 @@ exports.deleteTestCase = async (req, res) => {
 
 // Run test cases for all submissions in an assignment
 exports.runBulkTests = async (req, res) => {
+  const bulkStartTime = Date.now();
   try {
     const { assignmentId } = req.params;
+    console.log(`[BULK TEST] Starting bulk tests for assignment ${assignmentId} at ${new Date().toISOString()}`);
 
     // 1. Fetch all submissions and the test cases for this assignment
     const submissions = await Submission.findAll({
@@ -1122,10 +1172,15 @@ exports.runBulkTests = async (req, res) => {
       return res.json({ message: "No submissions found", results: [] });
     }
 
+    console.log(`[BULK TEST] Processing ${submissions.length} submissions with ${testCases.length} test cases each`);
     const studentResults = [];
 
     // 2. Process each student submission one by one
-    for (const submission of submissions) {
+    for (let i = 0; i < submissions.length; i++) {
+      const submission = submissions[i];
+      const studentStartTime = Date.now();
+      console.log(`[BULK TEST] [${i + 1}/${submissions.length}] Processing ${submission.student.name} (ID: ${submission.id})`);
+      
       const tempDir = path.join(__dirname, `../../temp/bulk_${submission.id}_${Date.now()}`);
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -1146,11 +1201,14 @@ exports.runBulkTests = async (req, res) => {
 
         // 3. Compile Student Java Files
         try {
+          const compileStart = Date.now();
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
           execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-            timeout: 10000,
-            stdio: ['pipe', 'pipe', 'pipe']
+            timeout: 20000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            maxBuffer: 1 * 1024 * 1024
           });
+          console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
 
@@ -1175,6 +1233,8 @@ exports.runBulkTests = async (req, res) => {
         // 4. Execution Logic: Run each test case
         let totalMarksEarned = 0;
         await TestResult.destroy({ where: { submissionId: submission.id } }); // Clear old results
+        
+        const testResultsToSave = []; // Batch collect results
 
         for (const testCase of testCases) {
           let passed = false;
@@ -1215,13 +1275,18 @@ exports.runBulkTests = async (req, res) => {
             errorMessage = execError.stderr?.toString() || execError.message;
           }
 
-          // Save individual test case result
-          await TestResult.create({
+          // Collect result for batch insert
+          testResultsToSave.push({
             submissionId: submission.id,
             testCaseId: testCase.id,
             passed,
             errorMessage: passed ? null : errorMessage
           });
+        }
+
+        // Batch save all test results at once using raw SQL
+        if (testResultsToSave.length > 0) {
+          await fastBulkInsertResults(testResultsToSave);
         }
 
         // 5. Final Update for this student
@@ -1241,8 +1306,11 @@ exports.runBulkTests = async (req, res) => {
       } finally {
         if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
       }
+      console.log(`  ✓ Student ${submission.student.name} completed in ${Date.now() - studentStartTime}ms`);
     }
 
+    const totalTime = Date.now() - bulkStartTime;
+    console.log(`[BULK TEST] ✓ All ${submissions.length} submissions completed in ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
     res.json({ message: "Bulk tests completed", results: studentResults, totalSubmissions: studentResults.length });
   } catch (error) {
     console.error("Bulk testing critical failure:", error);
