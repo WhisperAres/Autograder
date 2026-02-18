@@ -771,22 +771,24 @@ exports.runTestCases = async (req, res) => {
         }
       }
 
-      // Run test cases in PARALLEL
-      const results = await Promise.all(testCases.map(async (testCase) => {
-        let passed = false;
-        let actualOutput = "";
-        let errorMessage = "";
+      // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
+      const limiter = pLimit(5);
+      const results = await Promise.all(testCases.map((testCase, caseIndex) => 
+        limiter(async () => {
+          let passed = false;
+          let actualOutput = "";
+          let errorMessage = "";
 
-        try {
-          const codeFileExtensions = codeFiles.map(f => path.extname(f.fileName))[0];
-          let command = "";
+          try {
+            const codeFileExtensions = codeFiles.map(f => path.extname(f.fileName))[0];
+            let command = "";
 
-          if (codeFileExtensions === ".java" || javaFiles.length > 0) {
-            // For Java, create a test file that runs the test code as a harness
-            const uniqueId = `${submissionId}_${testCase.id}_${Date.now()}`;
-            const testFileName = `Test${uniqueId}.java`;
-            const testClassName = `Test${uniqueId}`;
-            const testCode = `public class ${testClassName} {
+            if (codeFileExtensions === ".java" || javaFiles.length > 0) {
+              // For Java, create a test file that runs the test code as a harness
+              const uniqueId = `${submissionId}_${caseIndex}`;
+              const testFileName = `Test${uniqueId}.java`;
+              const testClassName = `Test${uniqueId}`;
+              const testCode = `public class ${testClassName} {
         public static void main(String[] args) {
           try {
             ${transformJUnitStyle(testCase.testCode)}
@@ -798,57 +800,58 @@ exports.runTestCases = async (req, res) => {
           }
         }
       }`;
-            fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-            command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
-            actualOutput = execSync(command, {
-              encoding: "utf8",
-              timeout: 20000,
-              stdio: ['pipe', 'pipe', 'pipe'],
-              maxBuffer: 5 * 1024 * 1024
-            }).trim();
-          } else {
-            const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
+              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+              command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+              actualOutput = execSync(command, {
+                encoding: "utf8",
+                timeout: 15000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+                maxBuffer: 2 * 1024 * 1024
+              }).trim();
+            } else {
+              const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
 
-            if (mainFile.fileName.endsWith(".js")) {
-              command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-            } else if (mainFile.fileName.endsWith(".py")) {
-              command = `cd "${tempDir}" && python ${mainFile.fileName}`;
-            }
+              if (mainFile.fileName.endsWith(".js")) {
+                command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+              } else if (mainFile.fileName.endsWith(".py")) {
+                command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+              }
 
-            if (command) {
-              if (testCase.input) {
-                actualOutput = execSync(command, {
-                  input: testCase.input,
-                  encoding: "utf8",
-                  stdio: ["pipe", "pipe", "pipe"],
-                  timeout: 20000,
-                  maxBuffer: 5 * 1024 * 1024
-                }).trim();
-              } else {
-                actualOutput = execSync(command, {
-                  encoding: "utf8",
-                  timeout: 20000,
-                  maxBuffer: 5 * 1024 * 1024
-                }).trim();
+              if (command) {
+                if (testCase.input) {
+                  actualOutput = execSync(command, {
+                    input: testCase.input,
+                    encoding: "utf8",
+                    stdio: ["pipe", "pipe", "pipe"],
+                    timeout: 15000,
+                    maxBuffer: 2 * 1024 * 1024
+                  }).trim();
+                } else {
+                  actualOutput = execSync(command, {
+                    encoding: "utf8",
+                    timeout: 15000,
+                    maxBuffer: 2 * 1024 * 1024
+                  }).trim();
+                }
               }
             }
+
+            passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+          } catch (execError) {
+            errorMessage = execError.message || "Execution failed";
+            passed = false;
           }
 
-          passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
-        } catch (execError) {
-          errorMessage = execError.message || "Execution failed";
-          passed = false;
-        }
-
-        return {
-          testName: testCase.testName,
-          testCaseId: testCase.id,
-          passed,
-          actualOutput: passed ? actualOutput : "",
-          expectedOutput: testCase.expectedOutput,
-          errorMessage
-        };
-      }));
+          return {
+            testName: testCase.testName,
+            testCaseId: testCase.id,
+            passed,
+            actualOutput: passed ? actualOutput : "",
+            expectedOutput: testCase.expectedOutput,
+            errorMessage
+          };
+        })
+      ));
 
       // Build testResultsToSave from results array
       const testResultsToSave = results.map(result => ({
@@ -1163,13 +1166,47 @@ exports.deleteTestCase = async (req, res) => {
   }
 };
 
+// ==================== HELPER: Concurrency Control ====================
+
+// Run promises with limited concurrency
+const pLimit = (limit) => {
+  let count = 0;
+  const queue = [];
+  
+  const run = async (fn) => {
+    while (count >= limit) {
+      await new Promise(resolve => queue.push(resolve));
+    }
+    count++;
+    try {
+      return await fn();
+    } finally {
+      count--;
+      const resolve = queue.shift();
+      if (resolve) resolve();
+    }
+  };
+
+  return (fn) => run(fn);
+};
+
+// Track currently running bulk tests to prevent duplicates
+const runningTests = new Set();
+
 // ==================== BULK OPERATIONS ====================
 
 // Run test cases for all submissions in an assignment
 exports.runBulkTests = async (req, res) => {
   const bulkStartTime = Date.now();
+  const { assignmentId } = req.params;
+
+  // Prevent duplicate test runs
+  if (runningTests.has(assignmentId)) {
+    return res.status(409).json({ message: "Tests already running for this assignment. Please wait." });
+  }
+  runningTests.add(assignmentId);
+
   try {
-    const { assignmentId } = req.params;
     console.log(`[BULK TEST] Starting bulk tests for assignment ${assignmentId} at ${new Date().toISOString()}`);
 
     // 1. Fetch all submissions and the test cases for this assignment
@@ -1234,22 +1271,25 @@ exports.runBulkTests = async (req, res) => {
         // Remove previous test results
         await TestResult.destroy({ where: { submissionId: submission.id } });
 
-        // Run test cases in parallel for this submission
+        // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
         const testResultsToSave = [];
-        const results = await Promise.all(testCases.map(async (testCase) => {
-          let passed = false;
-          let actualOutput = "";
-          let errorMessage = "";
+        const limiter = pLimit(5);
+        
+        const results = await Promise.all(testCases.map((testCase, caseIndex) => 
+          limiter(async () => {
+            let passed = false;
+            let actualOutput = "";
+            let errorMessage = "";
 
-          try {
-            let command = "";
+            try {
+              let command = "";
 
-            if (javaFiles.length > 0) {
-              // Create test harness Java file
-              const uniqueId = `${submission.id}_${testCase.id}_${Date.now()}`;
-              const testFileName = `Test${uniqueId}.java`;
-              const testClassName = `Test${uniqueId}`;
-              const testCode = `public class ${testClassName} {
+              if (javaFiles.length > 0) {
+                // Create test harness Java file with index to prevent collisions
+                const uniqueId = `${submission.id}_${caseIndex}`;
+                const testFileName = `Test${uniqueId}.java`;
+                const testClassName = `Test${uniqueId}`;
+                const testCode = `public class ${testClassName} {
         public static void main(String[] args) {
           try {
             ${transformJUnitStyle(testCase.testCode)}
@@ -1261,19 +1301,19 @@ exports.runBulkTests = async (req, res) => {
           }
         }
       }`;
-              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-              command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
-              actualOutput = execSync(command, {
-                encoding: "utf8",
-                timeout: 20000,
-                stdio: ['pipe', 'pipe', 'pipe'],
-                maxBuffer: 5 * 1024 * 1024
-              }).trim();
-            } else {
-              const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
-              if (mainFile.fileName.endsWith(".js")) {
-                command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-              } else if (mainFile.fileName.endsWith(".py")) {
+                fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+                command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+                actualOutput = execSync(command, {
+                  encoding: "utf8",
+                  timeout: 15000,
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  maxBuffer: 2 * 1024 * 1024
+                }).trim();
+              } else {
+                const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
+                if (mainFile.fileName.endsWith(".js")) {
+                  command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+                } else if (mainFile.fileName.endsWith(".py")) {
                 command = `cd "${tempDir}" && python ${mainFile.fileName}`;
               }
 
@@ -1373,6 +1413,9 @@ exports.runBulkTests = async (req, res) => {
   } catch (error) {
     console.error("Error during bulk tests:", error);
     res.status(500).json({ message: "Error during bulk tests" });
+  } finally {
+    // Remove from running tests to allow new runs
+    runningTests.delete(assignmentId);
   }
 };
 
