@@ -1358,7 +1358,6 @@ exports.runBulkTests = async (req, res) => {
               errorMessage
             };
           })));
-
         // Batch save all test results at once
         if (testResultsToSave.length > 0) {
           await fastBulkInsertResults(testResultsToSave);
