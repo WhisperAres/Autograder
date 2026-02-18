@@ -1,3 +1,4 @@
+
 const User = require("../models/user");
 const Assignment = require("../models/assignment");
 const Submission = require("../models/submission");
@@ -1085,12 +1086,21 @@ exports.runBulkTests = async (req, res) => {
           });
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
+          
+          // Clear previous results before adding the error
+          await TestResult.destroy({ where: { submissionId: submission.id } });
+          
           await submission.update({ marks: 0, status: 'compilation-error' });
-          await TestResult.create({ 
-            submissionId: submission.id, 
-            passed: false, 
-            errorMessage: `Compilation Failed: ${errorMsg}` 
-          });
+          
+          // Only create a TestResult if there are test cases to link to
+          if (testCases.length > 0) {
+            await TestResult.create({ 
+              submissionId: submission.id, 
+              testCaseId: testCases[0].id, // Linked to first test case to satisfy DB constraint
+              passed: false, 
+              errorMessage: `Compilation Failed: ${errorMsg}` 
+            });
+          }
           studentResults.push({ studentName: submission.student.name, status: 'compilation-error' });
           continue; 
         }

@@ -1,4 +1,4 @@
-// Test Result Model - Store test execution results
+
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -14,7 +14,7 @@ const TestResult = sequelize.define('TestResult', {
   },
   testCaseId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
   },
   passed: {
     type: DataTypes.BOOLEAN,
