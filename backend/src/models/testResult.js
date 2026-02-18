@@ -29,7 +29,7 @@ const TestResult = sequelize.define('TestResult', {
     allowNull: true,
   },
 }, {
-  tableName: 'test_results',
+  tableName: 'testresults',
   timestamps: false,
 });
 
