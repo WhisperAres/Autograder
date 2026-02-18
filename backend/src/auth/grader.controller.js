@@ -26,6 +26,26 @@ const getJavacExecutable = () => {
 const JAVA_CMD = getJavaExecutable();
 const JAVAC_CMD = getJavacExecutable();
 
+// Safe file cleanup with timeout
+const safeDeletedir = (dirpath) => {
+  try {
+    if (fs.existsSync(dirpath)) {
+      const files = fs.readdirSync(dirpath);
+      files.forEach(file => {
+        const curPath = path.join(dirpath, file);
+        if (fs.lstatSync(curPath).isDirectory()) {
+          safeDeletedir(curPath);
+        } else {
+          try { fs.unlinkSync(curPath); } catch (e) {}
+        }
+      });
+      try { fs.rmdirSync(dirpath); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn(`Failed to cleanup ${dirpath}:`, e.message);
+  }
+};
+
 // Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
 const transformJUnitStyle = (code) => {
   if (!code || typeof code !== 'string') return code;
@@ -196,8 +216,9 @@ exports.runTestCases = async (req, res) => {
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-          timeout: 30000, 
-          stdio: ['pipe', 'pipe', 'pipe'] 
+          timeout: 20000, 
+          stdio: ['pipe', 'pipe', 'pipe'],
+          maxBuffer: 5 * 1024 * 1024
         });
       } catch (compileErr) {
         const errorMsg = compileErr.stderr ? compileErr.stderr.toString() : compileErr.message;
@@ -238,7 +259,8 @@ exports.runTestCases = async (req, res) => {
           actualOutput = execSync(cmd, {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
-            timeout: 30000
+            timeout: 20000,
+            maxBuffer: 5 * 1024 * 1024
           }).trim();
 
           passed = actualOutput.includes("PASS");
@@ -272,7 +294,7 @@ exports.runTestCases = async (req, res) => {
       });
 
     } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
     }
   } catch (error) {
     res.status(500).json({ message: "Error running tests: " + error.message });
@@ -516,8 +538,9 @@ exports.runGraderTests = async (req, res) => {
         try {
           // Compile all solution files
           execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-            timeout: 30000, 
-            stdio: ['pipe', 'pipe', 'pipe'] 
+            timeout: 20000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            maxBuffer: 1 * 1024 * 1024
           });
         } catch (compileErr) {
           // If compilation fails, stop immediately and return error
@@ -559,9 +582,10 @@ exports.runGraderTests = async (req, res) => {
 
             // Compile and Run only the harness (linking to pre-compiled solution)
             output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, { 
-              timeout: 30000,
+              timeout: 20000,
               encoding: 'utf-8',
-              stdio: ['pipe', 'pipe', 'pipe']
+              stdio: ['pipe', 'pipe', 'pipe'],
+              maxBuffer: 1 * 1024 * 1024
             }).trim();
             
             testPassed = output.includes("PASS");
@@ -573,7 +597,7 @@ exports.runGraderTests = async (req, res) => {
              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
              
              output = execSync(`cd "${tempDir}" && python ${testFileName}`, { 
-               timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+               timeout: 20000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024
              }).trim();
              testPassed = output.includes("PASS");
 
@@ -584,7 +608,7 @@ exports.runGraderTests = async (req, res) => {
              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
              
              output = execSync(`cd "${tempDir}" && node ${testFileName}`, { 
-               timeout: 30000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+               timeout: 20000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024
              }).trim();
              testPassed = output.includes("PASS");
           }
@@ -611,7 +635,7 @@ exports.runGraderTests = async (req, res) => {
       });
 
     } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
     }
   } catch (error) {
     console.error("Error running grader tests:", error);

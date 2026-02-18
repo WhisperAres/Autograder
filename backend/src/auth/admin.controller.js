@@ -11,7 +11,30 @@ const bcrypt = require("bcryptjs");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
-const { execSync } = require("child_process");
+const { execSync, spawn } = require("child_process");
+
+// Safe execution with proper timeout handling
+const execWithTimeout = (command, timeoutMs = 30000) => {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Command timeout exceeded (${timeoutMs}ms): ${command}`));
+    }, timeoutMs);
+
+    try {
+      const result = execSync(command, {
+        encoding: "utf8",
+        timeout: timeoutMs,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+      });
+      clearTimeout(timeout);
+      resolve(result.trim());
+    } catch (error) {
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
+};
 
 // Detect Java executable path
 const getJavaExecutable = () => {
@@ -105,6 +128,37 @@ const transformJUnitStyle = (code) => {
   }
 
   return out;
+};
+
+// Detect potential infinite loops in test code
+const detectInfiniteLoop = (code) => {
+  const warnings = [];
+  if (/while\s*\(\s*true\s*\)/.test(code)) warnings.push("Found while(true)");
+  if (/for\s*\(\s*;\s*;\s*\)/.test(code)) warnings.push("Found for(;;)");
+  if (/while\s*\(\s*1\s*\)/.test(code)) warnings.push("Found while(1)");
+  if (code.match(/System\.out\.println.*\{.*\}/g)) warnings.push("Complex loop output detected");
+  return warnings;
+};
+
+// Safe file cleanup with timeout
+const safeDeletedir = (dirpath) => {
+  try {
+    if (fs.existsSync(dirpath)) {
+      // Force delete with short timeout for cleanup
+      const files = fs.readdirSync(dirpath);
+      files.forEach(file => {
+        const curPath = path.join(dirpath, file);
+        if (fs.lstatSync(curPath).isDirectory()) {
+          safeDeletedir(curPath);
+        } else {
+          try { fs.unlinkSync(curPath); } catch (e) {}
+        }
+      });
+      try { fs.rmdirSync(dirpath); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn(`Failed to cleanup ${dirpath}:`, e.message);
+  }
 };
 
 // ==================== USER MANAGEMENT ====================
@@ -561,8 +615,9 @@ exports.runSingleTest = async (req, res) => {
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-          timeout: 30000,
-          stdio: ['pipe', 'pipe', 'pipe']
+          timeout: 20000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          maxBuffer: 1 * 1024 * 1024
         });
       } catch (compileErr) {
         return res.json({
@@ -579,14 +634,14 @@ exports.runSingleTest = async (req, res) => {
 
       try {
         const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
-        const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024 }).trim();
         const passed = actualOutput.includes("PASS");
         res.json({ testName: testCase.testName, testCaseId: testCase.id, passed, actualOutput: passed ? actualOutput : "", errorMessage: passed ? null : "Assertion failed", marks: testCase.marks || 0 });
       } catch (execError) {
         res.json({ testName: testCase.testName, passed: false, errorMessage: execError.stderr?.toString() || execError.message, marks: 0 });
       }
     } finally {
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
     }
   } catch (error) {
     res.status(500).json({ message: "Error running test: " + error.message });
@@ -647,8 +702,9 @@ exports.runTestCases = async (req, res) => {
         try {
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
           execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-            timeout: 30000,
-            stdio: ['pipe', 'pipe', 'pipe']
+            timeout: 20000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            maxBuffer: 5 * 1024 * 1024
           });
         } catch (compileErr) {
           await submission.update({ marks: 0, status: 'compilation-error' });
@@ -694,8 +750,9 @@ exports.runTestCases = async (req, res) => {
             command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
             actualOutput = execSync(command, {
               encoding: "utf8",
-              timeout: 30000,
-              stdio: ['pipe', 'pipe', 'pipe']
+              timeout: 20000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+              maxBuffer: 5 * 1024 * 1024
             }).trim();
           } else {
             const mainFile = codeFiles.find(f =>
@@ -714,12 +771,14 @@ exports.runTestCases = async (req, res) => {
                   input: testCase.input,
                   encoding: "utf8",
                   stdio: ["pipe", "pipe", "pipe"],
-                  timeout: 30000
+                  timeout: 20000,
+                  maxBuffer: 5 * 1024 * 1024
                 }).trim();
               } else {
                 actualOutput = execSync(command, {
                   encoding: "utf8",
-                  timeout: 30000
+                  timeout: 20000,
+                  maxBuffer: 5 * 1024 * 1024
                 }).trim();
               }
             }
@@ -772,11 +831,7 @@ exports.runTestCases = async (req, res) => {
         totalMarks: submission.totalMarks
       });
     } finally {
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
-      }
+      try { safeDeletedir(tempDir); } catch (e) {}
     }
   } catch (error) {
     console.error("Error running tests:", error);
@@ -1147,8 +1202,9 @@ exports.runBulkTests = async (req, res) => {
             const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
             const output = execSync(cmd, {
               encoding: "utf8",
-              timeout: 30000,
-              stdio: ['pipe', 'pipe', 'pipe']
+              timeout: 20000,
+              stdio: ['pipe', 'pipe', 'pipe'],
+              maxBuffer: 5 * 1024 * 1024
             }).trim();
 
             passed = output.includes("PASS");
@@ -1183,7 +1239,7 @@ exports.runBulkTests = async (req, res) => {
       } catch (err) {
         console.error(`Error processing submission ${submission.id}:`, err);
       } finally {
-        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+        if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
       }
     }
 
