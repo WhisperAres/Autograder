@@ -30,7 +30,7 @@ const execWithRealTimeout = (command, timeoutMs = 20000) => {
         stdio: ['pipe', 'pipe', 'pipe'],
         maxBuffer: 1 * 1024 * 1024
       });
-      
+
       if (!isResolved) {
         clearTimeout(timeout);
         isResolved = true;
@@ -161,10 +161,10 @@ const safeDeletedir = (dirpath) => {
         if (fs.lstatSync(curPath).isDirectory()) {
           safeDeletedir(curPath);
         } else {
-          try { fs.unlinkSync(curPath); } catch (e) {}
+          try { fs.unlinkSync(curPath); } catch (e) { }
         }
       });
-      try { fs.rmdirSync(dirpath); } catch (e) {}
+      try { fs.rmdirSync(dirpath); } catch (e) { }
     }
   } catch (e) {
     console.warn(`Failed to cleanup ${dirpath}:`, e.message);
@@ -174,22 +174,22 @@ const safeDeletedir = (dirpath) => {
 // Fast bulk insert for test results (used instead of bulkCreate for better performance)
 const fastBulkInsertResults = async (testResults) => {
   if (!testResults || testResults.length === 0) return;
-  
+
   const { sequelize } = TestResult;
   const { QueryTypes } = require('sequelize');
-  
+
   // Build a single INSERT statement with all values using quoted column names
   // Note: testresults table does NOT have timestamps (createdAt/updatedAt)
   const cols = ['"submissionId"', '"testCaseId"', '"passed"', '"actualOutput"', '"errorMessage"'];
   const placeholders = testResults.map(() => '(?, ?, ?, ?, ?)').join(',');
-  
+
   const values = [];
   for (const r of testResults) {
     values.push(r.submissionId, r.testCaseId, r.passed, r.actualOutput || '', r.errorMessage || null);
   }
-  
+
   const query = `INSERT INTO "testresults" (${cols.join(',')}) VALUES ${placeholders}`;
-  
+
   try {
     await sequelize.query(query, {
       replacements: values,
@@ -759,21 +759,21 @@ exports.runTestCases = async (req, res) => {
           });
         } catch (compileErr) {
           await submission.update({ marks: 0, status: 'compilation-error' });
-          return res.json({ 
-            message: "Compilation Failed", 
-            results: [], 
-            passCount: 0, 
+          return res.json({
+            message: "Compilation Failed",
+            results: [],
+            passCount: 0,
             totalCount: testCases.length,
             marksObtained: 0,
             totalMarks: submission.totalMarks,
-            errorMessage: compileErr.stderr?.toString() || compileErr.message 
+            errorMessage: compileErr.stderr?.toString() || compileErr.message
           });
         }
       }
 
       // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
       const limiter = pLimit(5);
-      const results = await Promise.all(testCases.map((testCase, caseIndex) => 
+      const results = await Promise.all(testCases.map((testCase, caseIndex) =>
         limiter(async () => {
           let passed = false;
           let actualOutput = "";
@@ -897,7 +897,7 @@ exports.runTestCases = async (req, res) => {
         totalMarks: submission.totalMarks
       });
     } finally {
-      try { safeDeletedir(tempDir); } catch (e) {}
+      try { safeDeletedir(tempDir); } catch (e) { }
     }
   } catch (error) {
     console.error("Error running tests:", error);
@@ -1172,7 +1172,7 @@ exports.deleteTestCase = async (req, res) => {
 const pLimit = (limit) => {
   let count = 0;
   const queue = [];
-  
+
   const run = async (fn) => {
     while (count >= limit) {
       await new Promise(resolve => queue.push(resolve));
@@ -1229,7 +1229,7 @@ exports.runBulkTests = async (req, res) => {
     // 2. Process submissions in parallel
     const submissionUpdates = [];
     const tempDirsToClean = [];
-    
+
     const studentResults = await Promise.all(submissions.map(async (submission, index) => {
       const studentStartTime = Date.now();
       console.log(`[BULK TEST] [${index + 1}/${submissions.length}] Processing ${submission.student.name} (ID: ${submission.id})`);
@@ -1274,8 +1274,8 @@ exports.runBulkTests = async (req, res) => {
         // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
         const testResultsToSave = [];
         const limiter = pLimit(5);
-        
-        const results = await Promise.all(testCases.map((testCase, caseIndex) => 
+
+        const results = await Promise.all(testCases.map((testCase, caseIndex) =>
           limiter(async () => {
             let passed = false;
             let actualOutput = "";
@@ -1314,50 +1314,50 @@ exports.runBulkTests = async (req, res) => {
                 if (mainFile.fileName.endsWith(".js")) {
                   command = `cd "${tempDir}" && node ${mainFile.fileName}`;
                 } else if (mainFile.fileName.endsWith(".py")) {
-                command = `cd "${tempDir}" && python ${mainFile.fileName}`;
-              }
+                  command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+                }
 
-              if (command) {
-                if (testCase.input) {
-                  actualOutput = execSync(command, {
-                    input: testCase.input,
-                    encoding: "utf8",
-                    stdio: ["pipe", "pipe", "pipe"],
-                    timeout: 20000,
-                    maxBuffer: 5 * 1024 * 1024
-                  }).trim();
-                } else {
-                  actualOutput = execSync(command, {
-                    encoding: "utf8",
-                    timeout: 20000,
-                    maxBuffer: 5 * 1024 * 1024
-                  }).trim();
+                if (command) {
+                  if (testCase.input) {
+                    actualOutput = execSync(command, {
+                      input: testCase.input,
+                      encoding: "utf8",
+                      stdio: ["pipe", "pipe", "pipe"],
+                      timeout: 20000,
+                      maxBuffer: 5 * 1024 * 1024
+                    }).trim();
+                  } else {
+                    actualOutput = execSync(command, {
+                      encoding: "utf8",
+                      timeout: 20000,
+                      maxBuffer: 5 * 1024 * 1024
+                    }).trim();
+                  }
                 }
               }
+
+              passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+            } catch (execError) {
+              errorMessage = execError.message || "Execution failed";
+              passed = false;
             }
 
-            passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
-          } catch (execError) {
-            errorMessage = execError.message || "Execution failed";
-            passed = false;
-          }
+            testResultsToSave.push({
+              submissionId: submission.id,
+              testCaseId: testCase.id,
+              passed,
+              actualOutput: passed ? actualOutput : "",
+              errorMessage: !passed ? errorMessage : null
+            });
 
-          testResultsToSave.push({
-            submissionId: submission.id,
-            testCaseId: testCase.id,
-            passed,
-            actualOutput: passed ? actualOutput : "",
-            errorMessage: !passed ? errorMessage : null
-          });
-
-          return {
-            testName: testCase.testName,
-            passed,
-            actualOutput: passed ? actualOutput : "",
-            expectedOutput: testCase.expectedOutput,
-            errorMessage
-          };
-        }));
+            return {
+              testName: testCase.testName,
+              passed,
+              actualOutput: passed ? actualOutput : "",
+              expectedOutput: testCase.expectedOutput,
+              errorMessage
+            };
+          })));
 
         // Batch save all test results at once
         if (testResultsToSave.length > 0) {
@@ -1390,7 +1390,7 @@ exports.runBulkTests = async (req, res) => {
     if (submissionUpdates.length > 0) {
       const { sequelize } = Submission;
       const { QueryTypes } = require('sequelize');
-      
+
       for (const update of submissionUpdates) {
         await Submission.update(
           { marks: update.marks, status: update.status },
@@ -1401,7 +1401,7 @@ exports.runBulkTests = async (req, res) => {
 
     const totalTime = Date.now() - bulkStartTime;
     console.log(`[BULK TEST] Completed bulk tests in ${totalTime}ms`);
-    
+
     res.json({ message: "Bulk tests completed", results: studentResults, totalTime: `${totalTime}ms` });
 
     // Clean up temp directories ASYNCHRONOUSLY after response is sent
