@@ -177,18 +177,18 @@ const fastBulkInsertResults = async (testResults) => {
   
   const { sequelize } = TestResult;
   const { QueryTypes } = require('sequelize');
-  const now = new Date();
   
-  // Build a single INSERT statement with all values
-  const cols = ['submissionId', 'testCaseId', 'passed', 'actualOutput', 'errorMessage', 'createdAt', 'updatedAt'];
-  const placeholders = testResults.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(',');
+  // Build a single INSERT statement with all values using quoted column names
+  // Note: testresults table does NOT have timestamps (createdAt/updatedAt)
+  const cols = ['"submissionId"', '"testCaseId"', '"passed"', '"actualOutput"', '"errorMessage"'];
+  const placeholders = testResults.map(() => '(?, ?, ?, ?, ?)').join(',');
   
   const values = [];
   for (const r of testResults) {
-    values.push(r.submissionId, r.testCaseId, r.passed, r.actualOutput || '', r.errorMessage || null, now, now);
+    values.push(r.submissionId, r.testCaseId, r.passed, r.actualOutput || '', r.errorMessage || null);
   }
   
-  const query = `INSERT INTO testresults (${cols.join(',')}) VALUES ${placeholders}`;
+  const query = `INSERT INTO "testresults" (${cols.join(',')}) VALUES ${placeholders}`;
   
   try {
     await sequelize.query(query, {
@@ -771,11 +771,8 @@ exports.runTestCases = async (req, res) => {
         }
       }
 
-      const results = [];
-      const testResultsToSave = [];
-      let totalMarksEarned = 0;
-
-      for (const testCase of testCases) {
+      // Run test cases in PARALLEL
+      const results = await Promise.all(testCases.map(async (testCase) => {
         let passed = false;
         let actualOutput = "";
         let errorMessage = "";
@@ -786,7 +783,7 @@ exports.runTestCases = async (req, res) => {
 
           if (codeFileExtensions === ".java" || javaFiles.length > 0) {
             // For Java, create a test file that runs the test code as a harness
-            const uniqueId = Date.now();
+            const uniqueId = `${submissionId}_${testCase.id}_${Date.now()}`;
             const testFileName = `Test${uniqueId}.java`;
             const testClassName = `Test${uniqueId}`;
             const testCode = `public class ${testClassName} {
@@ -810,9 +807,7 @@ exports.runTestCases = async (req, res) => {
               maxBuffer: 5 * 1024 * 1024
             }).trim();
           } else {
-            const mainFile = codeFiles.find(f =>
-              f.fileName.endsWith(".js")
-            ) || codeFiles[0];
+            const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
 
             if (mainFile.fileName.endsWith(".js")) {
               command = `cd "${tempDir}" && node ${mainFile.fileName}`;
@@ -845,23 +840,24 @@ exports.runTestCases = async (req, res) => {
           passed = false;
         }
 
-        // Collect result for batch insert (don't save yet)
-        testResultsToSave.push({
-          submissionId,
-          testCaseId: testCase.id,
-          passed,
-          actualOutput: passed ? actualOutput : "",
-          errorMessage: !passed ? errorMessage : null
-        });
-
-        results.push({
+        return {
           testName: testCase.testName,
+          testCaseId: testCase.id,
           passed,
           actualOutput: passed ? actualOutput : "",
           expectedOutput: testCase.expectedOutput,
           errorMessage
-        });
-      }
+        };
+      }));
+
+      // Build testResultsToSave from results array
+      const testResultsToSave = results.map(result => ({
+        submissionId,
+        testCaseId: result.testCaseId,
+        passed: result.passed,
+        actualOutput: result.actualOutput,
+        errorMessage: result.errorMessage
+      }));
 
       // Batch save all test results at once using raw SQL (much faster than ORM)
       if (testResultsToSave.length > 0) {
@@ -869,7 +865,7 @@ exports.runTestCases = async (req, res) => {
       }
 
       // Calculate marks based on passed tests
-      totalMarksEarned = 0;
+      let totalMarksEarned = 0;
       for (let i = 0; i < results.length; i++) {
         if (results[i].passed) {
           totalMarksEarned += parseFloat(testCases[i].marks) || 0;
@@ -884,7 +880,13 @@ exports.runTestCases = async (req, res) => {
 
       res.json({
         message: "Test cases executed",
-        results,
+        results: results.map(r => ({
+          testName: r.testName,
+          passed: r.passed,
+          actualOutput: r.actualOutput,
+          expectedOutput: r.expectedOutput,
+          errorMessage: r.errorMessage
+        })),
         submissionId,
         passCount: results.filter(r => r.passed).length,
         totalCount: results.length,
@@ -1201,15 +1203,15 @@ exports.runBulkTests = async (req, res) => {
         const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
 
         if (javaFiles.length === 0) {
-          return { studentName: submission.student.name, status: 'no-java-files' };
+          return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
         }
 
-        // Write student files to disk
-        for (const file of javaFiles) {
+        // Write all code files to disk
+        for (const file of codeFiles) {
           fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
         }
 
-        // Compile Student Java Files
+        // Compile all Java files ONCE before test loop
         try {
           const compileStart = Date.now();
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
@@ -1221,16 +1223,120 @@ exports.runBulkTests = async (req, res) => {
           console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
-          return { studentName: submission.student.name, status: 'compilation-error', error: errorMsg };
+          await submission.update({ marks: 0, status: 'compilation-error' });
+          return { studentName: submission.student.name, status: 'compilation-error', error: errorMsg, passCount: 0, totalCount: testCases.length };
         }
 
-        // Run Test Cases (Placeholder for actual test execution logic)
-        // ...
+        // Remove previous test results
+        await TestResult.destroy({ where: { submissionId: submission.id } });
 
-        return { studentName: submission.student.name, status: 'success' };
+        // Run test cases in parallel for this submission
+        const testResultsToSave = [];
+        const results = await Promise.all(testCases.map(async (testCase) => {
+          let passed = false;
+          let actualOutput = "";
+          let errorMessage = "";
+
+          try {
+            let command = "";
+
+            if (javaFiles.length > 0) {
+              // Create test harness Java file
+              const uniqueId = `${submission.id}_${testCase.id}_${Date.now()}`;
+              const testFileName = `Test${uniqueId}.java`;
+              const testClassName = `Test${uniqueId}`;
+              const testCode = `public class ${testClassName} {
+        public static void main(String[] args) {
+          try {
+            ${transformJUnitStyle(testCase.testCode)}
+            System.out.println("PASS");
+          } catch (AssertionError e) {
+            System.out.println("FAIL: " + e.getMessage());
+          } catch (Exception e) {
+            System.out.println("FAIL: " + e.getMessage());
+          }
+        }
+      }`;
+              fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+              command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+              actualOutput = execSync(command, {
+                encoding: "utf8",
+                timeout: 20000,
+                stdio: ['pipe', 'pipe', 'pipe'],
+                maxBuffer: 5 * 1024 * 1024
+              }).trim();
+            } else {
+              const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
+              if (mainFile.fileName.endsWith(".js")) {
+                command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+              } else if (mainFile.fileName.endsWith(".py")) {
+                command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+              }
+
+              if (command) {
+                if (testCase.input) {
+                  actualOutput = execSync(command, {
+                    input: testCase.input,
+                    encoding: "utf8",
+                    stdio: ["pipe", "pipe", "pipe"],
+                    timeout: 20000,
+                    maxBuffer: 5 * 1024 * 1024
+                  }).trim();
+                } else {
+                  actualOutput = execSync(command, {
+                    encoding: "utf8",
+                    timeout: 20000,
+                    maxBuffer: 5 * 1024 * 1024
+                  }).trim();
+                }
+              }
+            }
+
+            passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+          } catch (execError) {
+            errorMessage = execError.message || "Execution failed";
+            passed = false;
+          }
+
+          testResultsToSave.push({
+            submissionId: submission.id,
+            testCaseId: testCase.id,
+            passed,
+            actualOutput: passed ? actualOutput : "",
+            errorMessage: !passed ? errorMessage : null
+          });
+
+          return {
+            testName: testCase.testName,
+            passed,
+            actualOutput: passed ? actualOutput : "",
+            expectedOutput: testCase.expectedOutput,
+            errorMessage
+          };
+        }));
+
+        // Batch save all test results at once
+        if (testResultsToSave.length > 0) {
+          await fastBulkInsertResults(testResultsToSave);
+        }
+
+        // Calculate marks
+        let totalMarksEarned = 0;
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].passed) {
+            totalMarksEarned += parseFloat(testCases[i].marks) || 0;
+          }
+        }
+
+        await submission.update({ marks: totalMarksEarned, status: 'evaluated' });
+
+        const passCount = results.filter(r => r.passed).length;
+        console.log(`  ✓ ${submission.student.name}: ${passCount}/${results.length} tests passed (${Date.now() - studentStartTime}ms)`);
+
+        return { studentName: submission.student.name, status: 'success', passCount, totalCount: results.length, marksObtained: totalMarksEarned };
       } catch (err) {
         console.error(`Error processing submission ${submission.id}:`, err);
-        return { studentName: submission.student.name, status: 'error', error: err.message };
+        return { studentName: submission.student.name, status: 'error', error: err.message, passCount: 0, totalCount: testCases.length };
       } finally {
         safeDeletedir(tempDir);
       }
@@ -1244,10 +1350,12 @@ exports.runBulkTests = async (req, res) => {
   }
 };
 
-// Run test cases for all submissions in an assignment
+// Run test cases for all submissions in an assignment - PARALLEL
 exports.runTestCasesForAll = async (req, res) => {
+  const startTime = Date.now();
   try {
     const { assignmentId } = req.params;
+    console.log(`[ALL TESTS] Starting parallel tests for assignment ${assignmentId}`);
 
     // Fetch all submissions for the assignment
     const submissions = await Submission.findAll({ where: { assignmentId } });
@@ -1259,22 +1367,29 @@ exports.runTestCasesForAll = async (req, res) => {
     // Clear old marks for all submissions
     await Submission.update({ marks: 0, status: "pending" }, { where: { assignmentId } });
 
-    const results = [];
+    // Process all submissions in parallel
+    const results = await Promise.all(submissions.map(async (submission) => {
+      return new Promise((resolve) => {
+        const fakeReq = { params: { submissionId: submission.id } };
+        const fakeRes = {
+          json: (data) => resolve(data),
+          status: (code) => ({ json: (data) => resolve({ status: code, data }) })
+        };
+        exports.runTestCases(fakeReq, fakeRes).catch(err => {
+          console.error(`Error in parallel test for submission ${submission.id}:`, err);
+          resolve({ error: err.message });
+        });
+      });
+    }));
 
-    for (const submission of submissions) {
-      // call the module's runTestCases with a fake req/res to capture output
-      const fakeReq = { params: { submissionId: submission.id } };
-      const fakeRes = {
-        json: (data) => results.push(data),
-        status: (code) => ({ json: (data) => results.push({ status: code, data }) })
-      };
-      await exports.runTestCases(fakeReq, fakeRes);
-    }
+    const totalTime = Date.now() - startTime;
+    console.log(`[ALL TESTS] Completed all tests in ${totalTime}ms`);
 
     res.json({
-      message: "Test cases executed for all submissions",
+      message: "Test cases executed for all submissions in parallel",
       results,
-      totalSubmissions: submissions.length
+      totalSubmissions: submissions.length,
+      totalTime: `${totalTime}ms`
     });
   } catch (error) {
     console.error("Error running test cases for all submissions:", error);
