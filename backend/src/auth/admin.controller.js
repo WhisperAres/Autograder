@@ -562,7 +562,7 @@ exports.runSingleTest = async (req, res) => {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
           timeout: 10000,
-          stdio: ['pipe', 'pipe', 'pipe'] 
+          stdio: ['pipe', 'pipe', 'pipe']
         });
       } catch (compileErr) {
         return res.json({
@@ -648,7 +648,6 @@ exports.runTestCases = async (req, res) => {
 
         try {
           const codeFileExtensions = codeFiles.map(f => path.extname(f.fileName))[0];
-          let actualOutput = "";
           let command = "";
 
           // Compile all Java files first if there are any
@@ -1039,16 +1038,16 @@ exports.deleteTestCase = async (req, res) => {
 exports.runBulkTests = async (req, res) => {
   try {
     const { assignmentId } = req.params;
-    
+
     // 1. Fetch all submissions and the test cases for this assignment
     const submissions = await Submission.findAll({
       where: { assignmentId },
       include: [{ model: User, as: "student", attributes: ['name'] }]
     });
 
-    const testCases = await TestCase.findAll({ 
+    const testCases = await TestCase.findAll({
       where: { assignmentId },
-      order: [['id', 'ASC']] 
+      order: [['id', 'ASC']]
     });
 
     if (submissions.length === 0) {
@@ -1066,7 +1065,7 @@ exports.runBulkTests = async (req, res) => {
         await submission.update({ status: 'grading' });
         const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
         const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-        
+
         if (javaFiles.length === 0) {
           studentResults.push({ studentName: submission.student.name, status: 'no-java-files' });
           continue;
@@ -1080,29 +1079,29 @@ exports.runBulkTests = async (req, res) => {
         // 3. Compile Student Java Files
         try {
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-            timeout: 10000, 
-            stdio: ['pipe', 'pipe', 'pipe'] 
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+            timeout: 10000,
+            stdio: ['pipe', 'pipe', 'pipe']
           });
         } catch (compileErr) {
           const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
-          
+
           // Clear previous results before adding the error
           await TestResult.destroy({ where: { submissionId: submission.id } });
-          
+
           await submission.update({ marks: 0, status: 'compilation-error' });
-          
+
           // Only create a TestResult if there are test cases to link to
           if (testCases.length > 0) {
-            await TestResult.create({ 
-              submissionId: submission.id, 
+            await TestResult.create({
+              submissionId: submission.id,
               testCaseId: testCases[0].id, // Linked to first test case to satisfy DB constraint
-              passed: false, 
-              errorMessage: `Compilation Failed: ${errorMsg}` 
+              passed: false,
+              errorMessage: `Compilation Failed: ${errorMsg}`
             });
           }
           studentResults.push({ studentName: submission.student.name, status: 'compilation-error' });
-          continue; 
+          continue;
         }
 
         // 4. Execution Logic: Run each test case
@@ -1128,15 +1127,15 @@ exports.runBulkTests = async (req, res) => {
                 }
               }
             }`;
-            
+
             fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
             // Compile and Run the test harness
             const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
-            const output = execSync(cmd, { 
-              encoding: "utf8", 
-              timeout: 5000, 
-              stdio: ['pipe', 'pipe', 'pipe'] 
+            const output = execSync(cmd, {
+              encoding: "utf8",
+              timeout: 5000,
+              stdio: ['pipe', 'pipe', 'pipe']
             }).trim();
 
             passed = output.includes("PASS");
@@ -1157,15 +1156,15 @@ exports.runBulkTests = async (req, res) => {
         }
 
         // 5. Final Update for this student
-        await submission.update({ 
-          marks: totalMarksEarned, 
-          status: 'evaluated' 
+        await submission.update({
+          marks: totalMarksEarned,
+          status: 'evaluated'
         });
 
-        studentResults.push({ 
-          studentName: submission.student.name, 
-          status: 'evaluated', 
-          marks: totalMarksEarned 
+        studentResults.push({
+          studentName: submission.student.name,
+          status: 'evaluated',
+          marks: totalMarksEarned
         });
 
       } catch (err) {
@@ -1175,7 +1174,7 @@ exports.runBulkTests = async (req, res) => {
       }
     }
 
-    res.json({ message: "Bulk tests completed", results: studentResults });
+    res.json({ message: "Bulk tests completed", results: studentResults, totalSubmissions: studentResults.length });
   } catch (error) {
     console.error("Bulk testing critical failure:", error);
     res.status(500).json({ message: "Bulk testing failed" });
@@ -1211,7 +1210,8 @@ exports.runTestCasesForAll = async (req, res) => {
 
     res.json({
       message: "Test cases executed for all submissions",
-      results
+      results,
+      totalSubmissions: submissions.length
     });
   } catch (error) {
     console.error("Error running test cases for all submissions:", error);

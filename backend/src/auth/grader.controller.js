@@ -266,7 +266,9 @@ exports.runTestCases = async (req, res) => {
         message: "Tests completed",
         results,
         submissionId,
-        marksObtained: totalMarksEarned
+        marksObtained: totalMarksEarned,
+        passCount: results.filter(r => r.passed).length,
+        totalCount: results.length
       });
 
     } finally {
