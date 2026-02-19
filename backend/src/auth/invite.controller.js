@@ -40,11 +40,7 @@ const generateInviteToken = () => {
 
 // Get frontend URL based on environment
 const getFrontendUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.FRONTEND_URL || 'https://your-prod-domain.com';
-  } else {
-    return 'http://localhost:5173'; // Vite default port
-  }
+    return 'https://autograder-4usv.onrender.com';
 };
 
 // Send invite emails to multiple students

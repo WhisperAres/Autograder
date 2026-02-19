@@ -127,17 +127,6 @@ export default function InviteStudents() {
             )}
           </div>
         )}
-
-        <div className="info-section">
-          <h3>How It Works</h3>
-          <ol>
-            <li>Enter the email addresses of students you want to invite</li>
-            <li>Click "Send Invitations"</li>
-            <li>Students will receive an email with a sign-up link</li>
-            <li>They can click the link to create their account</li>
-            <li>Invitation links expire in 7 days</li>
-          </ol>
-        </div>
       </div>
     </div>
   );
