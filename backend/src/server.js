@@ -34,6 +34,14 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error("❌ Server initialization error:", error.message);
+    console.error("\n⚠️  Database Connection Failed!");
+    console.error("Make sure PostgreSQL is running with correct credentials in .env file:");
+    console.error("  - DB_HOST=localhost");
+    console.error("  - DB_PORT=5432");
+    console.error("  - DB_USER=postgres");
+    console.error("  - DB_PASSWORD=your_password");
+    console.error("  - DB_NAME=autograder_db");
+    console.error("\nOr set DATABASE_URL environment variable for production");
     process.exit(1);
   }
 };

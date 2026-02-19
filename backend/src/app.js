@@ -9,6 +9,7 @@ const adminRoutes = require("./auth/admin.routes");
 const adminPagesRoutes = require("./auth/admin-pages.routes");
 const graderPagesRoutes = require("./auth/grader-pages.routes");
 const studentPagesRoutes = require("./auth/student-pages.routes");
+const inviteRoutes = require("./auth/invite.routes");
 const verifyToken = require("./middlewares/verify.middleware");
 
 const User = require("./models/user");
@@ -19,6 +20,7 @@ const TestCase = require("./models/testCase");
 const TestResult = require("./models/testResult");
 const GraderSolution = require("./models/graderSolution");
 const GraderSolutionFile = require("./models/graderSolutionFile");
+const StudentInvite = require("./models/studentInvite");
 
 const app = express();
 
@@ -52,6 +54,7 @@ app.use(express.json());
 // });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/invite", inviteRoutes);
 app.use("/api/assignments", verifyToken, assignmentRoutes);
 app.use("/api/submissions", verifyToken, submissionRoutes);
 app.use("/api/grader", graderRoutes);

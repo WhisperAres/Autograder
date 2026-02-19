@@ -5,13 +5,11 @@ import Login from './pages/login'
 import Dashboard from './pages/dashboard'
 import GraderDashboard from './pages/grader'
 import AdminDashboard from './pages/admin'
+import InviteStudents from './pages/inviteStudents'
+import StudentSignup from './pages/studentSignup'
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userRole, setUserRole] = useState(null)
-  const [user, setUser] = useState(null)
-
-  useEffect(() => {
+  const initializeAuth = () => {
     const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
     
@@ -19,12 +17,15 @@ function App() {
       const parsed = JSON.parse(storedUser)
       const normalizedRole = (parsed.role === 'ta' || parsed.role === 'TA') ? 'grader' : parsed.role;
       const userData = { ...parsed, role: normalizedRole };
-      localStorage.setItem('user', JSON.stringify(userData));
-      setIsAuthenticated(true)
-      setUserRole(userData.role)
-      setUser(userData)
+      return { isAuth: true, role: userData.role, user: userData }
     }
-  }, [])
+    return { isAuth: false, role: null, user: null }
+  }
+
+  const authState = initializeAuth()
+  const [isAuthenticated, setIsAuthenticated] = useState(authState.isAuth)
+  const [userRole, setUserRole] = useState(authState.role)
+  const [user, setUser] = useState(authState.user)
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -248,6 +249,35 @@ function App() {
                   </div>
                 </nav>
                 <AdminDashboard />
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/student-signup"
+          element={
+            <StudentSignup />
+          }
+        />
+
+        <Route
+          path="/admin/invite-students"
+          element={
+            isAuthenticated && userRole === 'admin' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Admin</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <InviteStudents />
               </div>
             ) : (
               <Navigate to="/login" />

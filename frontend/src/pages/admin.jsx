@@ -457,6 +457,13 @@ export default function AdminDashboard() {
             >
               Users
             </button>
+            <button
+              className={`tab-btn ${activeTab === "invite" ? "active" : ""}`}
+              onClick={() => { setActiveTab("invite"); window.location.href = "/admin/invite-students"; }}
+              style={{ marginLeft: "auto", background: "#4CAF50", color: "white" }}
+            >
+              + Invite Students
+            </button>
           </div>
         </>
       ) : (
