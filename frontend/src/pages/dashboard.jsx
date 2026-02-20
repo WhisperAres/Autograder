@@ -435,20 +435,20 @@ export default function Dashboard({ handleLogout, user }) {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Test Results</h3>
-              <button onClick={() => setShowTestResults(false)}>✕</button>
+              <button style={{ transform: "scale(0.7)"}} onClick={() => setShowTestResults(false)}>✕</button>
             </div>
             <div className="modal-content">
-              <div className="score-display">{testResults.submission.marks}/{testResults.submission.totalMarks}</div>
-              <div className="results-list">
+              <div style={{ fontsize: "12px" , transform: "scale(0.7)"}} className="score-display">{testResults.submission.marks}/{testResults.submission.totalMarks}</div>
+              <div className="results-list" >
                 {testResults.testResults.map(test => (
-                  <div key={test.id} className={`result-item ${test.passed ? "pass" : "fail"}`}>
+                  <div style={{transform: "scale(0.7)"}} key={test.id} className={`result-item ${test.passed ? "pass" : "fail"}`}>
                     <span>{test.passed ? "✓" : "✗"}</span> {test.testName}
                   </div>
                 ))}
               </div>
             </div>
             <div className="modal-footer">
-              <button onClick={() => setShowTestResults(false)}>Close</button>
+              <button style={{transform: "scale(0.7)"}}  onClick={() => setShowTestResults(false)}>Close</button>
             </div>
           </div>
         </div>
