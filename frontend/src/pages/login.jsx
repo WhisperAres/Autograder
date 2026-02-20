@@ -71,7 +71,7 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
 
                     <form onSubmit={handleLogin} className="login-form">
                         <div className="form-group">
-                            <label htmlFor="email">Email</label>
+                            <label htmlFor="email" style={{color:"var(--text-primary)"}}>Email</label>
                             <input
                                 type="email"
                                 id="email"
@@ -85,7 +85,7 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="password">Password</label>
+                            <label htmlFor="password" style={{color:"var(--text-primary)"}}>Password</label>
                             <input
                                 type="password"
                                 id="password"

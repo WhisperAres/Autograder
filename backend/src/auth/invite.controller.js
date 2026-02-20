@@ -1,46 +1,50 @@
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const StudentInvite = require('../models/studentInvite');
 const User = require('../models/user');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-// Email configuration for both localhost and production
-const getEmailTransporter = () => {
-  // For production, you should use your email service (Gmail, SendGrid, etc.)
-  // For development, you can use a test account or console logging
-  
-  if (process.env.NODE_ENV === 'production') {
-    // Production: Use your email service
-    return nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-  } else {
-    // Development: Log emails to console instead of sending
-    return {
-      sendMail: async (mailOptions) => {
-        console.log('📧 Email would be sent in production:');
-        console.log('To:', mailOptions.to);
-        console.log('Subject:', mailOptions.subject);
-        console.log('Body:', mailOptions.text);
-        return { messageId: 'dev-mode' };
-      },
+// Initialize SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// Send email using SendGrid
+const sendEmail = async (mailOptions) => {
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      // Development: Log emails to console instead of sending
+      console.log('📧 Email would be sent in production:');
+      console.log('To:', mailOptions.to);
+      console.log('Subject:', mailOptions.subject);
+      console.log('Body:', mailOptions.html);
+      return { messageId: 'dev-mode' };
+    }
+
+    // Production: Send via SendGrid
+    const msg = {
+      to: mailOptions.to,
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
+      subject: mailOptions.subject,
+      html: mailOptions.html,
+      text: mailOptions.text,
     };
+
+    const response = await sgMail.send(msg);
+    return response;
+  } catch (error) {
+    console.error('SendGrid error:', error);
+    throw error;
   }
+};
+
+// Get frontend URL based on environment
+const getFrontendUrl = () => {
+    return process.env.FRONTEND_URL || 'https://autograder-4usv.onrender.com'
 };
 
 // Generate unique invite token
 const generateInviteToken = () => {
   return crypto.randomBytes(32).toString('hex');
-};
-
-// Get frontend URL based on environment
-const getFrontendUrl = () => {
-    return 'https://autograder-4usv.onrender.com';
 };
 
 // Send invite emails to multiple students
@@ -60,7 +64,6 @@ exports.sendInvites = async (req, res) => {
       return res.status(400).json({ message: 'No valid email addresses provided' });
     }
 
-    const transporter = getEmailTransporter();
     const frontendUrl = getFrontendUrl();
     const inviteDurationHours = parseInt(process.env.INVITE_EXPIRY_HOURS) || 168; // Default 7 days
     const invites = [];
@@ -131,7 +134,7 @@ Click the link to sign up: ${inviteLink}
 This link expires in ${inviteDurationHours} hours.`,
         };
 
-        await transporter.sendMail(mailOptions);
+        await sendEmail(mailOptions);
         results.success.push(email);
         invites.push({ email, inviteLink });
       } catch (error) {
