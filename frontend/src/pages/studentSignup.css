@@ -161,13 +161,25 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 18px;
   padding: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0.6;
   transition: opacity 0.2s;
+  color: #667eea;
+  width: 32px;
+  height: 32px;
+}
+
+.toggle-password svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.signup-container[data-theme='dark'] .toggle-password {
+  color: #64b5f6;
 }
 
 .toggle-password:hover:not(:disabled) {
@@ -176,6 +188,7 @@
 
 .toggle-password:disabled {
   cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .password-requirements {

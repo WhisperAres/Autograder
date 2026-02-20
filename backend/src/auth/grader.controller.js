@@ -8,23 +8,9 @@ const GraderSolutionFile = require("../models/graderSolutionFile");
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 
-// Detect Java executable path (handle both Windows and Unix)
-const getJavaExecutable = () => {
-  const isWindows = os.platform() === 'win32';
-  const javaCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\java.exe"` : 'java';
-  return javaCmd;
-};
-
-const getJavacExecutable = () => {
-  const isWindows = os.platform() === 'win32';
-  const javacCmd = isWindows ? `"C:\\Program Files\\Java\\jdk-21.0.10\\bin\\javac.exe"` : 'javac';
-  return javacCmd;
-};
-
-const JAVA_CMD = getJavaExecutable();
-const JAVAC_CMD = getJavacExecutable();
+const JAVAC_CMD = process.env.JAVAC_CMD || "javac";
+const JAVA_CMD = process.env.JAVA_CMD || "java";
 
 // Safe file cleanup with timeout
 const safeDeletedir = (dirpath) => {
@@ -46,86 +32,88 @@ const safeDeletedir = (dirpath) => {
   }
 };
 
-// Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
-const transformJUnitStyle = (code) => {
-  if (!code || typeof code !== 'string') return code;
+/**
+ * Enhanced Transformer: Handles all JUnit-style assertions with robustness
+ * 1. assertEquals(expected, actual, delta)
+ * 2. assertEquals(expected, actual)
+ * 3. assertTrue(condition)
+ * 4. assertFalse(condition)
+ * 5. assertNotNull(value)
+ */
+const transformJUnitStyle = (testCode) => {
+  if (!testCode) return "";
 
-  const splitTopLevelArgs = (s) => {
+  // Helper to split arguments while respecting nested parentheses and quotes
+  const splitArgs = (argsStr) => {
     const parts = [];
-    let cur = '';
+    let current = '';
     let depth = 0;
-    let inSingle = false;
-    let inDouble = false;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === "'" && !inDouble) { inSingle = !inSingle; cur += ch; continue; }
-      if (ch === '"' && !inSingle) { inDouble = !inDouble; cur += ch; continue; }
-      if (!inSingle && !inDouble) {
-        if (ch === '(' || ch === '{' || ch === '[') { depth++; }
-        else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
-        else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; continue; }
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    
+    for (let i = 0; i < argsStr.length; i++) {
+      const char = argsStr[i];
+      const prevChar = i > 0 ? argsStr[i - 1] : '';
+      
+      if (char === "'" && prevChar !== '\\' && !inDoubleQuote) {
+        inSingleQuote = !inSingleQuote;
+      } else if (char === '"' && prevChar !== '\\' && !inSingleQuote) {
+        inDoubleQuote = !inDoubleQuote;
       }
-      cur += ch;
+      
+      if (!inSingleQuote && !inDoubleQuote) {
+        if (char === '(' || char === '{' || char === '[') depth++;
+        else if (char === ')' || char === '}' || char === ']') depth--;
+        else if (char === ',' && depth === 0) {
+          parts.push(current.trim());
+          current = '';
+          continue;
+        }
+      }
+      current += char;
     }
-    if (cur.trim() !== '') parts.push(cur.trim());
+    if (current.trim()) parts.push(current.trim());
     return parts;
   };
 
-  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull'];
-  let i = 0;
-  let out = '';
-  while (i < code.length) {
-    let matched = false;
-    for (const kw of keywords) {
-      if (code.startsWith(kw, i)) {
-        let j = i + kw.length;
-        // skip whitespace
-        while (code[j] && /\s/.test(code[j])) j++;
-        if (code[j] !== '(') continue;
+  let result = testCode;
 
-        // find matching closing parenthesis
-        let depth = 0;
-        let k = j;
-        for (; k < code.length; k++) {
-          if (code[k] === '(') depth++;
-          else if (code[k] === ')') { depth--; if (depth === 0) break; }
-        }
-        if (k >= code.length) continue; // unmatched, skip
-
-        const argsStr = code.substring(j + 1, k);
-        let replacement = '';
-        if (kw === 'assertTrue') {
-          replacement = `if (!(${argsStr})) throw new AssertionError("assertTrue failed");`;
-        } else if (kw === 'assertFalse') {
-          replacement = `if ((${argsStr})) throw new AssertionError("assertFalse failed");`;
-        } else if (kw === 'assertNotNull') {
-          replacement = `if (${argsStr} == null) throw new AssertionError("assertNotNull failed");`;
-        } else if (kw === 'assertEquals') {
-          const parts = splitTopLevelArgs(argsStr);
-          const a = parts[0] || '';
-          const b = parts[1] || '';
-          replacement = `if (!String.valueOf(${a}).equals(String.valueOf(${b}))) throw new AssertionError("assertEquals failed: expected " + String.valueOf(${a}) + " got " + String.valueOf(${b}));`;
-        }
-
-        out += replacement;
-
-        // advance i to after closing parenthesis
-        i = k + 1;
-        // skip optional semicolon
-        while (code[i] && /\s/.test(code[i])) i++;
-        if (code[i] === ';') i++;
-
-        matched = true;
-        break;
-      }
+  // 1. assertEquals with 3 arguments (includes delta)
+  result = result.replace(/assertEquals\s*\(([^)]+,[^)]+,[^)]+)\)\s*;/g, (match, argsStr) => {
+    const parts = splitArgs(argsStr);
+    if (parts.length === 3) {
+      const [expected, actual, delta] = parts;
+      return `if (Math.abs((${expected}) - (${actual})) > (${delta})) throw new AssertionError("assertEquals with delta failed: expected " + (${expected}) + " (±" + (${delta}) + ") but got " + (${actual}));`;
     }
-    if (!matched) {
-      out += code[i];
-      i++;
-    }
-  }
+    return match;
+  });
 
-  return out;
+  // 2. assertEquals with 2 arguments
+  result = result.replace(/assertEquals\s*\(([^)]+,[^)]+)\)\s*;/g, (match, argsStr) => {
+    const parts = splitArgs(argsStr);
+    if (parts.length === 2) {
+      const [expected, actual] = parts;
+      return `if (!String.valueOf(${expected}).equals(String.valueOf(${actual}))) throw new AssertionError("assertEquals failed: expected " + String.valueOf(${expected}) + " but got " + String.valueOf(${actual}));`;
+    }
+    return match;
+  });
+
+  // 3. assertTrue
+  result = result.replace(/assertTrue\s*\(([^)]+)\)\s*;/g, (match, condition) => {
+    return `if (!(${condition})) throw new AssertionError("assertTrue failed: condition '" + (${condition}) + "' was not true");`;
+  });
+
+  // 4. assertFalse
+  result = result.replace(/assertFalse\s*\(([^)]+)\)\s*;/g, (match, condition) => {
+    return `if ((${condition})) throw new AssertionError("assertFalse failed: condition '" + (${condition}) + "' was not false");`;
+  });
+
+  // 5. assertNotNull
+  result = result.replace(/assertNotNull\s*\(([^)]+)\)\s*;/g, (match, value) => {
+    return `if ((${value}) == null) throw new AssertionError("assertNotNull failed: " + (${value}) + " was null");`;
+  });
+
+  return result;
 };
 
 // Get all assignments (for grader to select from)
@@ -176,8 +164,8 @@ exports.getSubmissionsByAssignment = async (req, res) => {
 };
 
 // Run test cases on a submission
-
 exports.runTestCases = async (req, res) => {
+  let tempDir = null;
   try {
     const { submissionId } = req.params;
 
@@ -195,109 +183,109 @@ exports.runTestCases = async (req, res) => {
       return res.json({ message: "No test cases defined", results: [] });
     }
 
-    const codeFiles = submission.codeFiles;
-    const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-    
+    const javaFiles = submission.codeFiles.filter(f => f.fileName.endsWith(".java"));
     if (javaFiles.length === 0) {
-      return res.status(404).json({ message: "No Java files found in submission" });
+      return res.status(404).json({ message: "No Java files found" });
     }
 
-    const results = [];
-    const tempDir = path.join(__dirname, "../../temp", `submission_${submissionId}_${Date.now()}`);
+    // Sanitize ID for Java Class Name
+    const sanitizedId = submissionId.toString().replace(/[^a-zA-Z0-9]/g, "");
+    tempDir = path.join(__dirname, "../../temp", `sub_${sanitizedId}_${Date.now()}`);
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    try {
-      // Write student Java files
-      for (const codeFile of javaFiles) {
-        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
-      }
-
-      // [STEP 1] Compile all student Java files together
-      try {
-        const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-          timeout: 20000, 
-          stdio: ['pipe', 'pipe', 'pipe'],
-          maxBuffer: 5 * 1024 * 1024
-        });
-      } catch (compileErr) {
-        const errorMsg = compileErr.stderr ? compileErr.stderr.toString() : compileErr.message;
-        return res.json({ 
-          message: "Compilation failed", 
-          error: errorMsg,
-          results: [],
-          submissionId
-        });
-      }
-
-      // [STEP 2] Run each test case individually
-      for (const testCase of testCases) {
-        let passed = false;
-        let actualOutput = "";
-        let errorMessage = "";
-
-        try {
-          const uniqueId = Date.now() + Math.random().toString().replace('.', '');
-          const testClassName = `Test${uniqueId}`;
-          const testCode = `public class ${testClassName} {
-            public static void main(String[] args) {
-              try {
-                ${transformJUnitStyle(testCase.testCode)}
-                System.out.println("PASS");
-              } catch (AssertionError e) {
-                System.out.println("FAIL: " + e.getMessage());
-              } catch (Exception e) {
-                System.out.println("FAIL: " + e.getMessage());
-              }
-            }
-          }`;
-          
-          fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
-
-          // Compile and run the harness
-          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
-          actualOutput = execSync(cmd, {
-            encoding: "utf8",
-            stdio: ["pipe", "pipe", "pipe"],
-            timeout: 20000,
-            maxBuffer: 5 * 1024 * 1024
-          }).trim();
-
-          passed = actualOutput.includes("PASS");
-        } catch (execError) {
-          errorMessage = execError.stderr ? execError.stderr.toString() : execError.message;
-          passed = false;
-        }
-
-        results.push({
-          testName: testCase.testName,
-          passed,
-          actualOutput,
-          expectedOutput: testCase.expectedOutput,
-          errorMessage: passed ? null : errorMessage,
-          marks: testCase.marks
-        });
-      }
-
-      // [STEP 3] Update Submission Marks
-      let totalMarksEarned = 0;
-      results.forEach((r) => { if (r.passed) totalMarksEarned += parseFloat(r.marks) || 0; });
-      await submission.update({ marks: totalMarksEarned, status: "evaluated" });
-
-      res.json({
-        message: "Tests completed",
-        results,
-        submissionId,
-        marksObtained: totalMarksEarned,
-        passCount: results.filter(r => r.passed).length,
-        totalCount: results.length
-      });
-
-    } finally {
-      if (fs.existsSync(tempDir)) safeDeletedir(tempDir);
+    // 1. Write student files
+    for (const codeFile of javaFiles) {
+      fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
     }
+
+    // 2. Compile all student files together
+    const javaFileNames = javaFiles.map(f => `"${f.fileName}"`).join(" ");
+    try {
+      execSync(`${JAVAC_CMD} ${javaFileNames}`, { cwd: tempDir, stdio: 'pipe' });
+    } catch (compileErr) {
+      const errOutput = compileErr.stderr ? compileErr.stderr.toString() : compileErr.message;
+      return res.json({ 
+        message: "Compilation failed", 
+        error: errOutput,
+        results: [], 
+        submissionId 
+      });
+    }
+
+    // 3. Build the Master Runner with Scoped Blocks {}
+    const masterClassName = `MasterRunner${sanitizedId}`;
+    let masterCode = `public class ${masterClassName} {\n`;
+    masterCode += `  public static void main(String[] args) {\n`;
+    
+    testCases.forEach((tc, index) => {
+      masterCode += `    System.out.println("@@BEGIN_${index}@@");\n`;
+      masterCode += `    try {\n`;
+      masterCode += `      { // Start Scope for Test ${index}\n`;
+      masterCode += `        ${transformJUnitStyle(tc.testCode)}\n`;
+      masterCode += `      } // End Scope\n`;
+      masterCode += `      System.out.println("@@PASS@@");\n`;
+      masterCode += `    } catch (Throwable e) {\n`;
+      // Use getMessage() or toString() to capture the error details
+      masterCode += `      System.out.println("@@FAIL@@" + e.toString());\n`;
+      masterCode += `    }\n`;
+    });
+    masterCode += `  }\n}`;
+
+    fs.writeFileSync(path.join(tempDir, `${masterClassName}.java`), masterCode);
+    
+    // Compile Master Runner
+    execSync(`${JAVAC_CMD} ${masterClassName}.java`, { cwd: tempDir });
+
+    // 4. Execute the single process
+    let rawOutput = "";
+    try {
+      rawOutput = execSync(`${JAVA_CMD} ${masterClassName}`, { 
+        cwd: tempDir, 
+        encoding: "utf8", 
+        timeout: 15000 // Prevents infinite loops from freezing server
+      });
+    } catch (execErr) {
+      // If the whole process crashes (e.g. out of memory)
+      rawOutput = execErr.stdout ? execErr.stdout.toString() : "";
+    }
+
+    // 5. Parse output
+    const results = testCases.map((tc, index) => {
+      const marker = `@@BEGIN_${index}@@`;
+      const section = rawOutput.split(marker)[1]?.split(/@@BEGIN_\d+@@/)[0] || "";
+      const passed = section.includes("@@PASS@@");
+      const errorPart = section.split("@@FAIL@@")[1] || null;
+
+      return {
+        testName: tc.testName,
+        passed,
+        actualOutput: section.trim().replace("@@PASS@@", "").replace("@@FAIL@@" + (errorPart || ""), ""),
+        expectedOutput: tc.expectedOutput,
+        errorMessage: passed ? null : errorPart?.trim(),
+        marks: tc.marks
+      };
+    });
+
+    // 6. Finalize Marks and DB status
+    let totalMarksEarned = results.reduce((acc, r) => r.passed ? acc + (parseFloat(r.marks) || 0) : acc, 0);
+    await submission.update({ marks: totalMarksEarned, status: "evaluated" });
+
+    res.json({
+      message: "Tests completed",
+      results,
+      submissionId,
+      marksObtained: totalMarksEarned,
+      passCount: results.filter(r => r.passed).length,
+      totalCount: results.length
+    });
+
   } catch (error) {
-    res.status(500).json({ message: "Error running tests: " + error.message });
+    console.error("Grader Error:", error);
+    res.status(500).json({ message: "Internal Error: " + error.message });
+  } finally {
+    if (tempDir && fs.existsSync(tempDir)) {
+      try { safeDeletedir(tempDir); } catch (e) { console.error("Cleanup failed:", e); }
+    }
   }
 };
 
