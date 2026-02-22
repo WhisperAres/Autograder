@@ -671,7 +671,7 @@ export default function AdminDashboard() {
                               alignItems: "center",
                               padding: "0 2px"
                             }}
-                            title={assignment.isHidden ? "Click to show assignment to students" : "Click to hide assignment from students"}
+                            title={assignment.isHidden ? "Click to publish assignment to students" : "Click to hide assignment from students"}
                           >
                             <div
                               style={{
@@ -687,7 +687,7 @@ export default function AdminDashboard() {
                             />
                           </div>
                           <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", minWidth: "70px" }}>
-                            {!assignment.isHidden ? "👁️ Show" : "🙈 Hide"}
+                            {!assignment.isHidden ? "Publish" : "Hide"}
                           </span>
 
                           {/* Animated Toggle Switch for View Marks */}
