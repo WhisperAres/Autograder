@@ -500,6 +500,33 @@ exports.toggleCanViewMarks = async (req, res) => {
   }
 };
 
+// Toggle assignment hidden status
+exports.toggleAssignmentVisibility = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { isHidden } = req.body;
+
+    if (isHidden === undefined || isHidden === null) {
+      return res.status(400).json({ message: "isHidden parameter required" });
+    }
+
+    const assignment = await Assignment.findByPk(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    await assignment.update({ isHidden: Boolean(isHidden) });
+
+    res.json({
+      message: `Assignment is now ${isHidden ? 'hidden' : 'visible'} to students`,
+      assignment
+    });
+  } catch (error) {
+    console.error("Error toggling assignment visibility:", error);
+    res.status(500).json({ message: "Error toggling assignment visibility" });
+  }
+};
+
 // ==================== GRADING & MARKS ====================
 
 // Get all submissions with marks

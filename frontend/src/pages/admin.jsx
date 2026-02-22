@@ -272,6 +272,21 @@ export default function AdminDashboard() {
     }
   };
 
+  // Toggle assignment visibility (show/hide to students)
+  const handleToggleAssignmentVisibility = async (assignmentId, isHidden) => {
+    try {
+      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/hide`, { isHidden });
+      const data = response.data;
+      // Update local state with server response
+      setAssignments(assignments.map(a =>
+        a.id === assignmentId ? { ...a, ...data.assignment } : a
+      ));
+      showModal("Success", `Assignment ${isHidden ? 'hidden' : 'shown'} to students`, "success");
+    } catch (err) {
+      setError("Error toggling assignment visibility: " + err.message);
+    }
+  };
+
   // Toggle allow students to view marks for a specific submission
   const handleToggleViewMarks = async (submissionId, currentViewMarks) => {
     try {
@@ -638,7 +653,44 @@ export default function AdminDashboard() {
 
                         {/* View Marks Toggle & Edit Button */}
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          {/* Animated Toggle Switch */}
+                          {/* Toggle Assignment Visibility (Show/Hide to Students) */}
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleAssignmentVisibility(assignment.id, !assignment.isHidden);
+                            }}
+                            style={{
+                              width: "50px",
+                              height: "24px",
+                              background: !assignment.isHidden ? "var(--primary)" : "var(--border)",
+                              borderRadius: "12px",
+                              cursor: "pointer",
+                              position: "relative",
+                              transition: "background 0.3s ease",
+                              display: "flex",
+                              alignItems: "center",
+                              padding: "0 2px"
+                            }}
+                            title={assignment.isHidden ? "Click to show assignment to students" : "Click to hide assignment from students"}
+                          >
+                            <div
+                              style={{
+                                width: "20px",
+                                height: "20px",
+                                background: "white",
+                                borderRadius: "50%",
+                                position: "absolute",
+                                left: !assignment.isHidden ? "28px" : "2px",
+                                transition: "left 0.3s ease",
+                                boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", minWidth: "70px" }}>
+                            {!assignment.isHidden ? "👁️ Show" : "🙈 Hide"}
+                          </span>
+
+                          {/* Animated Toggle Switch for View Marks */}
                           <div
                             onClick={(e) => {
                               e.stopPropagation();

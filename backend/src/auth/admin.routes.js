@@ -20,6 +20,7 @@ router.get("/assignments", checkRole("admin"), adminController.getAssignments);
 router.post("/assignments", checkRole("admin"), adminController.createAssignment);
 router.patch("/assignments/:assignmentId", checkRole("admin"), adminController.updateAssignment);
 router.patch("/assignments/:assignmentId/view-marks", checkRole("admin"), adminController.toggleCanViewMarks);
+router.patch("/assignments/:assignmentId/visibility", checkRole("admin"), adminController.toggleAssignmentVisibility);
 router.delete("/assignments/:assignmentId", checkRole("admin"), adminController.deleteAssignment);
 
 // ==================== TEST CASE MANAGEMENT ====================

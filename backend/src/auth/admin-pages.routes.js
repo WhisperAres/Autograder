@@ -24,6 +24,9 @@ router.delete("/assignments-list/:assignmentId", checkRole("admin"), adminContro
 // Toggle marks visibility for all students in assignment
 router.patch("/assignments-list/:assignmentId/toggle-visibility", checkRole("admin"), adminController.toggleCanViewMarks);
 
+// Toggle assignment hidden status (show/hide to students)
+router.patch("/assignments-list/:assignmentId/hide", checkRole("admin"), adminController.toggleAssignmentVisibility);
+
 // Export marks as CSV
 router.get("/assignments-list/:assignmentId/export", checkRole("admin"), adminController.downloadMarksCSV);
 

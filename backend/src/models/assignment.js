@@ -28,6 +28,10 @@ const Assignment = sequelize.define('Assignment', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  isHidden: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
 }, {
   tableName: 'assignments',
   timestamps: false,
