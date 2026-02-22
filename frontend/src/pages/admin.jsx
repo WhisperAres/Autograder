@@ -281,7 +281,7 @@ export default function AdminDashboard() {
       setAssignments(assignments.map(a =>
         a.id === assignmentId ? { ...a, ...data.assignment } : a
       ));
-      showModal("Success", `Assignment ${isHidden ? 'hidden' : 'shown'} to students`, "success");
+      showModal("Success", `Assignment ${isHidden ? 'hidden' : 'published'}`, "success");
     } catch (err) {
       setError("Error toggling assignment visibility: " + err.message);
     }
@@ -687,7 +687,7 @@ export default function AdminDashboard() {
                             />
                           </div>
                           <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", minWidth: "70px" }}>
-                            {!assignment.isHidden ? "Publish" : "Hide"}
+                            {!assignment.isHidden ? "Published" : "Hidden"}
                           </span>
 
                           {/* Animated Toggle Switch for View Marks */}
