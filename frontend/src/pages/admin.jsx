@@ -9,15 +9,13 @@ import "./admin.css";
 const convertISTToUTC = (dateStr, timeStr) => {
   if (!dateStr || !timeStr) return null;
   
-  // Create a date object from IST input
-  const [year, month, day] = dateStr.split('-');
-  const [hours, minutes] = timeStr.split(':');
+  // Create a UTC-based date first (by treating input as UTC initially)
+  const utcString = `${dateStr}T${timeStr}:00Z`;
+  const tempDate = new Date(utcString); // This treats as UTC
   
-  // Create date treating input as IST (UTC+5:30)
-  const istDate = new Date(year, month - 1, day, hours, minutes, 0);
-  
-  // Convert IST to UTC by subtracting 5 hours 30 minutes
-  const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+  // Now subtract 5:30 hours to convert from IST to UTC
+  // Because: 18:30 IST = 13:00 UTC (subtract 5:30)
+  const utcDate = new Date(tempDate.getTime() - (5.5 * 60 * 60 * 1000));
   
   return utcDate.toISOString();
 };

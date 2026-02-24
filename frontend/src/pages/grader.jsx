@@ -5,6 +5,17 @@ import Modal from "../components/Modal";
 import api from "../services/auth";
 import "./grader.css";
 
+// Helper function: Display UTC time as IST for date display
+const displayDateAsIST = (utcDateStr) => {
+  if (!utcDateStr) return '';
+  
+  const date = new Date(utcDateStr);
+  // Add 5 hours 30 minutes to convert UTC to IST
+  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  
+  return date.toLocaleString();
+};
+
 export default function GraderDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
@@ -308,7 +319,7 @@ export default function GraderDashboard() {
                     <div className="submission-top">
                       <div>
                         <div className="student-id">{sub.studentName || 'Student'}</div>
-                        <div className="submitted-date">{sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : ''}</div>
+                        <div className="submitted-date">{sub.submittedAt ? displayDateAsIST(sub.submittedAt) : ''} IST</div>
                       </div>
                       <div className={`status-badge ${sub.status ? 'status-' + sub.status : ''}`}>{sub.status || 'pending'}</div>
                     </div>

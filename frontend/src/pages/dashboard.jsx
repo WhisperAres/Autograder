@@ -4,6 +4,17 @@ import Modal from "../components/Modal";
 import api from "../services/auth";
 import "./dashboard.css";
 
+// Helper function: Display UTC time as IST for date display
+const displayDateAsIST = (utcDateStr) => {
+  if (!utcDateStr) return '';
+  
+  const date = new Date(utcDateStr);
+  // Add 5 hours 30 minutes to convert UTC to IST
+  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  
+  return date.toLocaleString();
+};
+
 export default function Dashboard({ handleLogout, user }) {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState([]);
@@ -331,7 +342,7 @@ export default function Dashboard({ handleLogout, user }) {
                           </td>
                           <td className="upload-cell">
                             <div className="upload-actions">
-                              <div className="due-text">Due: {dueDate.toLocaleString()}</div>
+                              <div className="due-text">Due: {displayDateAsIST(assignment.dueDate)} IST</div>
                               <button
                                 className="btn-upload-assignment"
                                 onClick={() => navigate(`/student/submit/${assignment.id}`)}
@@ -370,7 +381,7 @@ export default function Dashboard({ handleLogout, user }) {
                       color: isOverdue ? "#ef4444" : "#10b981",
                       fontSize: "0.9rem",
                     }}>
-                      {isOverdue ? "Submission Closed" : "Open"} <br /> Due: {dueDate.toLocaleString()}
+                      {isOverdue ? "Submission Closed" : "Open"} <br /> Due: {displayDateAsIST(selectedAssignment.dueDate)} IST
                     </div>
                   );
                 })()}
