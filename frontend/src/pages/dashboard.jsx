@@ -10,9 +10,18 @@ const displayDateAsIST = (utcDateStr) => {
   
   const date = new Date(utcDateStr);
   // Add 5 hours 30 minutes to convert UTC to IST
-  date.setTime(date.getTime() - (5.5 * 60 * 60 * 1000));
+  date.setTime(date.getTime());
   
-  return date.toLocaleString();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = monthNames[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${day} ${month} ${year}, ${hours}:${minutes}`;
 };
 
 export default function Dashboard({ handleLogout, user }) {
