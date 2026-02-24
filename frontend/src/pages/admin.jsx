@@ -627,7 +627,7 @@ export default function AdminDashboard() {
                 <form id="createAssignmentForm" onSubmit={handleCreateAssignment} className="form-panel" style={{ display: "none" }}>
                   <h3>Create New Assignment</h3>
                   <div className="form-group">
-                    <label>Title *</label>
+                    <label style={{color: "var(--primary)"}}>Title *</label>
                     <input
                       type="text"
                       value={newAssignment.title}
@@ -636,7 +636,7 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Description</label>
+                    <label style={{color: "var(--primary)"}}>Description</label>
                     <textarea
                       value={newAssignment.description}
                       onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
@@ -646,7 +646,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Due Date & Time * <span style={{ color: "var(--primary)", fontSize: "0.8rem", marginLeft: "4px" }}>(IST)</span></label>
+                      <label style={{color: "var(--primary)"}}>Due Date & Time * <span style={{ color: "var(--primary)", fontSize: "0.8rem", marginLeft: "4px" }}>(IST)</span></label>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         <input
                           type="date"
@@ -705,7 +705,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                     <div className="form-group">
-                      <label>Total Marks</label>
+                      <label style={{color: "var(--primary)"}}>Total Marks</label>
                       <input
                         type="number"
                         value={newAssignment.totalMarks}
