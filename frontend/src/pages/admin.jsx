@@ -5,6 +5,66 @@ import StudentDetail from "./studentDetail";
 import api from "../services/auth"; // Updated import
 import "./admin.css";
 
+// Helper function: Convert IST time (user input) to UTC ISO string for storage
+const convertISTToUTC = (dateStr, timeStr) => {
+  if (!dateStr || !timeStr) return null;
+  
+  // Create a date object from IST input
+  const [year, month, day] = dateStr.split('-');
+  const [hours, minutes] = timeStr.split(':');
+  
+  // Create date treating input as IST (UTC+5:30)
+  const istDate = new Date(year, month - 1, day, hours, minutes, 0);
+  
+  // Convert IST to UTC by subtracting 5 hours 30 minutes
+  const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+  
+  return utcDate.toISOString();
+};
+
+// Helper function: Convert UTC time to IST display string
+const convertUTCToIST = (dateStr) => {
+  if (!dateStr) return null;
+  
+  const date = new Date(dateStr);
+  
+  // Add 5 hours 30 minutes to convert UTC to IST
+  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  
+  return date.toISOString();
+};
+
+// Helper function: Convert UTC ISO string to YYYY-MM-DDTHH:MM format for IST display in inputs
+const convertUTCToISTForInputs = (utcDateStr) => {
+  if (!utcDateStr) return '';
+  
+  const date = new Date(utcDateStr);
+  // Add 5 hours 30 minutes to get IST
+  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  
+  const iso = date.toISOString();
+  return iso.split('.')[0]; // Return YYYY-MM-DDTHH:MM:SS format, which we'll split for inputs
+};
+
+// Helper function: Format IST display from local time input
+const formatISTDisplay = (dateStr, timeStr) => {
+  if (!dateStr || !timeStr) return null;
+  
+  const [year, month, day] = dateStr.split('-');
+  const [hours, minutes] = timeStr.split(':');
+  
+  // Create date treating input as IST
+  const istDate = new Date(year, month - 1, day, parseInt(hours), parseInt(minutes), 0);
+  
+  // Format for display
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  
+  const formatted = `${dayOfWeek[istDate.getDay()]}, ${istDate.getDate()} ${monthNames[istDate.getMonth()]} ${istDate.getFullYear()} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  
+  return formatted;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -125,7 +185,14 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await api.post("/admin/page/assignments-list", newAssignment);
+      // Convert IST time to UTC for backend storage
+      const [dateStr, timeStr] = newAssignment.dueDate.split('T');
+      const utcDate = convertISTToUTC(dateStr, timeStr);
+
+      const response = await api.post("/admin/page/assignments-list", {
+        ...newAssignment,
+        dueDate: utcDate
+      });
       const data = response.data;
       setAssignments([...assignments, data.assignment]);
       setNewAssignment({ title: "", description: "", dueDate: "", totalMarks: 100 });
@@ -139,7 +206,12 @@ export default function AdminDashboard() {
 
   // Edit assignment
   const handleEditAssignment = (assignment) => {
-    setEditingAssignment({ ...assignment });
+    // Convert UTC dueDate to IST for display in form inputs
+    const istDateTime = convertUTCToISTForInputs(assignment.dueDate);
+    setEditingAssignment({ 
+      ...assignment,
+      dueDate: istDateTime // This is now in YYYY-MM-DDTHH:MM:SS format representing IST time
+    });
   };
 
   // Update assignment
@@ -150,10 +222,14 @@ export default function AdminDashboard() {
     }
 
     try {
+      // Convert IST time to UTC for backend storage
+      const [dateStr, timeStr] = editingAssignment.dueDate.split('T');
+      const utcDate = convertISTToUTC(dateStr, timeStr);
+
       const response = await api.patch(`/admin/page/assignments-list/${editingAssignment.id}`, {
         title: editingAssignment.title,
         description: editingAssignment.description,
-        dueDate: editingAssignment.dueDate,
+        dueDate: utcDate,
         totalMarks: editingAssignment.totalMarks
       });
 
@@ -552,7 +628,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Due Date & Time *</label>
+                      <label>Due Date & Time * <span style={{ color: "var(--primary)", fontSize: "0.8rem", marginLeft: "4px" }}>(IST)</span></label>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         <input
                           type="date"
@@ -606,7 +682,7 @@ export default function AdminDashboard() {
                       </div>
                       {newAssignment.dueDate && (
                         <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                          {new Date(newAssignment.dueDate).toLocaleString()}
+                          {formatISTDisplay(newAssignment.dueDate.split('T')[0], newAssignment.dueDate.split('T')[1]?.substring(0, 5)) || 'Invalid date'} IST
                         </div>
                       )}
                     </div>
@@ -659,7 +735,7 @@ export default function AdminDashboard() {
                             alignItems: "center"
                           }}>
                             <span>{assignment.totalMarks} marks</span>
-                            <span>{new Date(assignment.dueDate).toLocaleDateString()}</span>
+                            <span>{new Date(assignment.dueDate).toLocaleDateString()} (IST)</span>
                           </div>
                         </div>
 
@@ -1121,7 +1197,7 @@ export default function AdminDashboard() {
                 <h2 style={{ marginTop: 0, color: "var(--primary)" }}>Edit Assignment</h2>
 
                 <div className="form-group">
-                  <label>Title *</label>
+                  <label style={{color: "var(--primary)"}}>Title *</label>
                   <input
                     type="text"
                     value={editingAssignment.title}
@@ -1131,7 +1207,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="form-group">
-                  <label>Description</label>
+                  <label style={{color: "var(--primary)"}}>Description</label>
                   <textarea
                     value={editingAssignment.description || ""}
                     onChange={(e) => setEditingAssignment({ ...editingAssignment, description: e.target.value })}
@@ -1143,7 +1219,7 @@ export default function AdminDashboard() {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label style={{color: "var(--primary)"}}>Due Date & Time *</label>
+                    <label style={{color: "var(--primary)"}}>Due Date & Time * <span style={{ color: "var(--primary)", fontSize: "0.8rem", marginLeft: "4px" }}>(IST)</span></label>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <input
                         type="date"
@@ -1210,7 +1286,7 @@ export default function AdminDashboard() {
 
                 {editingAssignment.dueDate && (
                   <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "10px", padding: "10px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px" }}>
-                    {new Date(editingAssignment.dueDate).toLocaleString()}
+                    {formatISTDisplay(editingAssignment.dueDate.split('T')[0], editingAssignment.dueDate.split('T')[1]?.substring(0, 5)) || 'Invalid date'} IST
                   </div>
                 )}
 
