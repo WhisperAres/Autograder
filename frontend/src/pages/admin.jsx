@@ -559,8 +559,16 @@ export default function AdminDashboard() {
                           value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[0] : ''}
                           onChange={(e) => {
                             const dateStr = e.target.value;
-                            const time = newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
-                            setNewAssignment({ ...newAssignment, dueDate: `${dateStr}T${time}` });
+                            let time = '23:59';
+                            if (newAssignment.dueDate) {
+                              const timePart = newAssignment.dueDate.split('T')[1];
+                              if (timePart) {
+                                time = timePart.substring(0, 5);
+                              }
+                            }
+                            if (dateStr) {
+                              setNewAssignment({ ...newAssignment, dueDate: `${dateStr}T${time}` });
+                            }
                           }}
                           style={{
                             padding: "8px 12px",
@@ -575,9 +583,13 @@ export default function AdminDashboard() {
                         />
                         <input
                           type="time"
-                          value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
+                          value={newAssignment.dueDate ? newAssignment.dueDate.split('T')[1]?.substring(0, 5) || '23:59' : '23:59'}
                           onChange={(e) => {
-                            const dateStr = newAssignment.dueDate ? newAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                            if (!e.target.value) return;
+                            let dateStr = new Date().toISOString().split('T')[0];
+                            if (newAssignment.dueDate) {
+                              dateStr = newAssignment.dueDate.split('T')[0];
+                            }
                             setNewAssignment({ ...newAssignment, dueDate: `${dateStr}T${e.target.value}` });
                           }}
                           style={{
@@ -594,7 +606,7 @@ export default function AdminDashboard() {
                       </div>
                       {newAssignment.dueDate && (
                         <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                          📅 {new Date(newAssignment.dueDate).toLocaleString()}
+                          {new Date(newAssignment.dueDate).toLocaleString()}
                         </div>
                       )}
                     </div>
@@ -1106,7 +1118,7 @@ export default function AdminDashboard() {
                 maxHeight: "90vh",
                 overflowY: "auto"
               }} onClick={(e) => e.stopPropagation()}>
-                <h2 style={{ marginTop: 0, color: "var(--primary)" }}>✏️ Edit Assignment</h2>
+                <h2 style={{ marginTop: 0, color: "var(--primary)" }}>Edit Assignment</h2>
 
                 <div className="form-group">
                   <label>Title *</label>
@@ -1125,20 +1137,29 @@ export default function AdminDashboard() {
                     onChange={(e) => setEditingAssignment({ ...editingAssignment, description: e.target.value })}
                     placeholder="Assignment description"
                     rows="3"
+                    style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}
                   ></textarea>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Due Date & Time *</label>
+                    <label style={{color: "var(--primary)"}}>Due Date & Time *</label>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <input
                         type="date"
                         value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[0] : ''}
                         onChange={(e) => {
                           const dateStr = e.target.value;
-                          const time = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59';
-                          setEditingAssignment({ ...editingAssignment, dueDate: `${dateStr}T${time}` });
+                          let time = '23:59';
+                          if (editingAssignment.dueDate) {
+                            const timePart = editingAssignment.dueDate.split('T')[1];
+                            if (timePart) {
+                              time = timePart.substring(0, 5);
+                            }
+                          }
+                          if (dateStr) {
+                            setEditingAssignment({ ...editingAssignment, dueDate: `${dateStr}T${time}` });
+                          }
                         }}
                         style={{
                           padding: "8px 12px",
@@ -1153,9 +1174,13 @@ export default function AdminDashboard() {
                       />
                       <input
                         type="time"
-                        value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1] || '23:59' : '23:59'}
+                        value={editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[1]?.substring(0, 5) || '23:59' : '23:59'}
                         onChange={(e) => {
-                          const dateStr = editingAssignment.dueDate ? editingAssignment.dueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                          if (!e.target.value) return;
+                          let dateStr = new Date().toISOString().split('T')[0];
+                          if (editingAssignment.dueDate) {
+                            dateStr = editingAssignment.dueDate.split('T')[0];
+                          }
                           setEditingAssignment({ ...editingAssignment, dueDate: `${dateStr}T${e.target.value}` });
                         }}
                         style={{
@@ -1172,7 +1197,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label>Total Marks</label>
+                    <label style={{color: "var(--primary)"}}>Total Marks</label>
                     <input
                       type="number"
                       value={editingAssignment.totalMarks}
@@ -1185,7 +1210,7 @@ export default function AdminDashboard() {
 
                 {editingAssignment.dueDate && (
                   <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "10px", padding: "10px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px" }}>
-                    📅 {new Date(editingAssignment.dueDate).toLocaleString()}
+                    {new Date(editingAssignment.dueDate).toLocaleString()}
                   </div>
                 )}
 
