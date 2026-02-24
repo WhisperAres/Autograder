@@ -65,6 +65,26 @@ const formatISTDisplay = (dateStr, timeStr) => {
   return formatted;
 };
 
+// Helper function: Display UTC time as IST for assignments list
+const displayDateAsIST = (utcDateStr) => {
+  if (!utcDateStr) return '';
+  
+  const date = new Date(utcDateStr);
+  // Add 5 hours 30 minutes to convert UTC to IST
+  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = monthNames[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${day} ${month} ${year} ${hours}:${minutes}`;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -735,7 +755,7 @@ export default function AdminDashboard() {
                             alignItems: "center"
                           }}>
                             <span>{assignment.totalMarks} marks</span>
-                            <span>{new Date(assignment.dueDate).toLocaleDateString()} (IST)</span>
+                            <span>Due: {displayDateAsIST(assignment.dueDate)} IST</span>
                           </div>
                         </div>
 
