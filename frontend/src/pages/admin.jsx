@@ -642,6 +642,7 @@ export default function AdminDashboard() {
                       onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
                       placeholder="Assignment description"
                       rows="3"
+                      style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}
                     ></textarea>
                   </div>
                   <div className="form-row">
