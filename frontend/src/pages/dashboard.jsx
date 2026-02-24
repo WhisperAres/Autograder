@@ -10,7 +10,7 @@ const displayDateAsIST = (utcDateStr) => {
   
   const date = new Date(utcDateStr);
   // Add 5 hours 30 minutes to convert UTC to IST
-  date.setTime(date.getTime() + (5.5 * 60 * 60 * 1000));
+  date.setTime(date.getTime());
   
   return date.toLocaleString();
 };
