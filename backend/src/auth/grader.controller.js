@@ -71,7 +71,7 @@ const transformJUnitStyle = (code) => {
     return parts;
   };
 
-  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull'];
+  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull', 'assertNull'];
   let i = 0;
   let out = '';
   while (i < code.length) {
@@ -100,6 +100,8 @@ const transformJUnitStyle = (code) => {
           replacement = `if ((${argsStr})) throw new AssertionError("assertFalse failed");`;
         } else if (kw === 'assertNotNull') {
           replacement = `if (${argsStr} == null) throw new AssertionError("assertNotNull failed");`;
+        } else if (kw === 'assertNull') {
+          replacement = `if (${argsStr} != null) throw new AssertionError("assertNull failed");`;
         } else if (kw === 'assertEquals') {
           const parts = splitTopLevelArgs(argsStr);
           const a = parts[0] || '';

@@ -232,7 +232,7 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
                 </div>
                 <form onSubmit={handleCreateTestCase} className="test-case-form">
                   <div className="form-group">
-                    <label>Test Case Name *</label>
+                    <label style={{color: "var(--primary)"}}>Test Case Name *</label>
                     <input
                       type="text"
                       placeholder="e.g., Test Case 1"
@@ -241,9 +241,9 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
                     />
                   </div>
                   <div className="form-group">
-                    <label>Test Code *</label>
+                    <label style={{color: "var(--primary)"}}>Test Code *</label>
                     <textarea
-                      style={{ fontFamily: 'monospace' }}
+                      style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}
                       placeholder="Enter test code here..."
                       value={newTestCase.testCode}
                       onChange={(e) => setNewTestCase({ ...newTestCase, testCode: e.target.value })}
@@ -253,7 +253,7 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
                     />
                   </div>
                   <div className="form-group">
-                    <label>Marks *</label>
+                    <label style={{color: "var(--primary)"}}>Marks *</label>
                     <input
                       type="number"
                       min="0.01"
