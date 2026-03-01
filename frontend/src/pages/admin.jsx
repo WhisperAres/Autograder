@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
@@ -138,11 +138,40 @@ export default function AdminDashboard() {
   const [testResults, setTestResults] = useState(null);
   const [bulkTestsRunning, setBulkTestsRunning] = useState(false);
   const [bulkTestResults, setBulkTestResults] = useState(null);
+  const keepAliveIntervalRef = useRef(null);
+
+  const stopKeepAlivePings = () => {
+    if (keepAliveIntervalRef.current) {
+      clearInterval(keepAliveIntervalRef.current);
+      keepAliveIntervalRef.current = null;
+    }
+  };
+
+  const startKeepAlivePings = () => {
+    stopKeepAlivePings();
+    const ping = async () => {
+      try {
+        await api.get("/health");
+      } catch (_) {
+        // Keep-alive is best-effort; do not block test execution flow.
+      }
+    };
+
+    // Send one ping immediately, then every 4 minutes (Render free sleeps after 15 minutes idle).
+    ping();
+    keepAliveIntervalRef.current = setInterval(ping, 4 * 60 * 1000);
+  };
 
   // Fetch all data
   useEffect(() => {
     fetchAllData();
   }, [token]);
+
+  useEffect(() => {
+    return () => {
+      stopKeepAlivePings();
+    };
+  }, []);
 
   // Respond to route params: assignmentId -> open assignment, submissionId -> open student detail
   useEffect(() => {
@@ -413,6 +442,7 @@ export default function AdminDashboard() {
     setBulkTestsRunning(true);
     setError("");
     setBulkTestResults(null);
+    startKeepAlivePings();
 
     try {
       const response = await api.post(`/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`);
@@ -438,6 +468,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError("Error running bulk tests: " + err.message);
     } finally {
+      stopKeepAlivePings();
       setBulkTestsRunning(false);
     }
   };

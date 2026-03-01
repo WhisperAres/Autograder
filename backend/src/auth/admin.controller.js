@@ -1222,12 +1222,53 @@ const pLimit = (limit) => {
 // Track currently running bulk tests to prevent duplicates
 const runningTests = new Set();
 
+const resolveServiceBaseUrl = (req) => {
+  const envUrl =
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    process.env.FRONTEND_URL;
+
+  if (envUrl && typeof envUrl === "string") {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  const host = req?.headers?.host;
+  if (!host) return null;
+
+  const forwardedProto = req?.headers?.["x-forwarded-proto"];
+  const protocol = forwardedProto || (host.includes("localhost") ? "http" : "https");
+  return `${protocol}://${host}`;
+};
+
+const startKeepAlive = (req, label = "grading") => {
+  const baseUrl = resolveServiceBaseUrl(req);
+  if (!baseUrl) return () => {};
+
+  const pingUrl = `${baseUrl}/api/health`;
+  const intervalMs = 4 * 60 * 1000; // 4 min < 15 min Render idle timeout
+
+  const pingOnce = async () => {
+    try {
+      await fetch(pingUrl, { method: "GET" });
+    } catch (error) {
+      console.warn(`[KEEPALIVE:${label}] Ping failed: ${error.message}`);
+    }
+  };
+
+  // Best-effort immediate ping, then periodic ping.
+  pingOnce();
+  const interval = setInterval(() => { pingOnce(); }, intervalMs);
+
+  return () => clearInterval(interval);
+};
+
 // ==================== BULK OPERATIONS ====================
 
 // Run test cases for all submissions in an assignment
 exports.runBulkTests = async (req, res) => {
   const bulkStartTime = Date.now();
   const { assignmentId } = req.params;
+  const stopKeepAlive = startKeepAlive(req, `bulk-${assignmentId}`);
 
   // Prevent duplicate test runs
   if (runningTests.has(assignmentId)) {
@@ -1457,6 +1498,7 @@ exports.runBulkTests = async (req, res) => {
     console.error("Error during bulk tests:", error);
     res.status(500).json({ message: "Error during bulk tests" });
   } finally {
+    stopKeepAlive();
     // Remove from running tests to allow new runs
     runningTests.delete(assignmentId);
   }
@@ -1465,6 +1507,7 @@ exports.runBulkTests = async (req, res) => {
 // Run test cases for all submissions in an assignment - PARALLEL
 exports.runTestCasesForAll = async (req, res) => {
   const startTime = Date.now();
+  const stopKeepAlive = startKeepAlive(req, "run-all");
   try {
     const { assignmentId } = req.params;
     console.log(`[ALL TESTS] Starting parallel tests for assignment ${assignmentId}`);
@@ -1506,5 +1549,7 @@ exports.runTestCasesForAll = async (req, res) => {
   } catch (error) {
     console.error("Error running test cases for all submissions:", error);
     res.status(500).json({ message: "Error running test cases for all submissions" });
+  } finally {
+    stopKeepAlive();
   }
 };

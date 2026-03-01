@@ -48,6 +48,11 @@ Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolu
 app.use(cors());
 app.use(express.json());
 
+// Lightweight public health endpoint used for keep-alive pings
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, timestamp: new Date().toISOString() });
+});
+
 // // Routes
 // app.get("/", (req, res) => {
 //     res.send("Backend is running");
