@@ -1242,7 +1242,7 @@ const resolveServiceBaseUrl = (req) => {
 
 const startKeepAlive = (req, label = "grading") => {
   const baseUrl = resolveServiceBaseUrl(req);
-  if (!baseUrl) return () => {};
+  if (!baseUrl) return () => { };
 
   const pingUrl = `${baseUrl}/api/health`;
   const intervalMs = 4 * 60 * 1000; // 4 min < 15 min Render idle timeout
@@ -1277,7 +1277,7 @@ exports.runBulkTests = async (req, res) => {
   runningTests.add(assignmentId);
 
   try {
-    console.log(`[BULK TEST] Starting bulk tests for assignment ${assignmentId} at ${new Date().toISOString()}`);
+    console.log(`[BULK TEST] Starting optimized bulk tests for assignment ${assignmentId} at ${new Date().toISOString()}`);
 
     // 1. Fetch all submissions and the test cases for this assignment
     const submissions = await Submission.findAll({
@@ -1297,16 +1297,21 @@ exports.runBulkTests = async (req, res) => {
 
     console.log(`[BULK TEST] Processing ${submissions.length} submissions with ${testCases.length} test cases each`);
 
-    // DELETE all previous test results UPFRONT (before parallel execution) to avoid connection timeouts
+    // OPTIMIZATION 1: Fetch ALL code files for the entire assignment at once to reduce DB hits
+    console.log(`[BULK TEST] Pre-fetching all code files for the assignment...`);
+    const allCodeFiles = await CodeFile.findAll({
+      where: { submissionId: submissions.map(s => s.id) }
+    });
+
+    // OPTIMIZATION 2: Clear previous test results in ONE bulk query upfront
     console.log(`[BULK TEST] Clearing previous test results for ${submissions.length} submissions...`);
-    for (const submission of submissions) {
-      await TestResult.destroy({ where: { submissionId: submission.id } });
-    }
+    await TestResult.destroy({ where: { submissionId: submissions.map(s => s.id) } });
     console.log(`[BULK TEST] Test results cleared`);
 
-    // 2. Process submissions in parallel (max 2-3 at a time to avoid connection pool exhaustion)
     const submissionUpdates = [];
     const tempDirsToClean = [];
+
+    // OPTIMIZATION 3: Set pLimit to 5
     const submissionLimiter = pLimit(5);
 
     const studentResults = await Promise.all(submissions.map((submission, index) =>
@@ -1319,10 +1324,12 @@ exports.runBulkTests = async (req, res) => {
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
         try {
-          const codeFiles = await CodeFile.findAll({ where: { submissionId: submission.id } });
+          // OPTIMIZATION 4: Filter files from memory instead of individual DB queries
+          const codeFiles = allCodeFiles.filter(f => f.submissionId === submission.id);
           const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
 
           if (javaFiles.length === 0) {
+            console.log(`  ✗ ${submission.student.name}: No Java files found`);
             submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-code' });
             return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
           }
@@ -1337,90 +1344,53 @@ exports.runBulkTests = async (req, res) => {
           try {
             const compileStart = Date.now();
             const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
-              timeout: 20000, 
-              stdio: 'pipe' 
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+              timeout: 25000,
+              stdio: 'pipe'
             });
             console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
           } catch (compileErr) {
-            const errorMsg = compileErr.stderr?.toString() || "Compilation failed";
-            console.log(`  ✗ ${submission.student.name}: Compilation failed - giving 0 marks`);
+            console.log(`  ✗ ${submission.student.name}: Compilation failed`);
             submissionUpdates.push({ id: submission.id, marks: 0, status: 'compilation-error' });
             compileSuccess = false;
-            // Continue to next submission instead of returning - don't block others
           }
 
-          // If compilation failed, skip tests for this student and move on
           if (!compileSuccess) {
             return { studentName: submission.student.name, status: 'compilation-error', passCount: 0, totalCount: testCases.length };
           }
 
-          // Run test cases with limited concurrency (max 3 at a time)
+          // Run test cases with internal concurrency control
           const testResultsToSave = [];
-          const limiter = pLimit(5);
+          const testLimiter = pLimit(2); // Internal test concurrency (Low to save RAM)
 
           const results = await Promise.all(testCases.map((testCase, caseIndex) =>
-            limiter(async () => {
+            testLimiter(async () => {
               let passed = false;
               let actualOutput = "";
               let errorMessage = "";
 
               try {
-                let command = "";
-
-                if (javaFiles.length > 0) {
-                  // Create test harness Java file with index to prevent collisions
-                  const uniqueId = `${submission.id}_${caseIndex}`;
-                  const testFileName = `Test${uniqueId}.java`;
-                  const testClassName = `Test${uniqueId}`;
-                  const testCode = `public class ${testClassName} {
-        public static void main(String[] args) {
-          try {
-            ${transformJUnitStyle(testCase.testCode)}
-            System.out.println("PASS");
-          } catch (AssertionError e) {
-            System.out.println("FAIL: " + e.getMessage());
-          } catch (Exception e) {
-            System.out.println("FAIL: " + e.getMessage());
-          }
-        }
-      }`;
-                  fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-                  command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
-                  actualOutput = execSync(command, {
-                    encoding: "utf8",
-                    timeout: 10000,
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    maxBuffer: 1 * 1024 * 1024
-                  }).trim();
-                } else {
-                  const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
-                  if (mainFile.fileName.endsWith(".js")) {
-                    command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-                  } else if (mainFile.fileName.endsWith(".py")) {
-                    command = `cd "${tempDir}" && python ${mainFile.fileName}`;
-                  }
-
-                  if (command) {
-                    if (testCase.input) {
-                      actualOutput = execSync(command, {
-                        input: testCase.input,
-                        encoding: "utf8",
-                        stdio: ["pipe", "pipe", "pipe"],
-                        timeout: 10000,
-                        maxBuffer: 1 * 1024 * 1024
-                      }).trim();
-                    } else {
-                      actualOutput = execSync(command, {
-                        encoding: "utf8",
-                        timeout: 10000,
-                        maxBuffer: 1 * 1024 * 1024
-                      }).trim();
+                const uniqueId = `${submission.id}_${caseIndex}`;
+                const testClassName = `Test${uniqueId}`;
+                const testCode = `public class ${testClassName} {
+                  public static void main(String[] args) {
+                    try { 
+                      ${transformJUnitStyle(testCase.testCode)} 
+                      System.out.println("PASS"); 
+                    } catch (Throwable e) { 
+                      System.out.println("FAIL: " + e.getMessage()); 
                     }
                   }
-                }
+                }`;
+                fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
-                passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, {
+                  encoding: "utf8",
+                  timeout: 10000,
+                  stdio: ['pipe', 'pipe', 'pipe']
+                }).trim();
+
+                passed = actualOutput.includes("PASS");
               } catch (execError) {
                 errorMessage = execError.message || "Execution failed";
                 passed = false;
@@ -1431,17 +1401,13 @@ exports.runBulkTests = async (req, res) => {
                 testCaseId: testCase.id,
                 passed,
                 actualOutput: passed ? actualOutput : "",
-                errorMessage: !passed ? errorMessage : null
+                errorMessage: passed ? null : (errorMessage || "Assertion failed")
               });
 
-              return {
-                testName: testCase.testName,
-                passed,
-                actualOutput: passed ? actualOutput : "",
-                expectedOutput: testCase.expectedOutput,
-                errorMessage
-              };
-            })));
+              return { passed };
+            })
+          ));
+
           // Batch save all test results at once
           if (testResultsToSave.length > 0) {
             await fastBulkInsertResults(testResultsToSave);
@@ -1458,10 +1424,9 @@ exports.runBulkTests = async (req, res) => {
           const passCount = results.filter(r => r.passed).length;
           console.log(`  ✓ ${submission.student.name}: ${passCount}/${results.length} tests passed (${Date.now() - studentStartTime}ms)`);
 
-          // Store update info for bulk update later
           submissionUpdates.push({ id: submission.id, marks: totalMarksEarned, status: 'evaluated' });
-
           return { studentName: submission.student.name, status: 'success', passCount, totalCount: results.length, marksObtained: totalMarksEarned };
+
         } catch (err) {
           console.error(`Error processing submission ${submission.id}:`, err);
           submissionUpdates.push({ id: submission.id, marks: 0, status: 'error' });
@@ -1470,36 +1435,40 @@ exports.runBulkTests = async (req, res) => {
       })
     ));
 
-    // BULK UPDATE all submissions at once (much faster than individual updates)
+    // OPTIMIZATION 5: Update all submissions in a single transaction
+    console.log(`[BULK TEST] Updating marks for ${submissionUpdates.length} submissions...`);
     if (submissionUpdates.length > 0) {
-      const { sequelize } = Submission;
-      const { QueryTypes } = require('sequelize');
-
-      for (const update of submissionUpdates) {
-        await Submission.update(
-          { marks: update.marks, status: update.status },
-          { where: { id: update.id } }
-        );
-      }
+      await Submission.sequelize.transaction(async (t) => {
+        for (const update of submissionUpdates) {
+          await Submission.update(
+            { marks: update.marks, status: update.status },
+            { where: { id: update.id }, transaction: t }
+          );
+        }
+      });
     }
 
     const totalTime = Date.now() - bulkStartTime;
     console.log(`[BULK TEST] Completed bulk tests in ${totalTime}ms`);
 
-    res.json({ message: "Bulk tests completed", results: studentResults, totalTime: `${totalTime}ms` });
+    res.json({
+      message: "Bulk tests completed successfully",
+      results: studentResults,
+      totalTime: `${totalTime}ms`
+    });
 
-    // Clean up temp directories ASYNCHRONOUSLY after response is sent
+    // Clean up temp directories asynchronously
     setImmediate(() => {
       tempDirsToClean.forEach(dir => {
         try { safeDeletedir(dir); } catch (e) { console.warn(`Cleanup error for ${dir}:`, e.message); }
       });
     });
+
   } catch (error) {
-    console.error("Error during bulk tests:", error);
-    res.status(500).json({ message: "Error during bulk tests" });
+    console.error("Critical Bulk test error:", error);
+    res.status(500).json({ message: "Error during bulk tests: " + error.message });
   } finally {
     stopKeepAlive();
-    // Remove from running tests to allow new runs
     runningTests.delete(assignmentId);
   }
 };
