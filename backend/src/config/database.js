@@ -15,7 +15,7 @@ if (process.env.DATABASE_URL) {
       }
     },
     pool: {
-      max: 15,
+      max: 10,
       min: 1,
       acquire: 120000,
       idle: 10000

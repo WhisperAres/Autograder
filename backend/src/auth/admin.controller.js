@@ -1312,7 +1312,7 @@ exports.runBulkTests = async (req, res) => {
     const tempDirsToClean = [];
 
     // OPTIMIZATION 3: Set pLimit to 5
-    const submissionLimiter = pLimit(5);
+    const submissionLimiter = pLimit(3);
 
     const studentResults = await Promise.all(submissions.map((submission, index) =>
       submissionLimiter(async () => {
