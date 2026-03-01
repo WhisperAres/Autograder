@@ -1307,7 +1307,7 @@ exports.runBulkTests = async (req, res) => {
     // 2. Process submissions in parallel (max 2-3 at a time to avoid connection pool exhaustion)
     const submissionUpdates = [];
     const tempDirsToClean = [];
-    const submissionLimiter = pLimit(1);
+    const submissionLimiter = pLimit(5);
 
     const studentResults = await Promise.all(submissions.map((submission, index) =>
       submissionLimiter(async () => {
@@ -1323,7 +1323,7 @@ exports.runBulkTests = async (req, res) => {
           const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
 
           if (javaFiles.length === 0) {
-            submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-java-files' });
+            submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-code' });
             return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
           }
 
@@ -1357,7 +1357,7 @@ exports.runBulkTests = async (req, res) => {
 
           // Run test cases with limited concurrency (max 3 at a time)
           const testResultsToSave = [];
-          const limiter = pLimit(3);
+          const limiter = pLimit(5);
 
           const results = await Promise.all(testCases.map((testCase, caseIndex) =>
             limiter(async () => {
