@@ -87,7 +87,7 @@ const transformJUnitStyle = (code) => {
     return parts;
   };
 
-  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull','assertNull'];
+  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull', 'assertNull'];
   let i = 0;
   let out = '';
   while (i < code.length) {
@@ -1250,6 +1250,7 @@ exports.runBulkTests = async (req, res) => {
     });
 
     if (submissions.length === 0) {
+      runningTests.delete(assignmentId);
       return res.json({ message: "No submissions found", results: [] });
     }
 
@@ -1265,7 +1266,7 @@ exports.runBulkTests = async (req, res) => {
     // 2. Process submissions in parallel (max 2-3 at a time to avoid connection pool exhaustion)
     const submissionUpdates = [];
     const tempDirsToClean = [];
-    const submissionLimiter = pLimit(2); // Limit to 2 concurrent submissions
+    const submissionLimiter = pLimit(1);
 
     const studentResults = await Promise.all(submissions.map((submission, index) =>
       submissionLimiter(async () => {
@@ -1289,16 +1290,15 @@ exports.runBulkTests = async (req, res) => {
           for (const file of codeFiles) {
             fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
           }
-           
+
           // Compile all Java files ONCE before test loop
           let compileSuccess = true;
           try {
             const compileStart = Date.now();
             const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
-              timeout: 20000,
-              stdio: ['pipe', 'pipe', 'pipe'],
-              maxBuffer: 1 * 1024 * 1024
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
+              timeout: 20000, 
+              stdio: 'pipe' 
             });
             console.log(`  ✓ Compiled in ${Date.now() - compileStart}ms`);
           } catch (compileErr) {
@@ -1321,18 +1321,18 @@ exports.runBulkTests = async (req, res) => {
           const results = await Promise.all(testCases.map((testCase, caseIndex) =>
             limiter(async () => {
               let passed = false;
-            let actualOutput = "";
-            let errorMessage = "";
+              let actualOutput = "";
+              let errorMessage = "";
 
-            try {
-              let command = "";
+              try {
+                let command = "";
 
-              if (javaFiles.length > 0) {
-                // Create test harness Java file with index to prevent collisions
-                const uniqueId = `${submission.id}_${caseIndex}`;
-                const testFileName = `Test${uniqueId}.java`;
-                const testClassName = `Test${uniqueId}`;
-                const testCode = `public class ${testClassName} {
+                if (javaFiles.length > 0) {
+                  // Create test harness Java file with index to prevent collisions
+                  const uniqueId = `${submission.id}_${caseIndex}`;
+                  const testFileName = `Test${uniqueId}.java`;
+                  const testClassName = `Test${uniqueId}`;
+                  const testCode = `public class ${testClassName} {
         public static void main(String[] args) {
           try {
             ${transformJUnitStyle(testCase.testCode)}
@@ -1344,88 +1344,88 @@ exports.runBulkTests = async (req, res) => {
           }
         }
       }`;
-                fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-                command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
-                actualOutput = execSync(command, {
-                  encoding: "utf8",
-                  timeout: 10000,
-                  stdio: ['pipe', 'pipe', 'pipe'],
-                  maxBuffer: 1 * 1024 * 1024
-                }).trim();
-              } else {
-                const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
-                if (mainFile.fileName.endsWith(".js")) {
-                  command = `cd "${tempDir}" && node ${mainFile.fileName}`;
-                } else if (mainFile.fileName.endsWith(".py")) {
-                  command = `cd "${tempDir}" && python ${mainFile.fileName}`;
-                }
+                  fs.writeFileSync(path.join(tempDir, testFileName), testCode);
+                  command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+                  actualOutput = execSync(command, {
+                    encoding: "utf8",
+                    timeout: 10000,
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    maxBuffer: 1 * 1024 * 1024
+                  }).trim();
+                } else {
+                  const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
+                  if (mainFile.fileName.endsWith(".js")) {
+                    command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+                  } else if (mainFile.fileName.endsWith(".py")) {
+                    command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+                  }
 
-                if (command) {
-                  if (testCase.input) {
-                    actualOutput = execSync(command, {
-                      input: testCase.input,
-                      encoding: "utf8",
-                      stdio: ["pipe", "pipe", "pipe"],
-                      timeout: 10000,
-                      maxBuffer: 1 * 1024 * 1024
-                    }).trim();
-                  } else {
-                    actualOutput = execSync(command, {
-                      encoding: "utf8",
-                      timeout: 10000,
-                      maxBuffer: 1 * 1024 * 1024
-                    }).trim();
+                  if (command) {
+                    if (testCase.input) {
+                      actualOutput = execSync(command, {
+                        input: testCase.input,
+                        encoding: "utf8",
+                        stdio: ["pipe", "pipe", "pipe"],
+                        timeout: 10000,
+                        maxBuffer: 1 * 1024 * 1024
+                      }).trim();
+                    } else {
+                      actualOutput = execSync(command, {
+                        encoding: "utf8",
+                        timeout: 10000,
+                        maxBuffer: 1 * 1024 * 1024
+                      }).trim();
+                    }
                   }
                 }
+
+                passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+              } catch (execError) {
+                errorMessage = execError.message || "Execution failed";
+                passed = false;
               }
 
-              passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
-            } catch (execError) {
-              errorMessage = execError.message || "Execution failed";
-              passed = false;
-            }
+              testResultsToSave.push({
+                submissionId: submission.id,
+                testCaseId: testCase.id,
+                passed,
+                actualOutput: passed ? actualOutput : "",
+                errorMessage: !passed ? errorMessage : null
+              });
 
-            testResultsToSave.push({
-              submissionId: submission.id,
-              testCaseId: testCase.id,
-              passed,
-              actualOutput: passed ? actualOutput : "",
-              errorMessage: !passed ? errorMessage : null
-            });
-
-            return {
-              testName: testCase.testName,
-              passed,
-              actualOutput: passed ? actualOutput : "",
-              expectedOutput: testCase.expectedOutput,
-              errorMessage
-            };
-          })));
-        // Batch save all test results at once
-        if (testResultsToSave.length > 0) {
-          await fastBulkInsertResults(testResultsToSave);
-        }
-
-        // Calculate marks
-        let totalMarksEarned = 0;
-        for (let i = 0; i < results.length; i++) {
-          if (results[i].passed) {
-            totalMarksEarned += parseFloat(testCases[i].marks) || 0;
+              return {
+                testName: testCase.testName,
+                passed,
+                actualOutput: passed ? actualOutput : "",
+                expectedOutput: testCase.expectedOutput,
+                errorMessage
+              };
+            })));
+          // Batch save all test results at once
+          if (testResultsToSave.length > 0) {
+            await fastBulkInsertResults(testResultsToSave);
           }
+
+          // Calculate marks
+          let totalMarksEarned = 0;
+          for (let i = 0; i < results.length; i++) {
+            if (results[i].passed) {
+              totalMarksEarned += parseFloat(testCases[i].marks) || 0;
+            }
+          }
+
+          const passCount = results.filter(r => r.passed).length;
+          console.log(`  ✓ ${submission.student.name}: ${passCount}/${results.length} tests passed (${Date.now() - studentStartTime}ms)`);
+
+          // Store update info for bulk update later
+          submissionUpdates.push({ id: submission.id, marks: totalMarksEarned, status: 'evaluated' });
+
+          return { studentName: submission.student.name, status: 'success', passCount, totalCount: results.length, marksObtained: totalMarksEarned };
+        } catch (err) {
+          console.error(`Error processing submission ${submission.id}:`, err);
+          submissionUpdates.push({ id: submission.id, marks: 0, status: 'error' });
+          return { studentName: submission.student.name, status: 'error', error: err.message, passCount: 0, totalCount: testCases.length };
         }
-
-        const passCount = results.filter(r => r.passed).length;
-        console.log(`  ✓ ${submission.student.name}: ${passCount}/${results.length} tests passed (${Date.now() - studentStartTime}ms)`);
-
-        // Store update info for bulk update later
-        submissionUpdates.push({ id: submission.id, marks: totalMarksEarned, status: 'evaluated' });
-
-        return { studentName: submission.student.name, status: 'success', passCount, totalCount: results.length, marksObtained: totalMarksEarned };
-      } catch (err) {
-        console.error(`Error processing submission ${submission.id}:`, err);
-        submissionUpdates.push({ id: submission.id, marks: 0, status: 'error' });
-        return { studentName: submission.student.name, status: 'error', error: err.message, passCount: 0, totalCount: testCases.length };
-      }
       })
     ));
 
