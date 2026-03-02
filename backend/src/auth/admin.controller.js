@@ -801,7 +801,7 @@ exports.runTestCases = async (req, res) => {
       }
 
       // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
-      const limiter = pLimit(5);
+      const limiter = pLimit(3);
       const results = await Promise.all(testCases.map((testCase, caseIndex) =>
         limiter(async () => {
           let passed = false;
