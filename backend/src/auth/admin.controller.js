@@ -801,7 +801,7 @@ exports.runTestCases = async (req, res) => {
       }
 
       // Run test cases with limited concurrency (max 5 at a time to prevent resource exhaustion)
-      const limiter = pLimit(3);
+      const limiter = pLimit(5);
       const results = await Promise.all(testCases.map((testCase, caseIndex) =>
         limiter(async () => {
           let passed = false;
@@ -1312,7 +1312,7 @@ exports.runBulkTests = async (req, res) => {
     const tempDirsToClean = [];
 
     // OPTIMIZATION 3: Set pLimit to 5
-    const submissionLimiter = pLimit(3);
+    const submissionLimiter = pLimit(2);
 
     const studentResults = await Promise.all(submissions.map((submission, index) =>
       submissionLimiter(async () => {
