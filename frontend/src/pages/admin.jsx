@@ -159,7 +159,7 @@ export default function AdminDashboard() {
 
     // Send one ping immediately, then every 4 minutes (Render free sleeps after 15 minutes idle).
     ping();
-    keepAliveIntervalRef.current = setInterval(ping, 4 * 60 * 1000);
+    keepAliveIntervalRef.current = setInterval(ping, 2 * 60 * 1000);
   };
 
   // Fetch all data

@@ -1245,7 +1245,7 @@ const startKeepAlive = (req, label = "grading") => {
   if (!baseUrl) return () => { };
 
   const pingUrl = `${baseUrl}/api/health`;
-  const intervalMs = 4 * 60 * 1000; // 4 min < 15 min Render idle timeout
+  const intervalMs = 2 * 60 * 1000; // 2 min < 15 min Render idle timeout
 
   const pingOnce = async () => {
     try {
@@ -1361,7 +1361,7 @@ exports.runBulkTests = async (req, res) => {
 
           // Run test cases with internal concurrency control
           const testResultsToSave = [];
-          const testLimiter = pLimit(3); // Internal test concurrency (Low to save RAM)
+          const testLimiter = pLimit(1); // Internal test concurrency (Low to save RAM)
 
           const results = await Promise.all(testCases.map((testCase, caseIndex) =>
             testLimiter(async () => {
