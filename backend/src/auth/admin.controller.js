@@ -1331,7 +1331,7 @@ exports.runBulkTests = async (req, res) => {
           if (javaFiles.length === 0) {
             console.log(`  ✗ ${submission.student.name}: No Java files found`);
             submissionUpdates.push({ id: submission.id, marks: 0, status: 'no-code' });
-            return { studentName: submission.student.name, status: 'no-java-files', passCount: 0, totalCount: testCases.length };
+            return { studentName: submission.student.name, status: 'no-code', passCount: 0, totalCount: testCases.length };
           }
 
           // Write all code files to disk
