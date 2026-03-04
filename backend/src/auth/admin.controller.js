@@ -1361,7 +1361,7 @@ exports.runBulkTests = async (req, res) => {
 
           // Run test cases with internal concurrency control
           const testResultsToSave = [];
-          const testLimiter = pLimit(2); // Internal test concurrency (Low to save RAM)
+          const testLimiter = pLimit(3); // Internal test concurrency (Low to save RAM)
 
           const results = await Promise.all(testCases.map((testCase, caseIndex) =>
             testLimiter(async () => {
