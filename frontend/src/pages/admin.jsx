@@ -133,6 +133,12 @@ export default function AdminDashboard() {
   const [newAssignment, setNewAssignment] = useState({ title: "", description: "", dueDate: "", totalMarks: 100 });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [newUser, setNewUser] = useState({ email: "", name: "", role: "student" });
+  const [studentSearchInput, setStudentSearchInput] = useState("");
+  const [graderSearchInput, setGraderSearchInput] = useState("");
+  const [adminSearchInput, setAdminSearchInput] = useState("");
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
+  const [graderSearchQuery, setGraderSearchQuery] = useState("");
+  const [adminSearchQuery, setAdminSearchQuery] = useState("");
   const [selectedUserRole, setSelectedUserRole] = useState("");
   const [submissionMarks, setSubmissionMarks] = useState("");
   const [testResults, setTestResults] = useState(null);
@@ -560,6 +566,20 @@ export default function AdminDashboard() {
   const studentUsers = users.filter(u => u.role === "student");
   const taUsers = users.filter(u => u.role === "grader");
   const adminUsers = users.filter(u => u.role === "admin");
+
+  const matchesUserSearch = (user, query) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return true;
+
+    return (
+      user.name?.toLowerCase().includes(normalizedQuery) ||
+      user.email?.toLowerCase().includes(normalizedQuery)
+    );
+  };
+
+  const filteredStudentUsers = studentUsers.filter(user => matchesUserSearch(user, studentSearchQuery));
+  const filteredTaUsers = taUsers.filter(user => matchesUserSearch(user, graderSearchQuery));
+  const filteredAdminUsers = adminUsers.filter(user => matchesUserSearch(user, adminSearchQuery));
 
   return (
     <div className="
@@ -1414,6 +1434,28 @@ export default function AdminDashboard() {
           <div className="users-grid">
             <div className="users-category" style={{ height: '100%' }}>
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Students ({studentUsers.length})</h3>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={studentSearchInput}
+                  onChange={(e) => setStudentSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setStudentSearchQuery(studentSearchInput);
+                    }
+                  }}
+                  placeholder="Search student by name or email"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setStudentSearchQuery(studentSearchInput)}
+                >
+                  Search
+                </button>
+              </div>
               <div style={{
                 maxHeight: '400px',
                 overflowY: 'auto',
@@ -1423,7 +1465,7 @@ export default function AdminDashboard() {
                 padding: '10px',
                 background: 'rgba(0,0,0,0.02)'
               }}>
-                {studentUsers.map(user => (
+                {filteredStudentUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
                       <h4>{user.name}</h4>
@@ -1448,6 +1490,28 @@ export default function AdminDashboard() {
 
             <div className="users-category">
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Graders ({taUsers.length})</h3>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={graderSearchInput}
+                  onChange={(e) => setGraderSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setGraderSearchQuery(graderSearchInput);
+                    }
+                  }}
+                  placeholder="Search grader by name or email"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setGraderSearchQuery(graderSearchInput)}
+                >
+                  Search
+                </button>
+              </div>
               <div style={{
                 maxHeight: '400px',
                 overflowY: 'auto',
@@ -1457,7 +1521,7 @@ export default function AdminDashboard() {
                 padding: '10px',
                 background: 'rgba(0,0,0,0.02)'
               }}>
-                {taUsers.map(user => (
+                {filteredTaUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
                       <h4>{user.name}</h4>
@@ -1482,6 +1546,28 @@ export default function AdminDashboard() {
 
             <div className="users-category">
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Admins ({adminUsers?.length || 0})</h3>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={adminSearchInput}
+                  onChange={(e) => setAdminSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      setAdminSearchQuery(adminSearchInput);
+                    }
+                  }}
+                  placeholder="Search admin by name or email"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setAdminSearchQuery(adminSearchInput)}
+                >
+                  Search
+                </button>
+              </div>
               <div style={{
                 maxHeight: '400px',
                 overflowY: 'auto',
@@ -1491,7 +1577,7 @@ export default function AdminDashboard() {
                 padding: '10px',
                 background: 'rgba(0,0,0,0.02)'
               }}>
-                {adminUsers.map(user => (
+                {filteredAdminUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
                       <h4>{user.name}</h4>
