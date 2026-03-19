@@ -1443,7 +1443,7 @@ export default function AdminDashboard() {
                     setStudentSearchInput(e.target.value);
                     setStudentSearchQuery(e.target.value);
                   }}
-                  placeholder="Search students by name or email"
+                  placeholder="Search Students"
                 />
               </div>
               <div className="users-list-panel">
@@ -1481,7 +1481,7 @@ export default function AdminDashboard() {
                     setGraderSearchInput(e.target.value);
                     setGraderSearchQuery(e.target.value);
                   }}
-                  placeholder="Search graders by name or email"
+                  placeholder="Search Graders"
                 />
               </div>
               <div className="users-list-panel">
@@ -1519,7 +1519,7 @@ export default function AdminDashboard() {
                     setAdminSearchInput(e.target.value);
                     setAdminSearchQuery(e.target.value);
                   }}
-                  placeholder="Search admins by name or email"
+                  placeholder="Search Admins"
                 />
               </div>
               <div className="users-list-panel">
