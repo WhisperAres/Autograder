@@ -1445,8 +1445,8 @@ export default function AdminDashboard() {
                       setStudentSearchQuery(studentSearchInput);
                     }
                   }}
-                  placeholder="Search student by name or email"
-                  style={{ flex: 1 }}
+                  placeholder="Search student"
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
                 />
                 <button
                   type="button"
@@ -1501,8 +1501,8 @@ export default function AdminDashboard() {
                       setGraderSearchQuery(graderSearchInput);
                     }
                   }}
-                  placeholder="Search grader by name or email"
-                  style={{ flex: 1 }}
+                  placeholder="Search grader"
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
                 />
                 <button
                   type="button"
@@ -1557,8 +1557,8 @@ export default function AdminDashboard() {
                       setAdminSearchQuery(adminSearchInput);
                     }
                   }}
-                  placeholder="Search admin by name or email"
-                  style={{ flex: 1 }}
+                  placeholder="Search admin"
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
                 />
                 <button
                   type="button"
