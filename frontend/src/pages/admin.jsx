@@ -1438,23 +1438,13 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={studentSearchInput}
-                  onChange={(e) => setStudentSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      setStudentSearchQuery(studentSearchInput);
-                    }
+                  onChange={(e) => {
+                    setStudentSearchInput(e.target.value);
+                    setStudentSearchQuery(e.target.value);
                   }}
                   placeholder="Search student"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1, alignContent: 'center' }}
                 />
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setStudentSearchQuery(studentSearchInput)}
-                >
-                  Search
-                </button>
               </div>
               <div style={{
                 maxHeight: '400px',
@@ -1494,23 +1484,13 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={graderSearchInput}
-                  onChange={(e) => setGraderSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      setGraderSearchQuery(graderSearchInput);
-                    }
+                  onChange={(e) => {
+                    setGraderSearchInput(e.target.value);
+                    setGraderSearchQuery(e.target.value);
                   }}
                   placeholder="Search grader"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1, alignContent: 'center' }}
                 />
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setGraderSearchQuery(graderSearchInput)}
-                >
-                  Search
-                </button>
               </div>
               <div style={{
                 maxHeight: '400px',
@@ -1550,23 +1530,13 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={adminSearchInput}
-                  onChange={(e) => setAdminSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      setAdminSearchQuery(adminSearchInput);
-                    }
+                  onChange={(e) => {
+                    setAdminSearchInput(e.target.value);
+                    setAdminSearchQuery(e.target.value);
                   }}
                   placeholder="Search admin"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 }}
+                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 , alignContent: 'center'}}
                 />
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setAdminSearchQuery(adminSearchInput)}
-                >
-                  Search
-                </button>
               </div>
               <div style={{
                 maxHeight: '400px',
