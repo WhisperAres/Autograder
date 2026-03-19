@@ -145,6 +145,9 @@ export default function AdminDashboard() {
   const [bulkTestsRunning, setBulkTestsRunning] = useState(false);
   const [bulkTestResults, setBulkTestResults] = useState(null);
   const keepAliveIntervalRef = useRef(null);
+  const studentSearchRef = useRef(null);
+  const graderSearchRef = useRef(null);
+  const adminSearchRef = useRef(null);
 
   const stopKeepAlivePings = () => {
     if (keepAliveIntervalRef.current) {
@@ -178,6 +181,16 @@ export default function AdminDashboard() {
       stopKeepAlivePings();
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "users") return;
+
+    requestAnimationFrame(() => {
+      studentSearchRef.current?.blur();
+      graderSearchRef.current?.blur();
+      adminSearchRef.current?.blur();
+    });
+  }, [activeTab]);
 
   // Respond to route params: assignmentId -> open assignment, submissionId -> open student detail
   useEffect(() => {
@@ -1436,6 +1449,7 @@ export default function AdminDashboard() {
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Students ({studentUsers.length})</h3>
               <div className="user-search-bar">
                 <input
+                  ref={studentSearchRef}
                   className="user-search-input"
                   type="text"
                   value={studentSearchInput}
@@ -1474,6 +1488,7 @@ export default function AdminDashboard() {
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Graders ({taUsers.length})</h3>
               <div className="user-search-bar">
                 <input
+                  ref={graderSearchRef}
                   className="user-search-input"
                   type="text"
                   value={graderSearchInput}
@@ -1512,6 +1527,7 @@ export default function AdminDashboard() {
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Admins ({adminUsers?.length || 0})</h3>
               <div className="user-search-bar">
                 <input
+                  ref={adminSearchRef}
                   className="user-search-input"
                   type="text"
                   value={adminSearchInput}
