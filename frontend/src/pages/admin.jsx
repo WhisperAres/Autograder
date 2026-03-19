@@ -1434,27 +1434,19 @@ export default function AdminDashboard() {
           <div className="users-grid">
             <div className="users-category" style={{ height: '100%' }}>
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Students ({studentUsers.length})</h3>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <div className="user-search-bar">
                 <input
+                  className="user-search-input"
                   type="text"
                   value={studentSearchInput}
                   onChange={(e) => {
                     setStudentSearchInput(e.target.value);
                     setStudentSearchQuery(e.target.value);
                   }}
-                  placeholder="Search student"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1, alignContent: 'center' }}
+                  placeholder="Search students by name or email"
                 />
               </div>
-              <div style={{
-                maxHeight: '400px',
-                overflowY: 'auto',
-                paddingRight: '10px',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'rgba(0,0,0,0.02)'
-              }}>
+              <div className="users-list-panel">
                 {filteredStudentUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
@@ -1480,27 +1472,19 @@ export default function AdminDashboard() {
 
             <div className="users-category">
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Graders ({taUsers.length})</h3>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <div className="user-search-bar">
                 <input
+                  className="user-search-input"
                   type="text"
                   value={graderSearchInput}
                   onChange={(e) => {
                     setGraderSearchInput(e.target.value);
                     setGraderSearchQuery(e.target.value);
                   }}
-                  placeholder="Search grader"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1, alignContent: 'center' }}
+                  placeholder="Search graders by name or email"
                 />
               </div>
-              <div style={{
-                maxHeight: '400px',
-                overflowY: 'auto',
-                paddingRight: '10px',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'rgba(0,0,0,0.02)'
-              }}>
+              <div className="users-list-panel">
                 {filteredTaUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
@@ -1526,27 +1510,19 @@ export default function AdminDashboard() {
 
             <div className="users-category">
               <h3 style={{ color: 'var(--text)', marginBottom: '10px' }}>Admins ({adminUsers?.length || 0})</h3>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <div className="user-search-bar">
                 <input
+                  className="user-search-input"
                   type="text"
                   value={adminSearchInput}
                   onChange={(e) => {
                     setAdminSearchInput(e.target.value);
                     setAdminSearchQuery(e.target.value);
                   }}
-                  placeholder="Search admin"
-                  style={{color: 'var(--text)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', flex: 1 , alignContent: 'center'}}
+                  placeholder="Search admins by name or email"
                 />
               </div>
-              <div style={{
-                maxHeight: '400px',
-                overflowY: 'auto',
-                paddingRight: '10px',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'rgba(0,0,0,0.02)'
-              }}>
+              <div className="users-list-panel">
                 {filteredAdminUsers.map(user => (
                   <div key={user.id} className="user-card">
                     <div className="user-info">
