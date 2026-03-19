@@ -653,6 +653,7 @@
 .user-search-input::placeholder {
   color: var(--text-muted);
   text-align: left;
+  border-left: 2px solid var(--primary);
 }
 
 .user-search-input:focus {
