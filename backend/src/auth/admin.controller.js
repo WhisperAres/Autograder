@@ -684,7 +684,7 @@ exports.runSingleTest = async (req, res) => {
 
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
           timeout: 20000,
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 1 * 1024 * 1024
@@ -714,7 +714,7 @@ exports.runSingleTest = async (req, res) => {
       fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
       try {
-        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
         const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024 }).trim();
         const passed = actualOutput.includes("PASS");
         res.json({ testName: testCase.testName, testCaseId: testCase.id, passed, actualOutput: passed ? actualOutput : "", errorMessage: passed ? null : "Assertion failed", marks: testCase.marks || 0 });
@@ -781,7 +781,7 @@ exports.runTestCases = async (req, res) => {
       if (javaFiles.length > 0) {
         try {
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 5 * 1024 * 1024
@@ -830,7 +830,7 @@ exports.runTestCases = async (req, res) => {
         }
       }`;
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-              command = `cd "${tempDir}" && ${JAVAC_CMD} ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+              command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testFileName} && ${JAVA_CMD} ${testClassName}`;
               actualOutput = execSync(command, {
                 encoding: "utf8",
                 timeout: 15000,
@@ -1344,7 +1344,7 @@ exports.runBulkTests = async (req, res) => {
           try {
             const compileStart = Date.now();
             const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, {
+            execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
               timeout: 25000,
               stdio: 'pipe'
             });
@@ -1384,7 +1384,7 @@ exports.runBulkTests = async (req, res) => {
                 }`;
                 fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
-                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, {
+                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, {
                   encoding: "utf8",
                   timeout: 10000,
                   stdio: ['pipe', 'pipe', 'pipe']

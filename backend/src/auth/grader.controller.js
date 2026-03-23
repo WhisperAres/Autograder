@@ -217,7 +217,7 @@ exports.runTestCases = async (req, res) => {
       // [STEP 1] Compile all student Java files together
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, { 
           timeout: 20000, 
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 5 * 1024 * 1024
@@ -257,7 +257,7 @@ exports.runTestCases = async (req, res) => {
           fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
           // Compile and run the harness
-          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
           actualOutput = execSync(cmd, {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
@@ -539,7 +539,7 @@ exports.runGraderTests = async (req, res) => {
         
         try {
           // Compile all solution files
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${javaFileNames}`, { 
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, { 
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 1 * 1024 * 1024
@@ -583,7 +583,7 @@ exports.runGraderTests = async (req, res) => {
             fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
             // Compile and Run only the harness (linking to pre-compiled solution)
-            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, { 
+            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, { 
               timeout: 20000,
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],
