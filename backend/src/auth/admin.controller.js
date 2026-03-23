@@ -144,11 +144,21 @@ const transformJUnitStyle = (code) => {
 
 // Helper to generate class field declarations from uploaded Java files
 const generateFieldDeclarations = (javaFiles) => {
-  return javaFiles.map(file => {
+  console.log("[generateFieldDeclarations] Called with javaFiles:", javaFiles);
+  if (!javaFiles || !Array.isArray(javaFiles)) {
+    console.log("[generateFieldDeclarations] javaFiles is not a valid array! Type:", typeof javaFiles);
+    return '';
+  }
+  console.log("[generateFieldDeclarations] javaFiles.length:", javaFiles.length);
+  const declarations = javaFiles.map(file => {
     const className = file.fileName.replace('.java', '');
     const fieldName = className.toLowerCase();
-    return `  public static ${className} ${fieldName};`;
+    const decl = `  public static ${className} ${fieldName};`;
+    console.log("[generateFieldDeclarations] Generated field:", decl);
+    return decl;
   }).join('\n');
+  console.log("[generateFieldDeclarations] Final declarations:\n", declarations);
+  return declarations;
 };
 
 // Detect potential infinite loops in test code
@@ -787,7 +797,9 @@ exports.runTestCases = async (req, res) => {
 
       // Compile all Java files ONCE before test loop
       const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
-      console.log("Java files for submission:", javaFiles.map(f => f.fileName));
+      console.log("[admin.runTestCases] Submission:", submissionId);
+      console.log("[admin.runTestCases] Total codeFiles:", codeFiles.length, "Files:", codeFiles.map(f => f.fileName));
+      console.log("[admin.runTestCases] Filtered javaFiles:", javaFiles.length, "Files:", javaFiles.map(f => f.fileName));
       if (javaFiles.length > 0) {
         try {
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
@@ -827,8 +839,11 @@ exports.runTestCases = async (req, res) => {
               const uniqueId = `${submissionId}_${caseIndex}`;
               const testFileName = `Test${uniqueId}.java`;
               const testClassName = `Test${uniqueId}`;
+              console.log("[testCode generation] caseIndex:", caseIndex, "javaFiles:", javaFiles.map(f => f.fileName));
+              const fieldDecls = generateFieldDeclarations(javaFiles);
+              console.log("[testCode generation] fieldDecls:", fieldDecls);
               const testCode = `public class ${testClassName} {
-${generateFieldDeclarations(javaFiles)}
+${fieldDecls}
   public static void main(String[] args) {
     try {
       ${transformJUnitStyle(testCase.testCode)}
