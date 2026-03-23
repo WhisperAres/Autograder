@@ -130,6 +130,15 @@ const transformJUnitStyle = (code) => {
   return out;
 };
 
+// Helper to generate class field declarations from uploaded Java files
+const generateFieldDeclarations = (javaFiles) => {
+  return javaFiles.map(file => {
+    const className = file.fileName.replace('.java', '');
+    const fieldName = className.toLowerCase();
+    return `  private static ${className} ${fieldName};`;
+  }).join('\n');
+};
+
 // Get all assignments (for grader to select from)
 exports.getAssignments = async (req, res) => {
   try {
@@ -242,17 +251,18 @@ exports.runTestCases = async (req, res) => {
           const uniqueId = Date.now() + Math.random().toString().replace('.', '');
           const testClassName = `Test${uniqueId}`;
           const testCode = `public class ${testClassName} {
-            public static void main(String[] args) {
-              try {
-                ${transformJUnitStyle(testCase.testCode)}
-                System.out.println("PASS");
-              } catch (AssertionError e) {
-                System.out.println("FAIL: " + e.getMessage());
-              } catch (Exception e) {
-                System.out.println("FAIL: " + e.getMessage());
-              }
-            }
-          }`;
+${generateFieldDeclarations(javaFiles)}
+  public static void main(String[] args) {
+    try {
+      ${transformJUnitStyle(testCase.testCode)}
+      System.out.println("PASS");
+    } catch (AssertionError e) {
+      System.out.println("FAIL: " + e.getMessage());
+    } catch (Exception e) {
+      System.out.println("FAIL: " + e.getMessage());
+    }
+  }
+}`;
           
           fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 

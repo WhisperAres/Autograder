@@ -142,6 +142,15 @@ const transformJUnitStyle = (code) => {
   return out;
 };
 
+// Helper to generate class field declarations from uploaded Java files
+const generateFieldDeclarations = (javaFiles) => {
+  return javaFiles.map(file => {
+    const className = file.fileName.replace('.java', '');
+    const fieldName = className.toLowerCase();
+    return `  private static ${className} ${fieldName};`;
+  }).join('\n');
+};
+
 // Detect potential infinite loops in test code
 const detectInfiniteLoop = (code) => {
   const warnings = [];
@@ -818,17 +827,18 @@ exports.runTestCases = async (req, res) => {
               const testFileName = `Test${uniqueId}.java`;
               const testClassName = `Test${uniqueId}`;
               const testCode = `public class ${testClassName} {
-        public static void main(String[] args) {
-          try {
-            ${transformJUnitStyle(testCase.testCode)}
-            System.out.println("PASS");
-          } catch (AssertionError e) {
-            System.out.println("FAIL: " + e.getMessage());
-          } catch (Exception e) {
-            System.out.println("FAIL: " + e.getMessage());
-          }
-        }
-      }`;
+${generateFieldDeclarations(javaFiles)}
+  public static void main(String[] args) {
+    try {
+      ${transformJUnitStyle(testCase.testCode)}
+      System.out.println("PASS");
+    } catch (AssertionError e) {
+      System.out.println("FAIL: " + e.getMessage());
+    } catch (Exception e) {
+      System.out.println("FAIL: " + e.getMessage());
+    }
+  }
+}`;
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
               command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testFileName} && ${JAVA_CMD} ${testClassName}`;
               actualOutput = execSync(command, {
