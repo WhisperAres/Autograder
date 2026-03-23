@@ -135,7 +135,7 @@ const generateFieldDeclarations = (javaFiles) => {
   return javaFiles.map(file => {
     const className = file.fileName.replace('.java', '');
     const fieldName = className.toLowerCase();
-    return `  private static ${className} ${fieldName};`;
+    return `  public static ${className} ${fieldName};`;
   }).join('\n');
 };
 
@@ -209,6 +209,7 @@ exports.runTestCases = async (req, res) => {
     const codeFiles = submission.codeFiles;
     const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
     
+    console.log("Java files for submission:", javaFiles.map(f => f.fileName));
     if (javaFiles.length === 0) {
       return res.status(404).json({ message: "No Java files found in submission" });
     }
@@ -264,6 +265,7 @@ ${generateFieldDeclarations(javaFiles)}
   }
 }`;
           
+          console.log("Generated test code for", testCase.testName, ":\n", testCode);
           fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
           // Compile and run the harness
