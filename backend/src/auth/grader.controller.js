@@ -46,6 +46,32 @@ const safeDeletedir = (dirpath) => {
   }
 };
 
+// Build classpath for Java compile/run, including optional junit/hamcrest jars
+const getJavaClasspath = (tempDir) => {
+  const cpItems = [tempDir];
+  const rootLib = path.join(__dirname, '../../lib');
+  const junitJar = path.join(rootLib, 'junit-4.13.2.jar');
+  const hamcrestJar = path.join(rootLib, 'hamcrest-core-1.3.jar');
+
+  if (fs.existsSync(junitJar)) cpItems.push(junitJar);
+  if (fs.existsSync(hamcrestJar)) cpItems.push(hamcrestJar);
+
+  if (process.env.JUNIT_CLASSPATH) {
+    cpItems.push(process.env.JUNIT_CLASSPATH);
+  }
+
+  return cpItems.join(path.delimiter);
+};
+
+// Remove JUnit imports from submitted code if junit libs are not available
+const sanitizeJavaSource = (source) => {
+  if (typeof source !== 'string') return source;
+  return source
+    .split(/\r?\n/)
+    .filter(line => !line.trim().startsWith('import org.junit.') && !line.trim().startsWith('import static org.junit.'))
+    .join('\n');
+};
+
 // Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
 const transformJUnitStyle = (code) => {
   if (!code || typeof code !== 'string') return code;
@@ -130,13 +156,33 @@ const transformJUnitStyle = (code) => {
   return out;
 };
 
-// Helper to generate class field declarations from uploaded Java files
-const generateFieldDeclarations = (javaFiles) => {
-  if (!javaFiles || !Array.isArray(javaFiles)) return '';
-  return javaFiles.map(file => {
-    const className = file.fileName.replace('.java', '');
-    return `  public static ${className} ${className.toLowerCase()};`;
-  }).join('\n');
+// Helper to generate class field declarations from uploaded Java files and test code object assignments
+const generateFieldDeclarations = (javaFiles, testCode = '') => {
+  const fieldMap = new Map();
+
+  if (Array.isArray(javaFiles)) {
+    for (const file of javaFiles) {
+      const className = file.fileName.replace('.java', '');
+      const fieldName = className.toLowerCase();
+      fieldMap.set(fieldName, className);
+    }
+  }
+
+  if (typeof testCode === 'string' && testCode.trim() !== '') {
+    const assignmentRegex = /(?:^|[;\n\r\t ])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*new\s+([A-Z][a-zA-Z0-9_]*)(?:\s*<[^>]*>)?\s*\(/g;
+    let m;
+    while ((m = assignmentRegex.exec(testCode)) !== null) {
+      const varName = m[1];
+      const className = m[2];
+      if (!fieldMap.has(varName)) {
+        fieldMap.set(varName, className);
+      }
+    }
+  }
+
+  return [...fieldMap.entries()]
+    .map(([fieldName, className]) => `  public static ${className} ${fieldName};`)
+    .join('\n');
 };
 
 // Extract import lines from submitted test code and return the body without imports
@@ -243,13 +289,15 @@ exports.runTestCases = async (req, res) => {
     try {
       // Write student Java files
       for (const codeFile of javaFiles) {
-        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
+        const sanitized = sanitizeJavaSource(codeFile.fileContent);
+        fs.writeFileSync(path.join(tempDir, codeFile.fileName), sanitized, "utf8");
       }
 
       // [STEP 1] Compile all student Java files together
       try {
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, { 
+        const classpath = getJavaClasspath(tempDir);
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, { 
           timeout: 20000, 
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 5 * 1024 * 1024
@@ -275,7 +323,7 @@ exports.runTestCases = async (req, res) => {
           const testClassName = `Test${uniqueId}`;
           const { imports, body } = extractImportsFromTestCode(testCase.testCode);
           console.log("[grader.runTestCases] Generating test for:", testCase.testName, "javaFiles:", javaFiles.map(f => f.fileName));
-          const fieldDecls = generateFieldDeclarations(javaFiles);
+          const fieldDecls = generateFieldDeclarations(javaFiles, body);
           console.log("[grader.runTestCases] fieldDecls:", fieldDecls);
           const testBody = transformJUnitStyle(body);
           const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
@@ -296,7 +344,8 @@ ${fieldDecls}
           fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
           // Compile and run the harness
-          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+          const classpath = getJavaClasspath(tempDir);
+          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
           actualOutput = execSync(cmd, {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],

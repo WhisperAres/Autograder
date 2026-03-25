@@ -181,6 +181,31 @@ const detectInfiniteLoop = (code) => {
   return warnings;
 };
 
+// Build classpath for Java compile/run, including optional junit/hamcrest jars
+const getJavaClasspath = (tempDir) => {
+  const cpItems = [tempDir];
+  const rootLib = path.join(__dirname, '../../lib');
+  const junitJar = path.join(rootLib, 'junit-4.13.2.jar');
+  const hamcrestJar = path.join(rootLib, 'hamcrest-core-1.3.jar');
+
+  if (fs.existsSync(junitJar)) cpItems.push(junitJar);
+  if (fs.existsSync(hamcrestJar)) cpItems.push(hamcrestJar);
+
+  if (process.env.JUNIT_CLASSPATH) {
+    cpItems.push(process.env.JUNIT_CLASSPATH);
+  }
+
+  return cpItems.join(path.delimiter);
+};
+
+const sanitizeJavaSource = (source) => {
+  if (typeof source !== 'string') return source;
+  return source
+    .split(/\r?\n/)
+    .filter(line => !line.trim().startsWith('import org.junit.') && !line.trim().startsWith('import static org.junit.'))
+    .join('\n');
+};
+
 // Safe file cleanup with timeout
 const safeDeletedir = (dirpath) => {
   try {
@@ -799,7 +824,8 @@ exports.runTestCases = async (req, res) => {
     try {
       for (const codeFile of codeFiles) {
         const filePath = path.join(tempDir, codeFile.fileName);
-        fs.writeFileSync(filePath, codeFile.fileContent, "utf8");
+        const sanitized = sanitizeJavaSource(codeFile.fileContent);
+        fs.writeFileSync(filePath, sanitized, "utf8");
       }
 
       // Remove any previous test results for this submission to avoid duplicates
@@ -813,7 +839,8 @@ exports.runTestCases = async (req, res) => {
       if (javaFiles.length > 0) {
         try {
           const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
+          const classpath = getJavaClasspath(tempDir);
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 5 * 1024 * 1024
@@ -850,8 +877,8 @@ exports.runTestCases = async (req, res) => {
               const testFileName = `Test${uniqueId}.java`;
               const testClassName = `Test${uniqueId}`;
               console.log("[testCode generation] caseIndex:", caseIndex, "javaFiles:", javaFiles.map(f => f.fileName));
-              const fieldDecls = generateFieldDeclarations(javaFiles);
               const { imports, body } = extractImportsFromTestCode(testCase.testCode);
+              const fieldDecls = generateFieldDeclarations(javaFiles, body);
               console.log("[testCode generation] fieldDecls:", fieldDecls);
               console.log("[testCode generation] imports:", imports);
               console.log("[testCode generation] body (no imports):\n", body);
@@ -871,7 +898,8 @@ ${fieldDecls}
 }`;
               console.log("Generated test code for", testCase.testName, ":\n", testCode);
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
-              command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testFileName} && ${JAVA_CMD} ${testClassName}`;
+              const classpath = getJavaClasspath(tempDir);
+              command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testFileName} && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
               actualOutput = execSync(command, {
                 encoding: "utf8",
                 timeout: 15000,
