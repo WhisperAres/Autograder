@@ -9,6 +9,7 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const https = require("https");
 
 // Detect Java executable path (handle both Windows and Unix)
 const getJavaExecutable = () => {
@@ -46,15 +47,58 @@ const safeDeletedir = (dirpath) => {
   }
 };
 
-// Build classpath for Java compile/run, including optional junit/hamcrest jars
+const JUNIT_LIB_DIR = path.join(__dirname, '../../lib');
+const JUNIT_JARS = [
+  {
+    name: 'junit-4.13.2.jar',
+    url: 'https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar'
+  },
+  {
+    name: 'hamcrest-core-1.3.jar',
+    url: 'https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar'
+  }
+];
+
+const downloadFile = (url, dest) => {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Failed to download ${url}, status ${res.statusCode}`));
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+    }).on('error', (err) => {
+      fs.unlink(dest, () => {});
+      reject(err);
+    });
+  });
+};
+
+const ensureJUnitJars = async () => {
+  if (!fs.existsSync(JUNIT_LIB_DIR)) {
+    fs.mkdirSync(JUNIT_LIB_DIR, { recursive: true });
+  }
+
+  for (const jar of JUNIT_JARS) {
+    const jarPath = path.join(JUNIT_LIB_DIR, jar.name);
+    if (!fs.existsSync(jarPath)) {
+      console.log(`[grader] Downloading ${jar.name} from Maven central`);
+      await downloadFile(jar.url, jarPath);
+      console.log(`[grader] Download complete: ${jarPath}`);
+    }
+  }
+};
+
 const getJavaClasspath = (tempDir) => {
   const cpItems = [tempDir];
-  const rootLib = path.join(__dirname, '../../lib');
-  const junitJar = path.join(rootLib, 'junit-4.13.2.jar');
-  const hamcrestJar = path.join(rootLib, 'hamcrest-core-1.3.jar');
 
-  if (fs.existsSync(junitJar)) cpItems.push(junitJar);
-  if (fs.existsSync(hamcrestJar)) cpItems.push(hamcrestJar);
+  for (const jar of JUNIT_JARS) {
+    const jarPath = path.join(JUNIT_LIB_DIR, jar.name);
+    if (fs.existsSync(jarPath)) {
+      cpItems.push(jarPath);
+    }
+  }
 
   if (process.env.JUNIT_CLASSPATH) {
     cpItems.push(process.env.JUNIT_CLASSPATH);
@@ -289,14 +333,15 @@ exports.runTestCases = async (req, res) => {
     try {
       // Write student Java files
       for (const codeFile of javaFiles) {
-        const sanitized = sanitizeJavaSource(codeFile.fileContent);
-        fs.writeFileSync(path.join(tempDir, codeFile.fileName), sanitized, "utf8");
+        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
       }
 
-      // [STEP 1] Compile all student Java files together
+      // [STEP 1] Ensure junit/hamcrest libs exist and compile all student Java files together
       try {
+        await ensureJUnitJars();
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
         const classpath = getJavaClasspath(tempDir);
+        console.log("[grader] javac classpath:", classpath);
         execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, { 
           timeout: 20000, 
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -345,7 +390,9 @@ ${fieldDecls}
 
           // Compile and run the harness
           const classpath = getJavaClasspath(tempDir);
+          console.log("[grader] test compile classpath:", classpath);
           const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
+          console.log("[grader] running command:", cmd);
           actualOutput = execSync(cmd, {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],

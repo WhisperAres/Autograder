@@ -10,6 +10,7 @@ const bcrypt = require("bcryptjs");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
 const { execSync, spawn } = require("child_process");
 const { promisify } = require("util");
 const exec = promisify(require("child_process").exec);
@@ -171,6 +172,54 @@ const extractImportsFromTestCode = (code) => {
   return { imports: uniqueImports.join('\n'), body: bodyLines.join('\n').trim() };
 };
 
+const JUNIT_LIB_DIR = path.join(__dirname, '../../lib');
+const JUNIT_JARS = [
+  { name: 'junit-4.13.2.jar', url: 'https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar' },
+  { name: 'hamcrest-core-1.3.jar', url: 'https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar' }
+];
+
+const downloadFile = (url, dest) => {
+  return new Promise((resolve, reject) => {
+    const fileStream = fs.createWriteStream(dest);
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Failed to download ${url}, status ${res.statusCode}`));
+      }
+      res.pipe(fileStream);
+      fileStream.on('finish', () => fileStream.close(resolve));
+    }).on('error', (err) => {
+      fs.unlink(dest, () => {});
+      reject(err);
+    });
+  });
+};
+
+const ensureJUnitJars = async () => {
+  if (!fs.existsSync(JUNIT_LIB_DIR)) {
+    fs.mkdirSync(JUNIT_LIB_DIR, { recursive: true });
+  }
+  for (const jar of JUNIT_JARS) {
+    const jarPath = path.join(JUNIT_LIB_DIR, jar.name);
+    if (!fs.existsSync(jarPath)) {
+      console.log(`[admin] Downloading ${jar.name} from Maven central`);
+      await downloadFile(jar.url, jarPath);
+      console.log(`[admin] Download complete: ${jarPath}`);
+    }
+  }
+};
+
+const getJavaClasspath = (tempDir) => {
+  const cpItems = [tempDir];
+  for (const jar of JUNIT_JARS) {
+    const jarPath = path.join(JUNIT_LIB_DIR, jar.name);
+    if (fs.existsSync(jarPath)) {
+      cpItems.push(jarPath);
+    }
+  }
+  if (process.env.JUNIT_CLASSPATH) cpItems.push(process.env.JUNIT_CLASSPATH);
+  return cpItems.join(path.delimiter);
+};
+
 // Detect potential infinite loops in test code
 const detectInfiniteLoop = (code) => {
   const warnings = [];
@@ -181,22 +230,7 @@ const detectInfiniteLoop = (code) => {
   return warnings;
 };
 
-// Build classpath for Java compile/run, including optional junit/hamcrest jars
-const getJavaClasspath = (tempDir) => {
-  const cpItems = [tempDir];
-  const rootLib = path.join(__dirname, '../../lib');
-  const junitJar = path.join(rootLib, 'junit-4.13.2.jar');
-  const hamcrestJar = path.join(rootLib, 'hamcrest-core-1.3.jar');
 
-  if (fs.existsSync(junitJar)) cpItems.push(junitJar);
-  if (fs.existsSync(hamcrestJar)) cpItems.push(hamcrestJar);
-
-  if (process.env.JUNIT_CLASSPATH) {
-    cpItems.push(process.env.JUNIT_CLASSPATH);
-  }
-
-  return cpItems.join(path.delimiter);
-};
 
 const sanitizeJavaSource = (source) => {
   if (typeof source !== 'string') return source;
@@ -737,8 +771,11 @@ exports.runSingleTest = async (req, res) => {
       }
 
       try {
+        await ensureJUnitJars();
         const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
+        const classpath = getJavaClasspath(tempDir);
+        console.log("[admin] javac classpath:", classpath);
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
           timeout: 20000,
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 1 * 1024 * 1024
@@ -768,7 +805,10 @@ exports.runSingleTest = async (req, res) => {
       fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
       try {
-        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`;
+        const classpath = getJavaClasspath(tempDir);
+        console.log("[admin] test compile classpath:", classpath);
+        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
+        console.log("[admin] running command:", cmd);
         const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024 }).trim();
         const passed = actualOutput.includes("PASS");
         res.json({ testName: testCase.testName, testCaseId: testCase.id, passed, actualOutput: passed ? actualOutput : "", errorMessage: passed ? null : "Assertion failed", marks: testCase.marks || 0 });
