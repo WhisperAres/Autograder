@@ -132,11 +132,31 @@ const transformJUnitStyle = (code) => {
 
 // Helper to generate class field declarations from uploaded Java files
 const generateFieldDeclarations = (javaFiles) => {
+  if (!javaFiles || !Array.isArray(javaFiles)) return '';
   return javaFiles.map(file => {
     const className = file.fileName.replace('.java', '');
-    const fieldName = className.toLowerCase();
-    return `  public static ${className} ${fieldName};`;
+    return `  public static ${className} ${className.toLowerCase()};`;
   }).join('\n');
+};
+
+// Extract import lines from submitted test code and return the body without imports
+const extractImportsFromTestCode = (code) => {
+  if (!code || typeof code !== 'string') return { imports: '', body: '' };
+  const imports = [];
+  const bodyLines = [];
+  const lines = code.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('import ')) {
+      imports.push(trimmed);
+    } else if (trimmed.startsWith('package ')) {
+      // ignore package statements in snippet
+    } else {
+      bodyLines.push(line);
+    }
+  }
+  const uniqueImports = [...new Set(imports)];
+  return { imports: uniqueImports.join('\n'), body: bodyLines.join('\n').trim() };
 };
 
 // Get all assignments (for grader to select from)
@@ -209,7 +229,9 @@ exports.runTestCases = async (req, res) => {
     const codeFiles = submission.codeFiles;
     const javaFiles = codeFiles.filter(f => f.fileName.endsWith(".java"));
     
-    console.log("Java files for submission:", javaFiles.map(f => f.fileName));
+    console.log("[grader.runTestCases] Submission:", submissionId);
+    console.log("[grader.runTestCases] Total codeFiles:", codeFiles.length, "Files:", codeFiles.map(f => f.fileName));
+    console.log("[grader.runTestCases] Filtered javaFiles:", javaFiles.length, "Files:", javaFiles.map(f => f.fileName));
     if (javaFiles.length === 0) {
       return res.status(404).json({ message: "No Java files found in submission" });
     }
@@ -251,11 +273,16 @@ exports.runTestCases = async (req, res) => {
         try {
           const uniqueId = Date.now() + Math.random().toString().replace('.', '');
           const testClassName = `Test${uniqueId}`;
-          const testCode = `public class ${testClassName} {
-${generateFieldDeclarations(javaFiles)}
+          const { imports, body } = extractImportsFromTestCode(testCase.testCode);
+          console.log("[grader.runTestCases] Generating test for:", testCase.testName, "javaFiles:", javaFiles.map(f => f.fileName));
+          const fieldDecls = generateFieldDeclarations(javaFiles);
+          console.log("[grader.runTestCases] fieldDecls:", fieldDecls);
+          const testBody = transformJUnitStyle(body);
+          const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+${fieldDecls}
   public static void main(String[] args) {
     try {
-      ${transformJUnitStyle(testCase.testCode)}
+      ${testBody}
       System.out.println("PASS");
     } catch (AssertionError e) {
       System.out.println("FAIL: " + e.getMessage());

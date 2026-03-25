@@ -144,21 +144,31 @@ const transformJUnitStyle = (code) => {
 
 // Helper to generate class field declarations from uploaded Java files
 const generateFieldDeclarations = (javaFiles) => {
-  console.log("[generateFieldDeclarations] Called with javaFiles:", javaFiles);
-  if (!javaFiles || !Array.isArray(javaFiles)) {
-    console.log("[generateFieldDeclarations] javaFiles is not a valid array! Type:", typeof javaFiles);
-    return '';
-  }
-  console.log("[generateFieldDeclarations] javaFiles.length:", javaFiles.length);
-  const declarations = javaFiles.map(file => {
+  if (!javaFiles || !Array.isArray(javaFiles)) return '';
+  return javaFiles.map(file => {
     const className = file.fileName.replace('.java', '');
-    const fieldName = className.toLowerCase();
-    const decl = `  public static ${className} ${fieldName};`;
-    console.log("[generateFieldDeclarations] Generated field:", decl);
-    return decl;
+    return `  public static ${className} ${className.toLowerCase()};`;
   }).join('\n');
-  console.log("[generateFieldDeclarations] Final declarations:\n", declarations);
-  return declarations;
+};
+
+// Extract import lines from submitted test code and return the body without imports
+const extractImportsFromTestCode = (code) => {
+  if (!code || typeof code !== 'string') return { imports: '', body: '' };
+  const imports = [];
+  const bodyLines = [];
+  const lines = code.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('import ')) {
+      imports.push(trimmed);
+    } else if (trimmed.startsWith('package ')) {
+      // ignore package statements in snippet
+    } else {
+      bodyLines.push(line);
+    }
+  }
+  const uniqueImports = [...new Set(imports)];
+  return { imports: uniqueImports.join('\n'), body: bodyLines.join('\n').trim() };
 };
 
 // Detect potential infinite loops in test code
@@ -841,12 +851,16 @@ exports.runTestCases = async (req, res) => {
               const testClassName = `Test${uniqueId}`;
               console.log("[testCode generation] caseIndex:", caseIndex, "javaFiles:", javaFiles.map(f => f.fileName));
               const fieldDecls = generateFieldDeclarations(javaFiles);
+              const { imports, body } = extractImportsFromTestCode(testCase.testCode);
               console.log("[testCode generation] fieldDecls:", fieldDecls);
-              const testCode = `public class ${testClassName} {
+              console.log("[testCode generation] imports:", imports);
+              console.log("[testCode generation] body (no imports):\n", body);
+              const testBody = transformJUnitStyle(body);
+              const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
 ${fieldDecls}
   public static void main(String[] args) {
     try {
-      ${transformJUnitStyle(testCase.testCode)}
+      ${testBody}
       System.out.println("PASS");
     } catch (AssertionError e) {
       System.out.println("FAIL: " + e.getMessage());
