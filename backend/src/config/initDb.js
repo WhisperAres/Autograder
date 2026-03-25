@@ -16,6 +16,8 @@ const TestCase = require('../models/testCase');
 const TestResult = require('../models/testResult');
 const GraderSolution = require('../models/graderSolution');
 const GraderSolutionFile = require('../models/graderSolutionFile');
+const StudentInvite = require('../models/studentInvite');
+const PasswordResetToken = require('../models/passwordResetToken');
 const bcrypt = require('bcryptjs');
 
 const initializeDatabase = async () => {

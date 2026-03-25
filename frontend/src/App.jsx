@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import Login from './pages/login'
+import ForgotPassword from './pages/forgotPassword'
 import Dashboard from './pages/dashboard'
 import GraderDashboard from './pages/grader'
 import AdminDashboard from './pages/admin'
 import InviteStudents from './pages/inviteStudents'
 import StudentSignup from './pages/studentSignup'
+import ResetPassword from './pages/resetPassword'
 
 function App() {
   const initializeAuth = () => {
@@ -46,6 +48,8 @@ function App() {
             <Login setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} setUser={setUser} />
           } 
         />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/student"
           element={

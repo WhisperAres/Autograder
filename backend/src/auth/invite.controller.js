@@ -1,53 +1,14 @@
 const crypto = require('crypto');
-const sgMail = require('@sendgrid/mail');
 const StudentInvite = require('../models/studentInvite');
 const User = require('../models/user');
 const bcrypt = require('bcryptjs');
+const { sendEmail, getFrontendUrl } = require('../utils/email');
 require('dotenv').config();
 
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-// Send email using SendGrid
-const sendEmail = async (mailOptions) => {
-  try {
-    if (process.env.NODE_ENV !== 'production') {
-      // Development: Log emails to console instead of sending
-      console.log('📧 Email would be sent in production:');
-      console.log('To:', mailOptions.to);
-      console.log('Subject:', mailOptions.subject);
-      console.log('Body:', mailOptions.html);
-      return { messageId: 'dev-mode' };
-    }
-
-    // Production: Send via SendGrid
-    const msg = {
-      to: mailOptions.to,
-      from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
-      subject: mailOptions.subject,
-      html: mailOptions.html,
-      text: mailOptions.text,
-    };
-
-    const response = await sgMail.send(msg);
-    return response;
-  } catch (error) {
-    console.error('SendGrid error:', error);
-    throw error;
-  }
-};
-
-// Get frontend URL based on environment
-const getFrontendUrl = () => {
-    return process.env.FRONTEND_URL || 'https://autograder-4usv.onrender.com'
-};
-
-// Generate unique invite token
 const generateInviteToken = () => {
   return crypto.randomBytes(32).toString('hex');
 };
 
-// Send invite emails to multiple students
 exports.sendInvites = async (req, res) => {
   try {
     const { emails } = req.body;
@@ -56,7 +17,6 @@ exports.sendInvites = async (req, res) => {
       return res.status(400).json({ message: 'Please provide a list of valid email addresses' });
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const validEmails = emails.filter(e => emailRegex.test(e));
 
@@ -65,7 +25,7 @@ exports.sendInvites = async (req, res) => {
     }
 
     const frontendUrl = getFrontendUrl();
-    const inviteDurationHours = parseInt(process.env.INVITE_EXPIRY_HOURS) || 168; // Default 7 days
+    const inviteDurationHours = parseInt(process.env.INVITE_EXPIRY_HOURS, 10) || 168;
     const invites = [];
     const results = {
       success: [],
@@ -74,7 +34,6 @@ exports.sendInvites = async (req, res) => {
 
     for (const email of validEmails) {
       try {
-        // Check if user already exists
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
           results.failed.push({
@@ -84,17 +43,14 @@ exports.sendInvites = async (req, res) => {
           continue;
         }
 
-        // Check if invite already exists and is still valid
         const existingInvite = await StudentInvite.findOne({
           where: { email, used: false },
         });
 
         let token;
         if (existingInvite && new Date(existingInvite.expiresAt) > new Date()) {
-          // Reuse existing valid invite
           token = existingInvite.token;
         } else {
-          // Generate new invite
           token = generateInviteToken();
           const expiresAt = new Date(Date.now() + inviteDurationHours * 60 * 60 * 1000);
 
@@ -105,11 +61,9 @@ exports.sendInvites = async (req, res) => {
           });
         }
 
-        // Create invite link
         const inviteLink = `${frontendUrl}/student-signup?token=${token}`;
 
-        // Send email
-        const mailOptions = {
+        await sendEmail({
           to: email,
           subject: 'You are invited to join our Autograder Platform!',
           html: `
@@ -129,12 +83,9 @@ exports.sendInvites = async (req, res) => {
             <p><strong>Note:</strong> This invite link will expire in ${inviteDurationHours} hours.</p>
             <p>If you have any questions, please contact your administrator.</p>
           `,
-          text: `You have been invited to join our Autograder Platform! 
-Click the link to sign up: ${inviteLink}
-This link expires in ${inviteDurationHours} hours.`,
-        };
+          text: `You have been invited to join our Autograder Platform!\nClick the link to sign up: ${inviteLink}\nThis link expires in ${inviteDurationHours} hours.`,
+        });
 
-        await sendEmail(mailOptions);
         results.success.push(email);
         invites.push({ email, inviteLink });
       } catch (error) {
@@ -154,7 +105,6 @@ This link expires in ${inviteDurationHours} hours.`,
         successEmails: results.success,
         failedEmails: results.failed,
       },
-      // In development, return the invite links for testing
       ...(process.env.NODE_ENV !== 'production' && { invites }),
     });
   } catch (error) {
@@ -163,7 +113,6 @@ This link expires in ${inviteDurationHours} hours.`,
   }
 };
 
-// Validate invite token
 exports.validateInvite = async (req, res) => {
   try {
     const { token } = req.params;
@@ -197,7 +146,6 @@ exports.validateInvite = async (req, res) => {
   }
 };
 
-// Complete student signup
 exports.completeSignup = async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -224,24 +172,20 @@ exports.completeSignup = async (req, res) => {
       return res.status(400).json({ message: 'This invite has expired' });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ where: { email: invite.email } });
     if (existingUser) {
       return res.status(400).json({ message: 'User with this email already exists' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create new user
     const newUser = await User.create({
       email: invite.email,
       password: hashedPassword,
-      name: invite.email.split('@')[0], // Use part of email as default name
+      name: invite.email.split('@')[0],
       role: 'student',
     });
 
-    // Mark invite as used
     await StudentInvite.update(
       { used: true, usedAt: new Date() },
       { where: { id: invite.id } }

@@ -10,6 +10,7 @@ const adminPagesRoutes = require("./auth/admin-pages.routes");
 const graderPagesRoutes = require("./auth/grader-pages.routes");
 const studentPagesRoutes = require("./auth/student-pages.routes");
 const inviteRoutes = require("./auth/invite.routes");
+const passwordResetRoutes = require("./auth/passwordReset.routes");
 const verifyToken = require("./middlewares/verify.middleware");
 
 const User = require("./models/user");
@@ -21,6 +22,7 @@ const TestResult = require("./models/testResult");
 const GraderSolution = require("./models/graderSolution");
 const GraderSolutionFile = require("./models/graderSolutionFile");
 const StudentInvite = require("./models/studentInvite");
+const PasswordResetToken = require("./models/passwordResetToken");
 
 const app = express();
 
@@ -59,6 +61,7 @@ app.get("/api/health", (req, res) => {
 // });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/auth/password-reset", passwordResetRoutes);
 app.use("/api/invite", inviteRoutes);
 app.use("/api/assignments", verifyToken, assignmentRoutes);
 app.use("/api/submissions", verifyToken, submissionRoutes);

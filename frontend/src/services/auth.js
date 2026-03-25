@@ -65,6 +65,21 @@ export const login = async (email, password) => {
     return res.data;
 };
 
+export const requestPasswordReset = async (email) => {
+    const res = await axios.post(`${API_URL}/auth/password-reset/forgot-password`, { email });
+    return res.data;
+};
+
+export const validatePasswordResetToken = async (token) => {
+    const res = await axios.get(`${API_URL}/auth/password-reset/validate/${token}`);
+    return res.data;
+};
+
+export const resetPassword = async (token, password) => {
+    const res = await axios.post(`${API_URL}/auth/password-reset/reset-password`, { token, password });
+    return res.data;
+};
+
 export const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");

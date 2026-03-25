@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { login } from "../services/auth"; // <--- Now importing the correct service
 import "./login.css";
 
@@ -96,6 +96,10 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
                                 disabled={loading}
                                 className="form-input"
                             />
+                        </div>
+
+                        <div className="form-link-row">
+                            <Link to="/forgot-password" className="form-link">Forgot password?</Link>
                         </div>
 
                         {error && <div className="error-message">{error}</div>}
