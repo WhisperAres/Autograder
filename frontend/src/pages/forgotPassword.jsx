@@ -46,13 +46,12 @@ export default function ForgotPassword() {
     return (
         <div className="login-container">
             <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="theme-toggle"
-                style={{ padding: "10px", borderRadius: "50%", cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg-secondary)", fontSize: "1.2rem" }}
-                title="Toggle theme"
-            >
-                {darkMode ? "Light" : "Dark"}
-            </button>
+        onClick={() => setDarkMode(!darkMode)}
+        className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
+        title="Toggle theme"
+      >
+        {darkMode ? "☀️" : "🌙"}
+      </button>
 
             <div className="login-wrapper">
                 <div className="login-card">
@@ -63,7 +62,7 @@ export default function ForgotPassword() {
 
                     <form onSubmit={handleSubmit} className="login-form">
                         <div className="form-group">
-                            <label htmlFor="email">Email</label>
+                            <label htmlFor="email" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>Email</label>
                             <input
                                 type="email"
                                 id="email"

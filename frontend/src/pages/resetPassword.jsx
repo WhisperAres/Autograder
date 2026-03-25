@@ -84,11 +84,10 @@ export default function ResetPassword() {
         <div className="login-container">
             <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="theme-toggle"
-                style={{ padding: "10px", borderRadius: "50%", cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg-secondary)", fontSize: "1.2rem" }}
+                className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
                 title="Toggle theme"
             >
-                {darkMode ? "Light" : "Dark"}
+                {darkMode ? "☀️" : "🌙"}
             </button>
 
             <div className="login-wrapper">
@@ -103,7 +102,7 @@ export default function ResetPassword() {
                     ) : tokenValid ? (
                         <form onSubmit={handleSubmit} className="login-form">
                             <div className="form-group">
-                                <label htmlFor="password">New Password</label>
+                                <label htmlFor="password" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>New Password</label>
                                 <input
                                     type="password"
                                     id="password"
@@ -117,7 +116,7 @@ export default function ResetPassword() {
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="confirmPassword">Confirm Password</label>
+                                <label htmlFor="confirmPassword" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>Confirm Password</label>
                                 <input
                                     type="password"
                                     id="confirmPassword"
