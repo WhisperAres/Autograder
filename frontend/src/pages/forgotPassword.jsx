@@ -62,7 +62,7 @@ export default function ForgotPassword() {
 
                     <form onSubmit={handleSubmit} className="login-form">
                         <div className="form-group">
-                            <label htmlFor="email" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>Email</label>
+                            <label htmlFor="email" style={{color:"var(--text-primary)"}}>Email</label>
                             <input
                                 type="email"
                                 id="email"

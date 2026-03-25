@@ -102,7 +102,7 @@ export default function ResetPassword() {
                     ) : tokenValid ? (
                         <form onSubmit={handleSubmit} className="login-form">
                             <div className="form-group">
-                                <label htmlFor="password" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>New Password</label>
+                                <label htmlFor="password" style={{color:"var(--text-primary)"}}>New Password</label>
                                 <input
                                     type="password"
                                     id="password"
@@ -116,7 +116,7 @@ export default function ResetPassword() {
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="confirmPassword" style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}>Confirm Password</label>
+                                <label htmlFor="confirmPassword" style={{color:"var(--text-primary)"}}>Confirm Password</label>
                                 <input
                                     type="password"
                                     id="confirmPassword"
