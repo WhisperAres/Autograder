@@ -174,24 +174,51 @@ const writeSubmissionFileToTemp = (tempDir, storedPath, fileContent) => {
   fs.writeFileSync(resolvedTargetPath, fileContent, "utf8");
 };
 
-// Extract import lines from submitted test code and return the body without imports
+const looksLikeJavaFieldDeclaration = (trimmedLine) => {
+  if (!trimmedLine) return false;
+  if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || trimmedLine.startsWith('*')) return true;
+  if (trimmedLine.startsWith('@')) return true;
+  if (!trimmedLine.endsWith(';')) return false;
+  if (trimmedLine.startsWith('if ') || trimmedLine.startsWith('if(')) return false;
+  if (trimmedLine.startsWith('for ') || trimmedLine.startsWith('for(')) return false;
+  if (trimmedLine.startsWith('while ') || trimmedLine.startsWith('while(')) return false;
+  if (trimmedLine.startsWith('switch ') || trimmedLine.startsWith('switch(')) return false;
+  if (trimmedLine.startsWith('return ') || trimmedLine.startsWith('throw ')) return false;
+  if (trimmedLine.includes('.')) return false;
+
+  return /^(public|private|protected|static|final|transient|volatile)\b/.test(trimmedLine);
+};
+
+// Extract import lines from submitted test code and split leading class members from executable body
 const extractImportsFromTestCode = (code) => {
-  if (!code || typeof code !== 'string') return { imports: '', body: '' };
+  if (!code || typeof code !== 'string') return { imports: '', classMembers: '', body: '' };
   const imports = [];
+  const classMemberLines = [];
   const bodyLines = [];
   const lines = code.split(/\r?\n/);
+  let collectingClassMembers = true;
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('import ')) {
       imports.push(trimmed);
     } else if (trimmed.startsWith('package ')) {
       // ignore package statements in snippet
+    } else if (collectingClassMembers && looksLikeJavaFieldDeclaration(trimmed)) {
+      classMemberLines.push(line);
     } else {
+      if (trimmed !== '') {
+        collectingClassMembers = false;
+      }
       bodyLines.push(line);
     }
   }
   const uniqueImports = [...new Set(imports)];
-  return { imports: uniqueImports.join('\n'), body: bodyLines.join('\n').trim() };
+  return {
+    imports: uniqueImports.join('\n'),
+    classMembers: classMemberLines.join('\n').trim(),
+    body: bodyLines.join('\n').trim()
+  };
 };
 
 const JUNIT_LIB_DIR = path.join(__dirname, '../../lib');
@@ -810,10 +837,11 @@ exports.runSingleTest = async (req, res) => {
 
       const uniqueId = Date.now() + Math.random().toString().replace('.', '');
       const testClassName = `Test${uniqueId}`;
-      const testCode = `public class ${testClassName} {
-        public static void main(String[] args) {
+      const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
+      const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+${classMembers ? classMembers + '\n' : ''}        public static void main(String[] args) {
           try {
-            ${transformJUnitStyle(testCase.testCode)}
+            ${transformJUnitStyle(body)}
             System.out.println("PASS");
           } catch (AssertionError e) {
             System.out.println("FAIL: " + e.getMessage());
@@ -936,14 +964,16 @@ exports.runTestCases = async (req, res) => {
               const testFileName = `Test${uniqueId}.java`;
               const testClassName = `Test${uniqueId}`;
               console.log("[testCode generation] caseIndex:", caseIndex, "javaFiles:", javaFiles.map(f => f.fileName));
-              const { imports, body } = extractImportsFromTestCode(testCase.testCode);
+              const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
               const fieldDecls = generateFieldDeclarations(javaFiles, body);
               console.log("[testCode generation] fieldDecls:", fieldDecls);
               console.log("[testCode generation] imports:", imports);
+              console.log("[testCode generation] classMembers:\n", classMembers);
               console.log("[testCode generation] body (no imports):\n", body);
               const testBody = transformJUnitStyle(body);
               const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
 ${fieldDecls}
+${classMembers ? classMembers + '\n' : ''}
   public static void main(String[] args) {
     try {
       ${testBody}
@@ -1502,10 +1532,12 @@ exports.runBulkTests = async (req, res) => {
               try {
                 const uniqueId = `${submission.id}_${caseIndex}`;
                 const testClassName = `Test${uniqueId}`;
-                const testCode = `public class ${testClassName} {
+                const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
+                const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+${classMembers ? classMembers + '\n' : ''}
                   public static void main(String[] args) {
                     try { 
-                      ${transformJUnitStyle(testCase.testCode)} 
+                      ${transformJUnitStyle(body)} 
                       System.out.println("PASS"); 
                     } catch (Throwable e) { 
                       System.out.println("FAIL: " + e.getMessage()); 

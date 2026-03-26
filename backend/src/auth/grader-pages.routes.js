@@ -16,7 +16,7 @@ router.get("/dashboard", graderController.getAssignments);
 
 // ==================== TEST SOLUTIONS PAGE ====================
 // Upload solution files for testing
-router.post("/test-solutions/:assignmentId/upload", upload.array("files", 10), graderController.uploadGraderSolution);
+router.post("/test-solutions/:assignmentId/upload", upload.any(), graderController.uploadGraderSolution);
 
 // Get uploaded solutions for assignment
 router.get("/test-solutions/:assignmentId/list", graderController.getGraderSolutions);

@@ -187,6 +187,37 @@ export default function GraderDashboard() {
     await fetchCodeForSubmission(submission.id);
   };
 
+  const appendUploadFiles = (incomingFiles) => {
+    const nextFiles = Array.from(incomingFiles || []);
+    if (nextFiles.length === 0) return;
+
+    setUploadFiles((currentFiles) => {
+      const seenPaths = new Set(
+        currentFiles.map((file) => file.webkitRelativePath || file.name)
+      );
+      const deduped = nextFiles.filter((file) => {
+        const relativePath = file.webkitRelativePath || file.name;
+        if (seenPaths.has(relativePath)) {
+          return false;
+        }
+        seenPaths.add(relativePath);
+        return true;
+      });
+
+      return [...currentFiles, ...deduped];
+    });
+  };
+
+  const handleGraderFileChange = (e) => {
+    appendUploadFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const handleGraderFolderChange = (e) => {
+    appendUploadFiles(e.target.files);
+    e.target.value = "";
+  };
+
   const handleFileUpload = async () => {
     if (uploadFiles.length === 0 || !selectedAssignment) {
       showModal('Error', "Please select files and an assignment", 'error');
@@ -195,7 +226,10 @@ export default function GraderDashboard() {
     setUploading(true);
     try {
       const form = new FormData();
-      uploadFiles.forEach((f) => form.append("files", f));
+      uploadFiles.forEach((f) => {
+        form.append("files", f);
+        form.append("paths", f.webkitRelativePath || f.name);
+      });
       const res = await api.post(`/grader/page/test-solutions/${selectedAssignment.id}/upload`, form);
       if (res.data.files) {
         setCodeFiles(res.data.files);
@@ -324,10 +358,28 @@ export default function GraderDashboard() {
               <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
-                    <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} />
-                    <label htmlFor="grader-file-input" style={{ display: 'block', padding: '20px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
-                      <span style={{ fontSize: '14px' }}>📁 {uploadFiles.length > 0 ? `${uploadFiles.length} files selected` : 'Click to select files'}</span>
-                    </label>
+                    <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
+                    <input id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <label htmlFor="grader-file-input" style={{ display: 'inline-block', padding: '12px 16px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
+                          <span style={{ fontSize: '14px' }}>Select Files</span>
+                        </label>
+                        <label htmlFor="grader-folder-input" style={{ display: 'inline-block', padding: '12px 16px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
+                          <span style={{ fontSize: '14px' }}>Select Folder</span>
+                        </label>
+                      </div>
+                      <div style={{ padding: '20px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '14px' }}>📁 {uploadFiles.length > 0 ? `${uploadFiles.length} file(s) selected` : 'Choose grader solution files or a package folder'}</span>
+                      </div>
+                      {uploadFiles.length > 0 && (
+                        <div style={{ maxHeight: '140px', overflowY: 'auto', textAlign: 'left', fontSize: '13px', color: 'var(--text-muted)' }}>
+                          {uploadFiles.map((f, index) => (
+                            <div key={`${f.webkitRelativePath || f.name}-${index}`}>{f.webkitRelativePath || f.name}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <button className="btn btn-success" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0} style={{ height: '60px', padding: '0 30px', borderRadius: '12px', fontWeight: '600' }}>
                     {uploading ? '⏳...' : 'Upload'}

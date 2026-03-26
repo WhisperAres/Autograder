@@ -207,7 +207,7 @@ const generateFieldDeclarations = (javaFiles, testCode = '') => {
 
   if (Array.isArray(javaFiles)) {
     for (const file of javaFiles) {
-      const className = file.fileName.replace('.java', '');
+      const className = path.basename(file.fileName, '.java');
       const fieldName = className.toLowerCase();
       fieldMap.set(fieldName, className);
     }
@@ -230,24 +230,89 @@ const generateFieldDeclarations = (javaFiles, testCode = '') => {
     .join('\n');
 };
 
-// Extract import lines from submitted test code and return the body without imports
+const quoteShellPath = (filePath) => `"${String(filePath).replace(/"/g, '\\"')}"`;
+
+const getJavaSourceArguments = (javaFiles) => (
+  javaFiles.map(file => quoteShellPath(file.fileName)).join(" ")
+);
+
+const normalizeStoredPath = (rawPath, fallbackName = 'uploaded-file') => {
+  const originalValue = String(rawPath || fallbackName).trim();
+  const normalizedParts = originalValue
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter(Boolean);
+
+  if (normalizedParts.length === 0) {
+    throw new Error('Uploaded file path is empty');
+  }
+
+  if (normalizedParts.some(segment => segment === '.' || segment === '..')) {
+    throw new Error(`Invalid uploaded file path: ${originalValue}`);
+  }
+
+  return normalizedParts.join('/');
+};
+
+const writeSubmissionFileToTemp = (tempDir, storedPath, fileContent) => {
+  const normalizedPath = normalizeStoredPath(storedPath, path.basename(String(storedPath || 'uploaded-file')));
+  const targetPath = path.join(tempDir, normalizedPath);
+  const resolvedTempDir = path.resolve(tempDir);
+  const resolvedTargetPath = path.resolve(targetPath);
+
+  if (resolvedTargetPath !== resolvedTempDir && !resolvedTargetPath.startsWith(`${resolvedTempDir}${path.sep}`)) {
+    throw new Error(`Unsafe submission file path: ${storedPath}`);
+  }
+
+  fs.mkdirSync(path.dirname(resolvedTargetPath), { recursive: true });
+  fs.writeFileSync(resolvedTargetPath, fileContent, "utf8");
+};
+
+const looksLikeJavaFieldDeclaration = (trimmedLine) => {
+  if (!trimmedLine) return false;
+  if (trimmedLine.startsWith('//') || trimmedLine.startsWith('/*') || trimmedLine.startsWith('*')) return true;
+  if (trimmedLine.startsWith('@')) return true;
+  if (!trimmedLine.endsWith(';')) return false;
+  if (trimmedLine.startsWith('if ') || trimmedLine.startsWith('if(')) return false;
+  if (trimmedLine.startsWith('for ') || trimmedLine.startsWith('for(')) return false;
+  if (trimmedLine.startsWith('while ') || trimmedLine.startsWith('while(')) return false;
+  if (trimmedLine.startsWith('switch ') || trimmedLine.startsWith('switch(')) return false;
+  if (trimmedLine.startsWith('return ') || trimmedLine.startsWith('throw ')) return false;
+  if (trimmedLine.includes('.')) return false;
+
+  return /^(public|private|protected|static|final|transient|volatile)\b/.test(trimmedLine);
+};
+
+// Extract import lines from submitted test code and split leading class members from executable body
 const extractImportsFromTestCode = (code) => {
-  if (!code || typeof code !== 'string') return { imports: '', body: '' };
+  if (!code || typeof code !== 'string') return { imports: '', classMembers: '', body: '' };
   const imports = [];
+  const classMemberLines = [];
   const bodyLines = [];
   const lines = code.split(/\r?\n/);
+  let collectingClassMembers = true;
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('import ')) {
       imports.push(trimmed);
     } else if (trimmed.startsWith('package ')) {
       // ignore package statements in snippet
+    } else if (collectingClassMembers && looksLikeJavaFieldDeclaration(trimmed)) {
+      classMemberLines.push(line);
     } else {
+      if (trimmed !== '') {
+        collectingClassMembers = false;
+      }
       bodyLines.push(line);
     }
   }
   const uniqueImports = [...new Set(imports)];
-  return { imports: uniqueImports.join('\n'), body: bodyLines.join('\n').trim() };
+  return {
+    imports: uniqueImports.join('\n'),
+    classMembers: classMemberLines.join('\n').trim(),
+    body: bodyLines.join('\n').trim()
+  };
 };
 
 // Get all assignments (for grader to select from)
@@ -334,16 +399,16 @@ exports.runTestCases = async (req, res) => {
     try {
       // Write student Java files
       for (const codeFile of javaFiles) {
-        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
+        writeSubmissionFileToTemp(tempDir, codeFile.fileName, sanitizeJavaSource(codeFile.fileContent));
       }
 
       // [STEP 1] Ensure junit/hamcrest libs exist and compile all student Java files together
       try {
         await ensureJUnitJars();
-        const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+        const javaFileNames = getJavaSourceArguments(javaFiles);
         const classpath = getJavaClasspath(tempDir);
         console.log("[grader] javac classpath:", classpath);
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, { 
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${javaFileNames}`, { 
           timeout: 20000, 
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 5 * 1024 * 1024
@@ -367,13 +432,14 @@ exports.runTestCases = async (req, res) => {
         try {
           const uniqueId = Date.now() + Math.random().toString().replace('.', '');
           const testClassName = `Test${uniqueId}`;
-          const { imports, body } = extractImportsFromTestCode(testCase.testCode);
+          const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
           console.log("[grader.runTestCases] Generating test for:", testCase.testName, "javaFiles:", javaFiles.map(f => f.fileName));
           const fieldDecls = generateFieldDeclarations(javaFiles, body);
           console.log("[grader.runTestCases] fieldDecls:", fieldDecls);
           const testBody = transformJUnitStyle(body);
           const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
 ${fieldDecls}
+${classMembers ? classMembers + '\n' : ''}
   public static void main(String[] args) {
     try {
       ${testBody}
@@ -392,7 +458,7 @@ ${fieldDecls}
           // Compile and run the harness
           const classpath = getJavaClasspath(tempDir);
           console.log("[grader] test compile classpath:", classpath);
-          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
+          const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
           console.log("[grader] running command:", cmd);
           actualOutput = execSync(cmd, {
             encoding: "utf8",
@@ -589,12 +655,18 @@ exports.uploadGraderSolution = async (req, res) => {
       graderId
     });
 
+    const uploadedPaths = Array.isArray(req.body?.paths)
+      ? req.body.paths
+      : req.body?.paths
+        ? [req.body.paths]
+        : [];
+
     // Save all files
     const savedFiles = await Promise.all(
-      req.files.map(file => 
+      req.files.map((file, index) => 
         GraderSolutionFile.create({
           solutionId: solution.id,
-          fileName: file.originalname,
+          fileName: normalizeStoredPath(uploadedPaths[index] || file.originalname, file.originalname),
           fileContent: file.buffer.toString('utf-8')
         })
       )
@@ -657,7 +729,7 @@ exports.runGraderTests = async (req, res) => {
     try {
       // 3. Write all files to temp directory
       for (const file of files) {
-        fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
+        writeSubmissionFileToTemp(tempDir, file.fileName, sanitizeJavaSource(file.fileContent));
       }
 
       // 4. Identify Main Language
@@ -671,13 +743,13 @@ exports.runGraderTests = async (req, res) => {
       // =========================================
       if (fileExt === '.java') {
         const javaFiles = files.filter(f => f.fileName.endsWith('.java'));
-        const javaFileNames = javaFiles.map(f => f.fileName).join(' ');
+        const javaFileNames = getJavaSourceArguments(javaFiles);
         
         try {
           await ensureJUnitJars();
           const classpath = getJavaClasspath(tempDir);
           // Compile all solution files
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, { 
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${javaFileNames}`, { 
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 1 * 1024 * 1024
@@ -702,10 +774,11 @@ exports.runGraderTests = async (req, res) => {
           if (fileExt === '.java') {
             const uniqueId = Date.now() + Math.random().toString().replace('.', '');
             const testClassName = `Test${uniqueId}`;
-            const { imports, body } = extractImportsFromTestCode(testCase.testCode);
+            const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
             
             // Generate Test Harness
             const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+${classMembers ? classMembers + '\n' : ''}
               public static void main(String[] args) {
                 try {
                   ${transformJUnitStyle(body)}
@@ -723,7 +796,7 @@ exports.runGraderTests = async (req, res) => {
 
             // Compile and Run only the harness (linking to pre-compiled solution)
             const classpath = getJavaClasspath(tempDir);
-            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, { 
+            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, { 
               timeout: 20000,
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],
