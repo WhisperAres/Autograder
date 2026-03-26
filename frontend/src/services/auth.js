@@ -15,6 +15,15 @@ const api = axios.create({
     baseURL: API_URL
 });
 
+export const AUTH_LOGOUT_EVENT = "auth:logout";
+
+const clearAuthStorage = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("lastActivityAt");
+};
+
 // Request Interceptor: Attach token to every request
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem("token");
@@ -81,10 +90,9 @@ export const resetPassword = async (token, password) => {
 };
 
 export const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-    window.location.href = "/login";
+    clearAuthStorage();
+    window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT));
+    window.location.replace("/login");
 };
 
 export const getToken = () => localStorage.getItem("token");

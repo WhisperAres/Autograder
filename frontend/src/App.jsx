@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import Login from './pages/login'
@@ -9,6 +9,9 @@ import AdminDashboard from './pages/admin'
 import InviteStudents from './pages/inviteStudents'
 import StudentSignup from './pages/studentSignup'
 import ResetPassword from './pages/resetPassword'
+import { AUTH_LOGOUT_EVENT, logout } from './services/auth'
+
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000
 
 function App() {
   const initializeAuth = () => {
@@ -28,14 +31,99 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(authState.isAuth)
   const [userRole, setUserRole] = useState(authState.role)
   const [user, setUser] = useState(authState.user)
+  const inactivityTimeoutRef = useRef(null)
+  const lastActivityRef = useRef(Number(localStorage.getItem('lastActivityAt')) || Date.now())
 
   const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current)
+    }
     setIsAuthenticated(false)
     setUserRole(null)
     setUser(null)
+    logout()
   }
+
+  useEffect(() => {
+    const syncAuthState = () => {
+      const nextAuthState = initializeAuth()
+      setIsAuthenticated(nextAuthState.isAuth)
+      setUserRole(nextAuthState.role)
+      setUser(nextAuthState.user)
+    }
+
+    const handleStorageChange = (event) => {
+      if (!event.key || ['token', 'refreshToken', 'user'].includes(event.key)) {
+        syncAuthState()
+      }
+    }
+
+    window.addEventListener(AUTH_LOGOUT_EVENT, syncAuthState)
+    window.addEventListener('storage', handleStorageChange)
+
+    return () => {
+      window.removeEventListener(AUTH_LOGOUT_EVENT, syncAuthState)
+      window.removeEventListener('storage', handleStorageChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current)
+        inactivityTimeoutRef.current = null
+      }
+      return
+    }
+
+    const markActivity = () => {
+      const now = Date.now()
+      lastActivityRef.current = now
+      localStorage.setItem('lastActivityAt', String(now))
+
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current)
+      }
+
+      inactivityTimeoutRef.current = setTimeout(() => {
+        logout()
+      }, INACTIVITY_LIMIT_MS)
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        return
+      }
+
+      const lastActivityAt = Number(localStorage.getItem('lastActivityAt')) || lastActivityRef.current
+      if (Date.now() - lastActivityAt >= INACTIVITY_LIMIT_MS) {
+        logout()
+        return
+      }
+
+      markActivity()
+    }
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click']
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, markActivity)
+    })
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    markActivity()
+
+    return () => {
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, markActivity)
+      })
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current)
+        inactivityTimeoutRef.current = null
+      }
+    }
+  }, [isAuthenticated])
 
   return (
     <Router>

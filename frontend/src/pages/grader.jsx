@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import TestCaseManager from "./testCaseManager";
 import Modal from "../components/Modal";
-import api from "../services/auth";
+import api, { logout } from "../services/auth";
 import "./grader.css";
 
 // Helper function: Display UTC time as IST for date display
@@ -54,22 +54,6 @@ export default function GraderDashboard() {
     setModalActions(actions.length > 0 ? actions : [{ label: 'OK', onClick: () => setIsModalOpen(false) }]);
     setIsModalOpen(true);
   };
-
-  useEffect(() => {
-    let timeout;
-    const resetTimer = () => {
-      if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => { handleLogout(); }, 30 * 60 * 1000);
-    };
-    window.addEventListener('mousemove', resetTimer);
-    window.addEventListener('keydown', resetTimer);
-    resetTimer();
-    return () => {
-      window.removeEventListener('mousemove', resetTimer);
-      window.removeEventListener('keydown', resetTimer);
-      if (timeout) clearTimeout(timeout);
-    };
-  }, []);
 
   useEffect(() => {
     if (!localStorage.getItem('token')) { navigate('/login', { replace: true }); }
@@ -243,10 +227,7 @@ export default function GraderDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    navigate('/login', { replace: true });
+    logout();
   };
 
   if (showTestCaseManager && selectedAssignment) {
