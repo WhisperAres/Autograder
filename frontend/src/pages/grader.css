@@ -698,6 +698,15 @@ div.assignments-grid {
   .code-content {
     font-size: 0.75rem;
   }
+
+  .grader-upload-header {
+    flex-direction: column;
+  }
+
+  .grader-upload-button {
+    width: 100%;
+    align-self: auto;
+  }
 }
 
 @media (max-width: 480px) {
@@ -744,6 +753,25 @@ div.assignments-grid {
   .code-content {
     font-size: 0.7rem;
     padding: 1rem;
+  }
+
+  .grader-upload-actions {
+    flex-direction: column;
+  }
+
+  .grader-upload-picker,
+  .grader-upload-clear {
+    width: 100%;
+    text-align: center;
+  }
+
+  .grader-upload-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .grader-upload-remove {
+    width: 100%;
   }
 }
 
@@ -1209,6 +1237,157 @@ div.assignments-grid {
 
 .file-list-preview ul li {
   background: var(--bg-secondary);
+}
+
+.grader-upload-card {
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+    var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+}
+
+.grader-upload-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.grader-upload-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.grader-upload-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  max-width: 760px;
+}
+
+.grader-upload-button {
+  min-width: 160px;
+  border-radius: 14px;
+  align-self: stretch;
+}
+
+.grader-upload-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.grader-upload-picker,
+.grader-upload-clear {
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.grader-upload-picker:hover,
+.grader-upload-clear:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.grader-upload-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.grader-upload-dropzone {
+  border: 1px dashed rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.06);
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+
+.grader-upload-dropzone.has-files {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.grader-upload-count {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.grader-upload-hint {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.grader-upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.grader-upload-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.grader-upload-item-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.grader-upload-item-name {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.grader-upload-item-meta {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.grader-upload-remove {
+  border: none;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.grader-upload-remove:hover {
+  background: rgba(239, 68, 68, 0.18);
 }
 
 .test-cases-list ul {

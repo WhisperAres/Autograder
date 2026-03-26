@@ -1070,7 +1070,10 @@ ${classMembers ? classMembers + '\n' : ''}
               }
             }
 
-            passed = actualOutput.includes("PASS") || actualOutput === testCase.expectedOutput.trim();
+            const expectedOutput = typeof testCase.expectedOutput === "string"
+              ? testCase.expectedOutput.trim()
+              : "";
+            passed = actualOutput.includes("PASS") || (expectedOutput !== "" && actualOutput === expectedOutput);
           } catch (execError) {
             errorMessage = execError.message || "Execution failed";
             passed = false;

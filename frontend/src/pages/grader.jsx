@@ -187,16 +187,18 @@ export default function GraderDashboard() {
     await fetchCodeForSubmission(submission.id);
   };
 
+  const getQueuedPath = (file) => file.webkitRelativePath || file.name;
+
   const appendUploadFiles = (incomingFiles) => {
     const nextFiles = Array.from(incomingFiles || []);
     if (nextFiles.length === 0) return;
 
     setUploadFiles((currentFiles) => {
       const seenPaths = new Set(
-        currentFiles.map((file) => file.webkitRelativePath || file.name)
+        currentFiles.map((file) => getQueuedPath(file))
       );
       const deduped = nextFiles.filter((file) => {
-        const relativePath = file.webkitRelativePath || file.name;
+        const relativePath = getQueuedPath(file);
         if (seenPaths.has(relativePath)) {
           return false;
         }
@@ -218,6 +220,16 @@ export default function GraderDashboard() {
     e.target.value = "";
   };
 
+  const removeQueuedUpload = (pathToRemove) => {
+    setUploadFiles((currentFiles) =>
+      currentFiles.filter((file) => getQueuedPath(file) !== pathToRemove)
+    );
+  };
+
+  const clearQueuedUploads = () => {
+    setUploadFiles([]);
+  };
+
   const handleFileUpload = async () => {
     if (uploadFiles.length === 0 || !selectedAssignment) {
       showModal('Error', "Please select files and an assignment", 'error');
@@ -228,7 +240,7 @@ export default function GraderDashboard() {
       const form = new FormData();
       uploadFiles.forEach((f) => {
         form.append("files", f);
-        form.append("paths", f.webkitRelativePath || f.name);
+        form.append("paths", getQueuedPath(f));
       });
       const res = await api.post(`/grader/page/test-solutions/${selectedAssignment.id}/upload`, form);
       if (res.data.files) {
@@ -355,36 +367,55 @@ export default function GraderDashboard() {
             </header>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingBottom: '20px' }}>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
-                    <input id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        <label htmlFor="grader-file-input" style={{ display: 'inline-block', padding: '12px 16px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
-                          <span style={{ fontSize: '14px' }}>Select Files</span>
-                        </label>
-                        <label htmlFor="grader-folder-input" style={{ display: 'inline-block', padding: '12px 16px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center', cursor: 'pointer' }}>
-                          <span style={{ fontSize: '14px' }}>Select Folder</span>
-                        </label>
-                      </div>
-                      <div style={{ padding: '20px', border: '2px dashed var(--border)', borderRadius: '12px', textAlign: 'center' }}>
-                        <span style={{ fontSize: '14px' }}>📁 {uploadFiles.length > 0 ? `${uploadFiles.length} file(s) selected` : 'Choose grader solution files or a package folder'}</span>
-                      </div>
-                      {uploadFiles.length > 0 && (
-                        <div style={{ maxHeight: '140px', overflowY: 'auto', textAlign: 'left', fontSize: '13px', color: 'var(--text-muted)' }}>
-                          {uploadFiles.map((f, index) => (
-                            <div key={`${f.webkitRelativePath || f.name}-${index}`}>{f.webkitRelativePath || f.name}</div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+              <div className="grader-upload-card">
+                <div className="grader-upload-header">
+                  <div>
+                    <h3 className="grader-upload-title">Upload Grader Solution</h3>
+                    <p className="grader-upload-subtitle">Add files or folders in multiple rounds. New selections are appended to the current queue.</p>
                   </div>
-                  <button className="btn btn-success" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0} style={{ height: '60px', padding: '0 30px', borderRadius: '12px', fontWeight: '600' }}>
-                    {uploading ? '⏳...' : 'Upload'}
+                  <button className="btn btn-success grader-upload-button" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0}>
+                    {uploading ? 'Uploading...' : 'Upload Queue'}
                   </button>
                 </div>
+
+                <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
+                <input id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
+
+                <div className="grader-upload-actions">
+                  <label htmlFor="grader-file-input" className="grader-upload-picker">Add Files</label>
+                  <label htmlFor="grader-folder-input" className="grader-upload-picker">Add Folder</label>
+                  <button type="button" className="grader-upload-clear" onClick={clearQueuedUploads} disabled={uploadFiles.length === 0}>Clear Queue</button>
+                </div>
+
+                <div className={`grader-upload-dropzone ${uploadFiles.length > 0 ? 'has-files' : ''}`}>
+                  <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) queued` : 'No files selected yet'}</div>
+                  <div className="grader-upload-hint">
+                    Package folders are preserved. You can click `Add Folder` again to add another folder to the same queue.
+                  </div>
+                </div>
+
+                {uploadFiles.length > 0 && (
+                  <div className="grader-upload-list">
+                    {uploadFiles.map((file, index) => {
+                      const queuedPath = getQueuedPath(file);
+                      return (
+                        <div key={`${queuedPath}-${index}`} className="grader-upload-item">
+                          <div className="grader-upload-item-main">
+                            <div className="grader-upload-item-name">{queuedPath}</div>
+                            <div className="grader-upload-item-meta">{Math.max(1, Math.round(file.size / 1024))} KB</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="grader-upload-remove"
+                            onClick={() => removeQueuedUpload(queuedPath)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {codeFiles.length > 0 && (
