@@ -15,7 +15,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
-router.post("/", upload.single("file"), uploadSubmission);
+router.post("/", upload.any(), uploadSubmission);
 router.get("/", getStudentSubmissions);
 router.get("/:submissionId/results", getSubmissionResults);
 router.get("/:submissionId/code/:fileId", getSubmissionCode);

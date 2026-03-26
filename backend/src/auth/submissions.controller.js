@@ -4,15 +4,47 @@ const CodeFile = require('../models/codeFile');
 const Assignment = require('../models/assignment');
 const FileService = require('../services/fileService');
 
+const normalizeSubmissionPath = (rawPath, fallbackName = 'uploaded-file') => {
+  const originalValue = String(rawPath || fallbackName).trim();
+  const normalizedParts = originalValue
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter(Boolean);
+
+  if (normalizedParts.length === 0) {
+    throw new Error('Uploaded file path is empty');
+  }
+
+  if (normalizedParts.some(segment => segment === '.' || segment === '..')) {
+    throw new Error(`Invalid uploaded file path: ${originalValue}`);
+  }
+
+  return normalizedParts.join('/');
+};
+
+const getUploadedFiles = (req) => {
+  if (Array.isArray(req.files) && req.files.length > 0) {
+    return req.files;
+  }
+
+  if (req.file) {
+    return [req.file];
+  }
+
+  return [];
+};
+
 exports.uploadSubmission = async (req, res) => {
   try {
     const assignmentId = req.params.assignmentId;
 
     const studentId = req.user.id;
     const studentEmail = req.user.email;
+    const uploadedFiles = getUploadedFiles(req);
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
+    if (uploadedFiles.length === 0) {
+      return res.status(400).json({ message: 'No files uploaded' });
     }
 
     if (!assignmentId) {
@@ -33,13 +65,6 @@ exports.uploadSubmission = async (req, res) => {
         message: `Submission closed. Due date was ${dueDate.toLocaleString()}`,
         isLate: true
       });
-    }
-
-    let fileContent;
-    try {
-      fileContent = req.file.buffer.toString('utf-8');
-    } catch (err) {
-      fileContent = req.file.buffer.toString('binary');
     }
 
     // Check if submission exists
@@ -68,12 +93,24 @@ exports.uploadSubmission = async (req, res) => {
       await submission.save();
     }
 
-    // Save code file to database
-    await FileService.saveCodeFile(
-      submission.id,
-      req.file.originalname,
-      fileContent
-    );
+    const uploadedPaths = Array.isArray(req.body?.paths)
+      ? req.body.paths
+      : req.body?.paths
+        ? [req.body.paths]
+        : [];
+
+    for (let index = 0; index < uploadedFiles.length; index++) {
+      const file = uploadedFiles[index];
+      let fileContent;
+      try {
+        fileContent = file.buffer.toString('utf-8');
+      } catch (err) {
+        fileContent = file.buffer.toString('binary');
+      }
+
+      const relativePath = normalizeSubmissionPath(uploadedPaths[index] || file.originalname, file.originalname);
+      await FileService.saveCodeFile(submission.id, relativePath, fileContent);
+    }
 
     // Fetch all files for this submission
     const files = await CodeFile.findAll({
@@ -82,7 +119,7 @@ exports.uploadSubmission = async (req, res) => {
     });
 
     res.json({
-      message: 'File uploaded successfully',
+      message: 'Files uploaded successfully',
       submission: {
         id: submission.id,
         assignmentId: submission.assignmentId,
@@ -98,7 +135,7 @@ exports.uploadSubmission = async (req, res) => {
     });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ message: 'Error uploading submission' });
+    res.status(500).json({ message: error.message || 'Error uploading submission' });
   }
 };
 

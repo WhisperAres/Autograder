@@ -7,7 +7,19 @@ class FileService {
   static async saveCodeFile(submissionId, fileName, fileContent) {
     try {
       const fileSizeKB = Buffer.byteLength(fileContent, 'utf8') / 1024;
-      
+
+      const existingFile = await CodeFile.findOne({
+        where: { submissionId, fileName }
+      });
+
+      if (existingFile) {
+        existingFile.fileContent = fileContent;
+        existingFile.fileSizeKB = Math.round(fileSizeKB * 100) / 100;
+        existingFile.uploadedAt = new Date();
+        await existingFile.save();
+        return existingFile;
+      }
+
       const codeFile = await CodeFile.create({
         submissionId,
         fileName,

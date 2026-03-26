@@ -165,8 +165,35 @@ export default function Dashboard({ handleLogout, user }) {
     navigate('/student/dashboard');
   };
 
+  const appendSelectedFiles = (incomingFiles) => {
+    const nextFiles = Array.from(incomingFiles || []);
+    if (nextFiles.length === 0) return;
+
+    setFiles((currentFiles) => {
+      const seenPaths = new Set(
+        currentFiles.map((file) => file.webkitRelativePath || file.name)
+      );
+      const deduped = nextFiles.filter((file) => {
+        const relativePath = file.webkitRelativePath || file.name;
+        if (seenPaths.has(relativePath)) {
+          return false;
+        }
+        seenPaths.add(relativePath);
+        return true;
+      });
+
+      return [...currentFiles, ...deduped];
+    });
+  };
+
   const handleFileChange = (e) => {
-    setFiles([...files, ...e.target.files]);
+    appendSelectedFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const handleFolderChange = (e) => {
+    appendSelectedFiles(e.target.files);
+    e.target.value = "";
   };
 
   const removeFile = (index) => {
@@ -183,13 +210,14 @@ export default function Dashboard({ handleLogout, user }) {
     setUploadingFiles(true);
 
     try {
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("assignmentId", selectedAssignment.id);
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append("files", file);
+        formData.append("paths", file.webkitRelativePath || file.name);
+      });
+      formData.append("assignmentId", selectedAssignment.id);
 
-        await api.post(`/student/page/submit-assignment/${selectedAssignment.id}/upload`, formData);
-      }
+      await api.post(`/student/page/submit-assignment/${selectedAssignment.id}/upload`, formData);
 
       setFiles([]);
       showModal('Success', 'Files uploaded successfully!', 'success');
@@ -404,11 +432,24 @@ export default function Dashboard({ handleLogout, user }) {
                       multiple
                       disabled={new Date(selectedAssignment.dueDate) < new Date()}
                     />
-                    <label htmlFor="file-input" className="btn-upload">+ Select Files</label>
+                    <input
+                      type="file"
+                      id="folder-input"
+                      style={{ display: 'none' }}
+                      onChange={handleFolderChange}
+                      multiple
+                      webkitdirectory=""
+                      directory=""
+                      disabled={new Date(selectedAssignment.dueDate) < new Date()}
+                    />
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <label htmlFor="file-input" className="btn-upload">+ Select Files</label>
+                      <label htmlFor="folder-input" className="btn-upload">+ Select Folder</label>
+                    </div>
                     {files.length > 0 && (
                       <ul className="file-list-upload" style={{ gap: 2, padding: '10px' }}>
                         {files.map((f, i) => (
-                          <li key={i}>{f.name} <button type="button" onClick={() => removeFile(i)}>✕</button></li>
+                          <li key={i}>{f.webkitRelativePath || f.name} <button type="button" onClick={() => removeFile(i)}>✕</button></li>
                         ))}
                       </ul>
                     )}

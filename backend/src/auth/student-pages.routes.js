@@ -30,7 +30,7 @@ router.get("/dashboard/submissions", getStudentSubmissions);
 router.get("/submit-assignment/:assignmentId", getAssignmentById);
 
 // Upload solution files
-router.post("/submit-assignment/:assignmentId/upload", upload.single("file"), uploadSubmission);
+router.post("/submit-assignment/:assignmentId/upload", upload.any(), uploadSubmission);
 
 // Delete specific file from submission
 router.delete("/submit-assignment/:submissionId/file/:fileId/delete", deleteSubmissionFile);

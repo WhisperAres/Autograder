@@ -147,9 +147,31 @@ const transformJUnitStyle = (code) => {
 const generateFieldDeclarations = (javaFiles) => {
   if (!javaFiles || !Array.isArray(javaFiles)) return '';
   return javaFiles.map(file => {
-    const className = file.fileName.replace('.java', '');
+    const className = path.basename(file.fileName, '.java');
     return `  public static ${className} ${className.toLowerCase()};`;
   }).join('\n');
+};
+
+const quoteShellPath = (filePath) => `"${String(filePath).replace(/"/g, '\\"')}"`;
+
+const getJavaSourceArguments = (javaFiles) => (
+  javaFiles.map(file => quoteShellPath(file.fileName)).join(" ")
+);
+
+const writeSubmissionFileToTemp = (tempDir, storedPath, fileContent) => {
+  const normalizedPath = String(storedPath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  const targetPath = path.join(tempDir, normalizedPath);
+  const resolvedTempDir = path.resolve(tempDir);
+  const resolvedTargetPath = path.resolve(targetPath);
+
+  if (resolvedTargetPath !== resolvedTempDir && !resolvedTargetPath.startsWith(`${resolvedTempDir}${path.sep}`)) {
+    throw new Error(`Unsafe submission file path: ${storedPath}`);
+  }
+
+  fs.mkdirSync(path.dirname(resolvedTargetPath), { recursive: true });
+  fs.writeFileSync(resolvedTargetPath, fileContent, "utf8");
 };
 
 // Extract import lines from submitted test code and return the body without imports
@@ -765,15 +787,15 @@ exports.runSingleTest = async (req, res) => {
 
     try {
       for (const codeFile of javaFiles) {
-        fs.writeFileSync(path.join(tempDir, codeFile.fileName), codeFile.fileContent, "utf8");
+        writeSubmissionFileToTemp(tempDir, codeFile.fileName, sanitizeJavaSource(codeFile.fileContent));
       }
 
       try {
         await ensureJUnitJars();
-        const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+        const javaFileNames = getJavaSourceArguments(javaFiles);
         const classpath = getJavaClasspath(tempDir);
         console.log("[admin] javac classpath:", classpath);
-        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
+        execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${javaFileNames}`, {
           timeout: 20000,
           stdio: ['pipe', 'pipe', 'pipe'],
           maxBuffer: 1 * 1024 * 1024
@@ -805,7 +827,7 @@ exports.runSingleTest = async (req, res) => {
       try {
         const classpath = getJavaClasspath(tempDir);
         console.log("[admin] test compile classpath:", classpath);
-        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
+        const cmd = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
         console.log("[admin] running command:", cmd);
         const actualOutput = execSync(cmd, { encoding: "utf8", timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 5 * 1024 * 1024 }).trim();
         const passed = actualOutput.includes("PASS");
@@ -861,9 +883,8 @@ exports.runTestCases = async (req, res) => {
 
     try {
       for (const codeFile of codeFiles) {
-        const filePath = path.join(tempDir, codeFile.fileName);
         const sanitized = sanitizeJavaSource(codeFile.fileContent);
-        fs.writeFileSync(filePath, sanitized, "utf8");
+        writeSubmissionFileToTemp(tempDir, codeFile.fileName, sanitized);
       }
 
       // Remove any previous test results for this submission to avoid duplicates
@@ -876,9 +897,9 @@ exports.runTestCases = async (req, res) => {
       console.log("[admin.runTestCases] Filtered javaFiles:", javaFiles.length, "Files:", javaFiles.map(f => f.fileName));
       if (javaFiles.length > 0) {
         try {
-          const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+          const javaFileNames = getJavaSourceArguments(javaFiles);
           const classpath = getJavaClasspath(tempDir);
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${javaFileNames}`, {
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 5 * 1024 * 1024
@@ -937,7 +958,7 @@ ${fieldDecls}
               console.log("Generated test code for", testCase.testName, ":\n", testCode);
               fs.writeFileSync(path.join(tempDir, testFileName), testCode);
               const classpath = getJavaClasspath(tempDir);
-              command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testFileName} && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
+              command = `cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${testFileName} && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`;
               actualOutput = execSync(command, {
                 encoding: "utf8",
                 timeout: 15000,
@@ -948,9 +969,9 @@ ${fieldDecls}
               const mainFile = codeFiles.find(f => f.fileName.endsWith(".js")) || codeFiles[0];
 
               if (mainFile.fileName.endsWith(".js")) {
-                command = `cd "${tempDir}" && node ${mainFile.fileName}`;
+                command = `cd "${tempDir}" && node ${quoteShellPath(mainFile.fileName)}`;
               } else if (mainFile.fileName.endsWith(".py")) {
-                command = `cd "${tempDir}" && python ${mainFile.fileName}`;
+                command = `cd "${tempDir}" && python ${quoteShellPath(mainFile.fileName)}`;
               }
 
               if (command) {
@@ -1443,17 +1464,17 @@ exports.runBulkTests = async (req, res) => {
 
           // Write all code files to disk
           for (const file of codeFiles) {
-            fs.writeFileSync(path.join(tempDir, file.fileName), file.fileContent);
+            writeSubmissionFileToTemp(tempDir, file.fileName, sanitizeJavaSource(file.fileContent));
           }
 
           // Compile all Java files ONCE before test loop
           let compileSuccess = true;
           try {
             const compileStart = Date.now();
-            const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
+            const javaFileNames = getJavaSourceArguments(javaFiles);
           await ensureJUnitJars();
           const classpath = getJavaClasspath(tempDir);
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${javaFileNames}`, {
               timeout: 25000,
               stdio: 'pipe'
             });
@@ -1495,7 +1516,7 @@ exports.runBulkTests = async (req, res) => {
 
                 await ensureJUnitJars();
                 const classpath = getJavaClasspath(tempDir);
-                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, {
+                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" -d "${tempDir}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, {
                   encoding: "utf8",
                   timeout: 10000,
                   stdio: ['pipe', 'pipe', 'pipe']
