@@ -201,32 +201,30 @@ const transformJUnitStyle = (code) => {
   return out;
 };
 
-// Helper to generate class field declarations from uploaded Java files and test code object assignments
-const generateFieldDeclarations = (javaFiles, testCode = '') => {
-  const fieldMap = new Map();
+const generateFieldDeclarations = (testCode = '', classMembers = '') => {
+  if (typeof testCode !== 'string' || testCode.trim() === '') return '';
 
-  if (Array.isArray(javaFiles)) {
-    for (const file of javaFiles) {
-      const className = path.basename(file.fileName, '.java');
-      const fieldName = className.toLowerCase();
-      fieldMap.set(fieldName, className);
-    }
+  const declaredNames = new Set();
+  const combinedDeclarations = `${classMembers || ''}\n`;
+  const declarationRegex = /\b(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?[A-Z][a-zA-Z0-9_<>\[\]]*\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:=|;)/g;
+  let declaredMatch;
+  while ((declaredMatch = declarationRegex.exec(combinedDeclarations)) !== null) {
+    declaredNames.add(declaredMatch[1]);
   }
 
-  if (typeof testCode === 'string' && testCode.trim() !== '') {
-    const assignmentRegex = /(?:^|[;\n\r\t ])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*new\s+([A-Z][a-zA-Z0-9_]*)(?:\s*<[^>]*>)?\s*\(/g;
-    let m;
-    while ((m = assignmentRegex.exec(testCode)) !== null) {
-      const varName = m[1];
-      const className = m[2];
-      if (!fieldMap.has(varName)) {
-        fieldMap.set(varName, className);
-      }
+  const fieldMap = new Map();
+  const assignmentRegex = /(?:^|[;\n\r\t ])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*new\s+([A-Z][a-zA-Z0-9_]*)(?:\s*<[^>]*>)?\s*\(/g;
+  let assignmentMatch;
+  while ((assignmentMatch = assignmentRegex.exec(testCode)) !== null) {
+    const varName = assignmentMatch[1];
+    const className = assignmentMatch[2];
+    if (!declaredNames.has(varName) && !fieldMap.has(varName)) {
+      fieldMap.set(varName, className);
     }
   }
 
   return [...fieldMap.entries()]
-    .map(([fieldName, className]) => `  public static ${className} ${fieldName};`)
+    .map(([fieldName, className]) => `  private ${className} ${fieldName};`)
     .join('\n');
 };
 
@@ -313,6 +311,22 @@ const extractImportsFromTestCode = (code) => {
     classMembers: classMemberLines.join('\n').trim(),
     body: bodyLines.join('\n').trim()
   };
+};
+
+const collectJavaTypeImports = (javaFiles = []) => {
+  const imports = [];
+
+  for (const file of javaFiles) {
+    if (!file?.fileName?.endsWith('.java')) continue;
+    const className = path.basename(file.fileName, '.java');
+    const source = typeof file.fileContent === 'string' ? file.fileContent : '';
+    const packageMatch = source.match(/^\s*package\s+([a-zA-Z_][\w.]*)\s*;/m);
+    if (packageMatch) {
+      imports.push(`import ${packageMatch[1]}.${className};`);
+    }
+  }
+
+  return [...new Set(imports)].join('\n');
 };
 
 // Get all assignments (for grader to select from)
@@ -434,13 +448,19 @@ exports.runTestCases = async (req, res) => {
           const testClassName = `Test${uniqueId}`;
           const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
           console.log("[grader.runTestCases] Generating test for:", testCase.testName, "javaFiles:", javaFiles.map(f => f.fileName));
-          const fieldDecls = generateFieldDeclarations(javaFiles, body);
+          const fieldDecls = generateFieldDeclarations(body, classMembers);
+          const autoImports = collectJavaTypeImports(javaFiles);
+          const mergedImports = [imports, autoImports].filter(Boolean).join('\n');
           console.log("[grader.runTestCases] fieldDecls:", fieldDecls);
           const testBody = transformJUnitStyle(body);
-          const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+          const testCode = `${mergedImports ? mergedImports + '\n\n' : ''}public class ${testClassName} {
 ${fieldDecls}
 ${classMembers ? classMembers + '\n' : ''}
   public static void main(String[] args) {
+    new ${testClassName}().run();
+  }
+
+  private void run() {
     try {
       ${testBody}
       System.out.println("PASS");
@@ -775,11 +795,18 @@ exports.runGraderTests = async (req, res) => {
             const uniqueId = Date.now() + Math.random().toString().replace('.', '');
             const testClassName = `Test${uniqueId}`;
             const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
+            const generatedFields = generateFieldDeclarations(body, classMembers);
+            const autoImports = collectJavaTypeImports(files.filter(f => f.fileName.endsWith('.java')));
+            const mergedImports = [imports, autoImports].filter(Boolean).join('\n');
             
             // Generate Test Harness
-            const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
-${classMembers ? classMembers + '\n' : ''}
+            const testCode = `${mergedImports ? mergedImports + '\n\n' : ''}public class ${testClassName} {
+${generatedFields ? generatedFields + '\n' : ''}${classMembers ? classMembers + '\n' : ''}
               public static void main(String[] args) {
+                new ${testClassName}().run();
+              }
+
+              private void run() {
                 try {
                   ${transformJUnitStyle(body)}
                   System.out.println("PASS");

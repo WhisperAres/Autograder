@@ -143,13 +143,31 @@ const transformJUnitStyle = (code) => {
   return out;
 };
 
-// Helper to generate class field declarations from uploaded Java files
-const generateFieldDeclarations = (javaFiles) => {
-  if (!javaFiles || !Array.isArray(javaFiles)) return '';
-  return javaFiles.map(file => {
-    const className = path.basename(file.fileName, '.java');
-    return `  public static ${className} ${className.toLowerCase()};`;
-  }).join('\n');
+const generateFieldDeclarations = (testCode = '', classMembers = '') => {
+  if (typeof testCode !== 'string' || testCode.trim() === '') return '';
+
+  const declaredNames = new Set();
+  const combinedDeclarations = `${classMembers || ''}\n`;
+  const declarationRegex = /\b(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?[A-Z][a-zA-Z0-9_<>\[\]]*\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:=|;)/g;
+  let declaredMatch;
+  while ((declaredMatch = declarationRegex.exec(combinedDeclarations)) !== null) {
+    declaredNames.add(declaredMatch[1]);
+  }
+
+  const fieldMap = new Map();
+  const assignmentRegex = /(?:^|[;\n\r\t ])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*new\s+([A-Z][a-zA-Z0-9_]*)(?:\s*<[^>]*>)?\s*\(/g;
+  let assignmentMatch;
+  while ((assignmentMatch = assignmentRegex.exec(testCode)) !== null) {
+    const varName = assignmentMatch[1];
+    const className = assignmentMatch[2];
+    if (!declaredNames.has(varName) && !fieldMap.has(varName)) {
+      fieldMap.set(varName, className);
+    }
+  }
+
+  return [...fieldMap.entries()]
+    .map(([fieldName, className]) => `  private ${className} ${fieldName};`)
+    .join('\n');
 };
 
 const quoteShellPath = (filePath) => `"${String(filePath).replace(/"/g, '\\"')}"`;
@@ -219,6 +237,22 @@ const extractImportsFromTestCode = (code) => {
     classMembers: classMemberLines.join('\n').trim(),
     body: bodyLines.join('\n').trim()
   };
+};
+
+const collectJavaTypeImports = (javaFiles = []) => {
+  const imports = [];
+
+  for (const file of javaFiles) {
+    if (!file?.fileName?.endsWith('.java')) continue;
+    const className = path.basename(file.fileName, '.java');
+    const source = typeof file.fileContent === 'string' ? file.fileContent : '';
+    const packageMatch = source.match(/^\s*package\s+([a-zA-Z_][\w.]*)\s*;/m);
+    if (packageMatch) {
+      imports.push(`import ${packageMatch[1]}.${className};`);
+    }
+  }
+
+  return [...new Set(imports)].join('\n');
 };
 
 const JUNIT_LIB_DIR = path.join(__dirname, '../../lib');
@@ -838,8 +872,15 @@ exports.runSingleTest = async (req, res) => {
       const uniqueId = Date.now() + Math.random().toString().replace('.', '');
       const testClassName = `Test${uniqueId}`;
       const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
-      const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
-${classMembers ? classMembers + '\n' : ''}        public static void main(String[] args) {
+      const autoImports = collectJavaTypeImports(javaFiles);
+      const generatedFields = generateFieldDeclarations(body, classMembers);
+      const mergedImports = [imports, autoImports].filter(Boolean).join('\n');
+      const testCode = `${mergedImports ? mergedImports + '\n\n' : ''}public class ${testClassName} {
+${generatedFields ? generatedFields + '\n' : ''}${classMembers ? classMembers + '\n' : ''}        public static void main(String[] args) {
+          new ${testClassName}().run();
+        }
+
+        private void run() {
           try {
             ${transformJUnitStyle(body)}
             System.out.println("PASS");
@@ -965,16 +1006,22 @@ exports.runTestCases = async (req, res) => {
               const testClassName = `Test${uniqueId}`;
               console.log("[testCode generation] caseIndex:", caseIndex, "javaFiles:", javaFiles.map(f => f.fileName));
               const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
-              const fieldDecls = generateFieldDeclarations(javaFiles, body);
+              const autoImports = collectJavaTypeImports(javaFiles);
+              const fieldDecls = generateFieldDeclarations(body, classMembers);
+              const mergedImports = [imports, autoImports].filter(Boolean).join('\n');
               console.log("[testCode generation] fieldDecls:", fieldDecls);
               console.log("[testCode generation] imports:", imports);
               console.log("[testCode generation] classMembers:\n", classMembers);
               console.log("[testCode generation] body (no imports):\n", body);
               const testBody = transformJUnitStyle(body);
-              const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
+              const testCode = `${mergedImports ? mergedImports + '\n\n' : ''}public class ${testClassName} {
 ${fieldDecls}
 ${classMembers ? classMembers + '\n' : ''}
   public static void main(String[] args) {
+    new ${testClassName}().run();
+  }
+
+  private void run() {
     try {
       ${testBody}
       System.out.println("PASS");
@@ -1533,9 +1580,16 @@ exports.runBulkTests = async (req, res) => {
                 const uniqueId = `${submission.id}_${caseIndex}`;
                 const testClassName = `Test${uniqueId}`;
                 const { imports, classMembers, body } = extractImportsFromTestCode(testCase.testCode);
-                const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
-${classMembers ? classMembers + '\n' : ''}
+                const autoImports = collectJavaTypeImports(javaFiles);
+                const generatedFields = generateFieldDeclarations(body, classMembers);
+                const mergedImports = [imports, autoImports].filter(Boolean).join('\n');
+                const testCode = `${mergedImports ? mergedImports + '\n\n' : ''}public class ${testClassName} {
+${generatedFields ? generatedFields + '\n' : ''}${classMembers ? classMembers + '\n' : ''}
                   public static void main(String[] args) {
+                    new ${testClassName}().run();
+                  }
+
+                  private void run() {
                     try { 
                       ${transformJUnitStyle(body)} 
                       System.out.println("PASS"); 
