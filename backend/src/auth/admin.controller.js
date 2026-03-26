@@ -1079,11 +1079,15 @@ ${classMembers ? classMembers + '\n' : ''}
             passed = false;
           }
 
+          if (!passed && !errorMessage && typeof actualOutput === "string" && actualOutput.trim() !== "") {
+            errorMessage = actualOutput.trim();
+          }
+
           return {
             testName: testCase.testName,
             testCaseId: testCase.id,
             passed,
-            actualOutput: passed ? actualOutput : "",
+            actualOutput,
             expectedOutput: testCase.expectedOutput,
             errorMessage
           };

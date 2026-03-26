@@ -493,6 +493,10 @@ ${classMembers ? classMembers + '\n' : ''}
           passed = false;
         }
 
+        if (!passed && !errorMessage && typeof actualOutput === "string" && actualOutput.trim() !== "") {
+          errorMessage = actualOutput.trim();
+        }
+
         results.push({
           testName: testCase.testName,
           passed,
