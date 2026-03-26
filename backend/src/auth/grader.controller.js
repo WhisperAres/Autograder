@@ -56,6 +56,10 @@ const JUNIT_JARS = [
   {
     name: 'hamcrest-core-1.3.jar',
     url: 'https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar'
+  },
+  {
+    name: 'junit-platform-console-standalone-1.10.2.jar',
+    url: 'https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar'
   }
 ];
 
@@ -110,10 +114,7 @@ const getJavaClasspath = (tempDir) => {
 // Remove JUnit imports from submitted code if junit libs are not available
 const sanitizeJavaSource = (source) => {
   if (typeof source !== 'string') return source;
-  return source
-    .split(/\r?\n/)
-    .filter(line => !line.trim().startsWith('import org.junit.') && !line.trim().startsWith('import static org.junit.'))
-    .join('\n');
+  return source.replace(/\r\n/g, '\n');
 };
 
 // Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
@@ -673,8 +674,10 @@ exports.runGraderTests = async (req, res) => {
         const javaFileNames = javaFiles.map(f => f.fileName).join(' ');
         
         try {
+          await ensureJUnitJars();
+          const classpath = getJavaClasspath(tempDir);
           // Compile all solution files
-          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, { 
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, { 
             timeout: 20000,
             stdio: ['pipe', 'pipe', 'pipe'],
             maxBuffer: 1 * 1024 * 1024
@@ -699,12 +702,13 @@ exports.runGraderTests = async (req, res) => {
           if (fileExt === '.java') {
             const uniqueId = Date.now() + Math.random().toString().replace('.', '');
             const testClassName = `Test${uniqueId}`;
+            const { imports, body } = extractImportsFromTestCode(testCase.testCode);
             
             // Generate Test Harness
-            const testCode = `public class ${testClassName} {
+            const testCode = `${imports ? imports + '\n\n' : ''}public class ${testClassName} {
               public static void main(String[] args) {
                 try {
-                  ${transformJUnitStyle(testCase.testCode)}
+                  ${transformJUnitStyle(body)}
                   System.out.println("PASS");
                 } catch (AssertionError e) {
                   System.out.println("FAIL: " + e.getMessage());
@@ -718,7 +722,8 @@ exports.runGraderTests = async (req, res) => {
             fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
             // Compile and Run only the harness (linking to pre-compiled solution)
-            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, { 
+            const classpath = getJavaClasspath(tempDir);
+            output = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, { 
               timeout: 20000,
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],

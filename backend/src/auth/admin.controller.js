@@ -175,7 +175,8 @@ const extractImportsFromTestCode = (code) => {
 const JUNIT_LIB_DIR = path.join(__dirname, '../../lib');
 const JUNIT_JARS = [
   { name: 'junit-4.13.2.jar', url: 'https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar' },
-  { name: 'hamcrest-core-1.3.jar', url: 'https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar' }
+  { name: 'hamcrest-core-1.3.jar', url: 'https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar' },
+  { name: 'junit-platform-console-standalone-1.10.2.jar', url: 'https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar' }
 ];
 
 const downloadFile = (url, dest) => {
@@ -234,10 +235,7 @@ const detectInfiniteLoop = (code) => {
 
 const sanitizeJavaSource = (source) => {
   if (typeof source !== 'string') return source;
-  return source
-    .split(/\r?\n/)
-    .filter(line => !line.trim().startsWith('import org.junit.') && !line.trim().startsWith('import static org.junit.'))
-    .join('\n');
+  return source.replace(/\r\n/g, '\n');
 };
 
 // Safe file cleanup with timeout
@@ -1453,7 +1451,9 @@ exports.runBulkTests = async (req, res) => {
           try {
             const compileStart = Date.now();
             const javaFileNames = javaFiles.map(f => f.fileName).join(" ");
-            execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${javaFileNames}`, {
+          await ensureJUnitJars();
+          const classpath = getJavaClasspath(tempDir);
+          execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${javaFileNames}`, {
               timeout: 25000,
               stdio: 'pipe'
             });
@@ -1493,7 +1493,9 @@ exports.runBulkTests = async (req, res) => {
                 }`;
                 fs.writeFileSync(path.join(tempDir, `${testClassName}.java`), testCode);
 
-                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 ${testClassName}.java && ${JAVA_CMD} ${testClassName}`, {
+                await ensureJUnitJars();
+                const classpath = getJavaClasspath(tempDir);
+                actualOutput = execSync(`cd "${tempDir}" && ${JAVAC_CMD} -encoding UTF-8 -cp "${classpath}" ${testClassName}.java && ${JAVA_CMD} -cp "${classpath}" ${testClassName}`, {
                   encoding: "utf8",
                   timeout: 10000,
                   stdio: ['pipe', 'pipe', 'pipe']
