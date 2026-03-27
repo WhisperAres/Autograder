@@ -30,7 +30,7 @@ export default function GraderDashboard() {
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [showUploadPickerOptions, setShowUploadPickerOptions] = useState(false);
+  const [isUploadDragOver, setIsUploadDragOver] = useState(false);
   const [runningTests, setRunningTests] = useState(false);
   const [testResults, setTestResults] = useState([]);
   const [showTestCaseManager, setShowTestCaseManager] = useState(false);
@@ -190,47 +190,164 @@ export default function GraderDashboard() {
     await fetchCodeForSubmission(submission.id);
   };
 
-  const getQueuedPath = (file) => file.webkitRelativePath || file.name;
+  const getQueuedPath = (file) => file.webkitRelativePath || file.relativePath || file.name;
+
+  const withRelativePath = (file, relativePath) => {
+    if (!relativePath || relativePath === file.webkitRelativePath) {
+      return file;
+    }
+
+    try {
+      Object.defineProperty(file, "relativePath", {
+        value: relativePath,
+        configurable: true
+      });
+    } catch (error) {
+      file.relativePath = relativePath;
+    }
+
+    return file;
+  };
+
+  const mergeUploadFiles = (currentFiles, incomingFiles) => {
+    const nextFiles = Array.from(incomingFiles || []);
+    if (nextFiles.length === 0) return currentFiles;
+
+    const seenPaths = new Set(currentFiles.map((file) => getQueuedPath(file)));
+    const deduped = nextFiles.filter((file) => {
+      const relativePath = getQueuedPath(file);
+      if (seenPaths.has(relativePath)) {
+        return false;
+      }
+      seenPaths.add(relativePath);
+      return true;
+    });
+
+    return [...currentFiles, ...deduped];
+  };
+
+  const uploadSelectedFiles = async (filesToUpload) => {
+    if (!selectedAssignment || filesToUpload.length === 0) {
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const form = new FormData();
+      filesToUpload.forEach((file) => {
+        form.append("files", file);
+        form.append("paths", getQueuedPath(file));
+      });
+      const res = await api.post(`/grader/page/test-solutions/${selectedAssignment.id}/upload`, form);
+      if (res.data.files) {
+        setCodeFiles(res.data.files);
+        setSelectedFileId(0);
+        setCodeContent(res.data.files[0].fileContent || "");
+        setCodeName(res.data.files[0].fileName || "Code");
+      }
+    } catch (err) {
+      showModal('Error', "Error uploading files: " + err.message, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const appendUploadFiles = (incomingFiles) => {
-    const nextFiles = Array.from(incomingFiles || []);
-    if (nextFiles.length === 0) return;
-
+    let mergedFiles = [];
     setUploadFiles((currentFiles) => {
-      const seenPaths = new Set(
-        currentFiles.map((file) => getQueuedPath(file))
-      );
-      const deduped = nextFiles.filter((file) => {
-        const relativePath = getQueuedPath(file);
-        if (seenPaths.has(relativePath)) {
-          return false;
-        }
-        seenPaths.add(relativePath);
-        return true;
-      });
-
-      return [...currentFiles, ...deduped];
+      mergedFiles = mergeUploadFiles(currentFiles, incomingFiles);
+      return mergedFiles;
     });
+    return mergedFiles;
   };
 
   const handleGraderFileChange = (e) => {
-    appendUploadFiles(e.target.files);
-    setShowUploadPickerOptions(false);
+    const mergedFiles = appendUploadFiles(e.target.files);
     e.target.value = "";
+    if (mergedFiles.length > 0) {
+      uploadSelectedFiles(mergedFiles);
+    }
   };
 
   const handleGraderFolderChange = (e) => {
-    appendUploadFiles(e.target.files);
-    setShowUploadPickerOptions(false);
+    const mergedFiles = appendUploadFiles(e.target.files);
     e.target.value = "";
+    if (mergedFiles.length > 0) {
+      uploadSelectedFiles(mergedFiles);
+    }
   };
 
-  const openFilePicker = () => {
-    graderFileInputRef.current?.click();
+  const readDroppedEntry = async (entry, parentPath = "") => {
+    if (!entry) return [];
+
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        entry.file((file) => {
+          const relativePath = parentPath ? `${parentPath}/${file.name}` : file.name;
+          resolve([withRelativePath(file, relativePath)]);
+        }, () => resolve([]));
+      });
+    }
+
+    if (!entry.isDirectory) {
+      return [];
+    }
+
+    const reader = entry.createReader();
+    const entries = [];
+    const readAllEntries = () => new Promise((resolve, reject) => {
+      const readBatch = () => {
+        reader.readEntries((batch) => {
+          if (!batch.length) {
+            resolve(entries);
+            return;
+          }
+          entries.push(...batch);
+          readBatch();
+        }, reject);
+      };
+      readBatch();
+    });
+
+    const childEntries = await readAllEntries();
+    const nestedFiles = await Promise.all(
+      childEntries.map((childEntry) =>
+        readDroppedEntry(childEntry, parentPath ? `${parentPath}/${entry.name}` : entry.name)
+      )
+    );
+
+    return nestedFiles.flat();
   };
 
-  const openFolderPicker = () => {
-    graderFolderInputRef.current?.click();
+  const extractDroppedFiles = async (dataTransferItems, fallbackFiles) => {
+    const items = Array.from(dataTransferItems || []);
+    if (items.length === 0) {
+      return Array.from(fallbackFiles || []);
+    }
+
+    const extracted = await Promise.all(
+      items.map(async (item) => {
+        const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+        if (!entry) {
+          const file = item.getAsFile ? item.getAsFile() : null;
+          return file ? [file] : [];
+        }
+        return readDroppedEntry(entry);
+      })
+    );
+
+    return extracted.flat();
+  };
+
+  const handleUploadDrop = async (e) => {
+    e.preventDefault();
+    setIsUploadDragOver(false);
+
+    const droppedFiles = await extractDroppedFiles(e.dataTransfer?.items, e.dataTransfer?.files);
+    const mergedFiles = appendUploadFiles(droppedFiles);
+    if (mergedFiles.length > 0) {
+      uploadSelectedFiles(mergedFiles);
+    }
   };
 
   const removeQueuedUpload = (pathToRemove) => {
@@ -241,31 +358,6 @@ export default function GraderDashboard() {
 
   const clearQueuedUploads = () => {
     setUploadFiles([]);
-  };
-
-  const handleFileUpload = async () => {
-    if (uploadFiles.length === 0 || !selectedAssignment) {
-      showModal('Error', "Please select files and an assignment", 'error');
-      return;
-    }
-    setUploading(true);
-    try {
-      const form = new FormData();
-      uploadFiles.forEach((f) => {
-        form.append("files", f);
-        form.append("paths", getQueuedPath(f));
-      });
-      const res = await api.post(`/grader/page/test-solutions/${selectedAssignment.id}/upload`, form);
-      if (res.data.files) {
-        setCodeFiles(res.data.files);
-        setSelectedFileId(0);
-        setCodeContent(res.data.files[0].fileContent || "");
-        setCodeName(res.data.files[0].fileName || "Code");
-      }
-      setUploadFiles([]);
-      fetchSubmissionsForAssignment(selectedAssignment.id);
-    } catch (err) { showModal('Error', "Error uploading files: " + err.message, 'error'); }
-    finally { setUploading(false); }
   };
 
   const handleRunTests = async (assignment) => {
@@ -348,10 +440,10 @@ export default function GraderDashboard() {
       <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
       >{darkMode ? '☀️' : '🌙'}</button>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
-        <div style={{ display: 'flex', gap: 20 }}>
+      <div className="grader-workspace">
+        <div className="grader-main-layout">
           {submissions.length > 0 && (
-            <div style={{ width: 320 }} className="submissions-list-panel">
+            <div className="submissions-list-panel grader-submissions-panel">
               <h2>Submissions</h2>
               <div className="submissions-list">
                 {submissions.map((sub) => (
@@ -369,56 +461,51 @@ export default function GraderDashboard() {
             </div>
           )}
 
-          <div style={{ flex: 1, padding: '24px', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box', overflow: 'hidden' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
+          <div className="grader-content-panel">
+            <header className="grader-page-header">
               <div>
-                <h1 style={{ fontSize: '24px', fontWeight: '600', margin: 0 }}>{selectedAssignment.title}</h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
-                  Total Marks: <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{selectedAssignment.totalMarks || 100}</span>
+                <h1 className="grader-page-title">{selectedAssignment.title}</h1>
+                <p className="grader-page-meta">
+                  Total Marks: <span>{selectedAssignment.totalMarks || 100}</span>
                 </p>
               </div>
             </header>
 
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingBottom: '20px' }}>
+            <div className="grader-content-stack">
               <div className="grader-upload-card">
                 <div className="grader-upload-header">
                   <div>
-                    <h3 className="grader-upload-title">Upload Grader Solution</h3>
-                    <p className="grader-upload-subtitle">Add files or folders in multiple rounds. Every new selection is attached with the earlier ones until you upload or clear them.</p>
+                    <h3 className="grader-upload-title">Upload Author Solution</h3>
+                    <p className="grader-upload-subtitle">Files upload immediately after selection. Add more later to extend the same selected set.</p>
                   </div>
-                  <button className="btn btn-success grader-upload-button" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0}>
-                    {uploading ? 'Uploading...' : 'Upload Solution'}
-                  </button>
+                  <div className="grader-upload-status">{uploading ? 'Uploading...' : 'Ready'}</div>
                 </div>
 
                 <input ref={graderFileInputRef} id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
                 <input ref={graderFolderInputRef} id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
 
                 <div className="grader-upload-actions">
-                  <div className="grader-upload-picker-group">
-                    <button
-                      type="button"
-                      className="grader-upload-picker"
-                      onClick={() => setShowUploadPickerOptions((current) => !current)}
-                    >
-                      Add files/folders
-                    </button>
-                    {showUploadPickerOptions && (
-                      <div className="grader-upload-picker-menu">
-                        <button type="button" className="grader-upload-picker-option" onClick={openFilePicker}>
-                          Choose files
-                        </button>
-                        <button type="button" className="grader-upload-picker-option" onClick={openFolderPicker}>
-                          Choose folder
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <label htmlFor="grader-file-input" className="grader-upload-picker">Add files</label>
+                  <label htmlFor="grader-folder-input" className="grader-upload-picker">Add folder</label>
                   <button type="button" className="grader-upload-clear" onClick={clearQueuedUploads} disabled={uploadFiles.length === 0}>Clear selected</button>
                 </div>
 
-                <div className={`grader-upload-dropzone ${uploadFiles.length > 0 ? 'has-files' : ''}`}>
-                  <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) selected` : 'No files or folders selected yet'}</div>
+                <div
+                  className={`grader-upload-dropzone ${uploadFiles.length > 0 ? 'has-files' : ''} ${isUploadDragOver ? 'is-dragover' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsUploadDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsUploadDragOver(false);
+                  }}
+                  onDrop={handleUploadDrop}
+                >
+                  <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) selected` : 'Drop files or folders here'}</div>
+                  <div className="grader-upload-hint">
+                    Drag multiple folders here to upload them together. Using drag and drop also avoids the browser&apos;s extra folder-access warning.
+                  </div>
                 </div>
 
                 {uploadFiles.length > 0 && (
@@ -444,6 +531,18 @@ export default function GraderDashboard() {
                   </div>
                 )}
               </div>
+
+              {codeFiles.length > 0 && (
+                <div className="grader-run-panel">
+                  <div>
+                    <p className="grader-run-panel-label">Solution workspace</p>
+                    <h3 className="grader-run-panel-title">{codeFiles.length} uploaded file(s) will be tested together</h3>
+                  </div>
+                  <button className="btn btn-primary grader-run-panel-button" onClick={() => handleRunTests(selectedAssignment)} disabled={runningTests}>
+                    {runningTests ? 'Running tests...' : 'Run Tests On All Files'}
+                  </button>
+                </div>
+              )}
 
               {codeFiles.length > 0 && (
                 <div style={{ display: 'flex', minHeight: '500px', flex: 1, background: '#0d1117', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>

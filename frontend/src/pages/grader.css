@@ -61,6 +61,96 @@
 
 .grader-dashboard, html, body { font-size: 15px; }
 
+.grader-workspace {
+  width: min(1600px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 20px 24px 32px;
+}
+
+.grader-main-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.grader-submissions-panel {
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.grader-content-panel {
+  min-width: 0;
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.grader-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.grader-page-title {
+  margin: 0;
+  font-size: clamp(1.8rem, 2vw, 2.4rem);
+  font-weight: 700;
+}
+
+.grader-page-meta {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.grader-page-meta span {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.grader-content-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+}
+
+.grader-run-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 18px;
+}
+
+.grader-run-panel-label {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.grader-run-panel-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.grader-run-panel-button {
+  min-width: 230px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
 
 .dashboard-header { position: relative; }
 
@@ -662,6 +752,34 @@ div.assignments-grid {
 }
 
 @media (max-width: 1024px) {
+  .grader-workspace {
+    width: calc(100vw - 24px);
+    padding: 16px 12px 24px;
+  }
+
+  .grader-main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .grader-submissions-panel {
+    position: static;
+    max-height: none;
+  }
+
+  .grader-run-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .grader-run-panel-button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .grader-content-stack aside[style*="width: '200px'"] {
+    width: 220px !important;
+  }
+
   .grader-container {
     grid-template-columns: 1fr;
   }
@@ -680,6 +798,15 @@ div.assignments-grid {
   .grader-container {
     padding: 1rem;
     gap: 1rem;
+  }
+
+  .grader-page-title {
+    font-size: 1.5rem;
+  }
+
+  .grader-upload-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .submission-details-panel {
@@ -1252,6 +1379,25 @@ div.assignments-grid {
   gap: 16px;
 }
 
+.grader-content-stack > div[style*="minHeight: '500px'"] {
+  min-height: 68vh !important;
+}
+
+.grader-content-stack > div[style*="background: '#0d1117'"] {
+  width: 100%;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.grader-content-stack aside[style*="width: '200px'"] {
+  width: 280px !important;
+  overflow-y: auto;
+}
+
+.grader-content-stack main[style*="flexDirection: 'column'"] {
+  min-width: 0;
+}
+
 .grader-upload-header {
   display: flex;
   justify-content: space-between;
@@ -1280,14 +1426,20 @@ div.assignments-grid {
   align-self: stretch;
 }
 
+.grader-upload-status {
+  align-self: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .grader-upload-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.grader-upload-picker-group {
-  position: relative;
 }
 
 .grader-upload-picker,
@@ -1311,39 +1463,6 @@ div.assignments-grid {
   transform: translateY(-1px);
 }
 
-.grader-upload-picker-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  min-width: 180px;
-  display: grid;
-  gap: 6px;
-  padding: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  box-shadow: var(--shadow-lg);
-  z-index: 5;
-}
-
-.grader-upload-picker-option {
-  border: 1px solid transparent;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s ease;
-}
-
-.grader-upload-picker-option:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
 .grader-upload-clear:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1358,6 +1477,11 @@ div.assignments-grid {
 
 .grader-upload-dropzone.has-files {
   background: rgba(16, 185, 129, 0.1);
+}
+
+.grader-upload-dropzone.is-dragover {
+  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.14);
 }
 
 .grader-upload-count {
