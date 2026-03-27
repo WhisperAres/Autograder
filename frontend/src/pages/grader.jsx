@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import TestCaseManager from "./testCaseManager";
 import Modal from "../components/Modal";
@@ -30,6 +30,7 @@ export default function GraderDashboard() {
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [showUploadPickerOptions, setShowUploadPickerOptions] = useState(false);
   const [runningTests, setRunningTests] = useState(false);
   const [testResults, setTestResults] = useState([]);
   const [showTestCaseManager, setShowTestCaseManager] = useState(false);
@@ -46,6 +47,8 @@ export default function GraderDashboard() {
 
   const params = useParams();
   const navigate = useNavigate();
+  const graderFileInputRef = useRef(null);
+  const graderFolderInputRef = useRef(null);
 
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
@@ -212,12 +215,22 @@ export default function GraderDashboard() {
 
   const handleGraderFileChange = (e) => {
     appendUploadFiles(e.target.files);
+    setShowUploadPickerOptions(false);
     e.target.value = "";
   };
 
   const handleGraderFolderChange = (e) => {
     appendUploadFiles(e.target.files);
+    setShowUploadPickerOptions(false);
     e.target.value = "";
+  };
+
+  const openFilePicker = () => {
+    graderFileInputRef.current?.click();
+  };
+
+  const openFolderPicker = () => {
+    graderFolderInputRef.current?.click();
   };
 
   const removeQueuedUpload = (pathToRemove) => {
@@ -371,27 +384,41 @@ export default function GraderDashboard() {
                 <div className="grader-upload-header">
                   <div>
                     <h3 className="grader-upload-title">Upload Grader Solution</h3>
-                    <p className="grader-upload-subtitle">Add files or folders in multiple rounds. New selections are appended to the current queue.</p>
+                    <p className="grader-upload-subtitle">Add files or folders in multiple rounds. Every new selection is attached with the earlier ones until you upload or clear them.</p>
                   </div>
                   <button className="btn btn-success grader-upload-button" onClick={handleFileUpload} disabled={uploading || uploadFiles.length === 0}>
-                    {uploading ? 'Uploading...' : 'Upload Queue'}
+                    {uploading ? 'Uploading...' : 'Upload Solution'}
                   </button>
                 </div>
 
-                <input id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
-                <input id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
+                <input ref={graderFileInputRef} id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
+                <input ref={graderFolderInputRef} id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
 
                 <div className="grader-upload-actions">
-                  <label htmlFor="grader-file-input" className="grader-upload-picker">Add Files</label>
-                  <label htmlFor="grader-folder-input" className="grader-upload-picker">Add Folder</label>
-                  <button type="button" className="grader-upload-clear" onClick={clearQueuedUploads} disabled={uploadFiles.length === 0}>Clear Queue</button>
+                  <div className="grader-upload-picker-group">
+                    <button
+                      type="button"
+                      className="grader-upload-picker"
+                      onClick={() => setShowUploadPickerOptions((current) => !current)}
+                    >
+                      Add files/folders
+                    </button>
+                    {showUploadPickerOptions && (
+                      <div className="grader-upload-picker-menu">
+                        <button type="button" className="grader-upload-picker-option" onClick={openFilePicker}>
+                          Choose files
+                        </button>
+                        <button type="button" className="grader-upload-picker-option" onClick={openFolderPicker}>
+                          Choose folder
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button type="button" className="grader-upload-clear" onClick={clearQueuedUploads} disabled={uploadFiles.length === 0}>Clear selected</button>
                 </div>
 
                 <div className={`grader-upload-dropzone ${uploadFiles.length > 0 ? 'has-files' : ''}`}>
-                  <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) queued` : 'No files selected yet'}</div>
-                  <div className="grader-upload-hint">
-                    Package folders are preserved. You can click `Add Folder` again to add another folder to the same queue.
-                  </div>
+                  <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) selected` : 'No files or folders selected yet'}</div>
                 </div>
 
                 {uploadFiles.length > 0 && (

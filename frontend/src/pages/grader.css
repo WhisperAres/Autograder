@@ -1286,6 +1286,10 @@ div.assignments-grid {
   flex-wrap: wrap;
 }
 
+.grader-upload-picker-group {
+  position: relative;
+}
+
 .grader-upload-picker,
 .grader-upload-clear {
   border: 1px solid var(--border-color);
@@ -1305,6 +1309,39 @@ div.assignments-grid {
   border-color: var(--primary);
   color: var(--primary);
   transform: translateY(-1px);
+}
+
+.grader-upload-picker-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 180px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  z-index: 5;
+}
+
+.grader-upload-picker-option {
+  border: 1px solid transparent;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.grader-upload-picker-option:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .grader-upload-clear:disabled {
