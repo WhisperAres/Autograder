@@ -144,7 +144,11 @@ export default function AdminDashboard() {
   const [testResults, setTestResults] = useState(null);
   const [bulkTestsRunning, setBulkTestsRunning] = useState(false);
   const [bulkTestResults, setBulkTestResults] = useState(null);
+  const [bulkProcessedCount, setBulkProcessedCount] = useState(0);
+  const [bulkTotalCount, setBulkTotalCount] = useState(0);
+  const [bulkCurrentStudentName, setBulkCurrentStudentName] = useState("");
   const keepAliveIntervalRef = useRef(null);
+  const bulkProgressIntervalRef = useRef(null);
   const studentSearchRef = useRef(null);
   const graderSearchRef = useRef(null);
   const adminSearchRef = useRef(null);
@@ -171,6 +175,36 @@ export default function AdminDashboard() {
     keepAliveIntervalRef.current = setInterval(ping, 2 * 60 * 1000);
   };
 
+  const stopBulkProgressPolling = () => {
+    if (bulkProgressIntervalRef.current) {
+      clearInterval(bulkProgressIntervalRef.current);
+      bulkProgressIntervalRef.current = null;
+    }
+  };
+
+  const startBulkProgressPolling = (assignmentId) => {
+    stopBulkProgressPolling();
+
+    const poll = async () => {
+      try {
+        const response = await api.get(`/admin/page/submissions-list/${assignmentId}/run-all-tests/status`);
+        const progress = response.data || {};
+        setBulkProcessedCount(progress.processedCount || 0);
+        setBulkTotalCount(progress.totalCount || 0);
+        setBulkCurrentStudentName(progress.currentStudentName || "");
+
+        if (!progress.running && bulkProgressIntervalRef.current) {
+          stopBulkProgressPolling();
+        }
+      } catch (_) {
+        // Best-effort progress polling only.
+      }
+    };
+
+    poll();
+    bulkProgressIntervalRef.current = setInterval(poll, 1000);
+  };
+
   // Fetch all data
   useEffect(() => {
     fetchAllData();
@@ -179,6 +213,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     return () => {
       stopKeepAlivePings();
+      stopBulkProgressPolling();
     };
   }, []);
 
@@ -461,13 +496,20 @@ export default function AdminDashboard() {
     setBulkTestsRunning(true);
     setError("");
     setBulkTestResults(null);
+    setBulkProcessedCount(0);
+    setBulkTotalCount(assignmentSubmissions.length);
+    setBulkCurrentStudentName("");
     startKeepAlivePings();
+    startBulkProgressPolling(selectedAssignment.id);
 
     try {
       const response = await api.post(`/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`);
       const data = response.data;
       setBulkTestResults(data);
       setError("");
+      setBulkProcessedCount(data.totalSubmissions || assignmentSubmissions.length);
+      setBulkTotalCount(data.totalSubmissions || assignmentSubmissions.length);
+      setBulkCurrentStudentName("");
 
       // Small delay to ensure database changes are committed
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -488,6 +530,7 @@ export default function AdminDashboard() {
       setError("Error running bulk tests: " + err.message);
     } finally {
       stopKeepAlivePings();
+      stopBulkProgressPolling();
       setBulkTestsRunning(false);
     }
   };
@@ -949,9 +992,16 @@ export default function AdminDashboard() {
                     disabled={bulkTestsRunning || assignmentSubmissions.length === 0}
                     style={{ marginLeft: "auto" }}
                   >
-                    {bulkTestsRunning ? "⏳ Running..." : " ▶ Run Tests"}
+                    {bulkTestsRunning ? `⏳ Running... ${bulkProcessedCount}/${bulkTotalCount || assignmentSubmissions.length}` : " ▶ Run Tests"}
                   </button>
                 </div>
+
+                {bulkTestsRunning && (
+                  <div style={{ margin: "10px 0 14px", fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                    Processed {bulkProcessedCount}/{bulkTotalCount || assignmentSubmissions.length} student(s)
+                    {bulkCurrentStudentName ? ` - Current: ${bulkCurrentStudentName}` : ""}
+                  </div>
+                )}
 
                 {/* Submissions List - Compact */}
                 {detailsTab === "submissions" && (

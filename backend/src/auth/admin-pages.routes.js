@@ -37,8 +37,11 @@ router.get("/submissions-list", checkRole("admin"), adminController.getAllSubmis
 // Get submissions for specific assignment
 router.get("/submissions-list/:assignmentId", checkRole("admin"), adminController.getSubmissionsByAssignment);
 
+// Get progress for bulk tests in an assignment
+router.get("/submissions-list/:assignmentId/run-all-tests/status", checkRole("admin"), adminController.getBulkTestProgress);
+
 // Run tests for all submissions in an assignment
-router.post("/submissions-list/:assignmentId/run-all-tests", checkRole("admin"), adminController.runBulkTests);
+router.post("/submissions-list/:assignmentId/run-all-tests", checkRole("admin"), adminController.runBulkTestsStandard);
 
 // ==================== GRADE SUBMISSION PAGE ====================
 // Get submission details for grading (includes code files)

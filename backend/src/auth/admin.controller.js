@@ -1433,6 +1433,7 @@ const pLimit = (limit) => {
 
 // Track currently running bulk tests to prevent duplicates
 const runningTests = new Set();
+const bulkTestProgress = new Map();
 
 const resolveServiceBaseUrl = (req) => {
   const envUrl =
@@ -1475,6 +1476,143 @@ const startKeepAlive = (req, label = "grading") => {
 };
 
 // ==================== BULK OPERATIONS ====================
+
+exports.getBulkTestProgress = async (req, res) => {
+  const { assignmentId } = req.params;
+  const progress = bulkTestProgress.get(String(assignmentId));
+
+  if (!progress) {
+    return res.json({
+      running: false,
+      processedCount: 0,
+      totalCount: 0,
+      currentStudentName: null
+    });
+  }
+
+  return res.json(progress);
+};
+
+exports.runBulkTestsStandard = async (req, res) => {
+  const bulkStartTime = Date.now();
+  const { assignmentId } = req.params;
+  const assignmentKey = String(assignmentId);
+  const stopKeepAlive = startKeepAlive(req, `bulk-standard-${assignmentId}`);
+
+  if (runningTests.has(assignmentKey)) {
+    return res.status(409).json({ message: "Tests already running for this assignment. Please wait." });
+  }
+  runningTests.add(assignmentKey);
+
+  try {
+    const submissions = await Submission.findAll({
+      where: { assignmentId },
+      include: [{ model: User, as: "student", attributes: ["name", "email"] }],
+      order: [["submittedAt", "ASC"], ["id", "ASC"]]
+    });
+
+    if (submissions.length === 0) {
+      runningTests.delete(assignmentKey);
+      return res.json({ message: "No submissions found", results: [] });
+    }
+
+    bulkTestProgress.set(assignmentKey, {
+      running: true,
+      processedCount: 0,
+      totalCount: submissions.length,
+      currentStudentName: null,
+      startedAt: new Date().toISOString()
+    });
+
+    const studentResults = [];
+
+    for (let index = 0; index < submissions.length; index += 1) {
+      const submission = submissions[index];
+      const studentName = submission.student?.name || "Unknown student";
+      const startedAt = bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString();
+
+      bulkTestProgress.set(assignmentKey, {
+        running: true,
+        processedCount: index,
+        totalCount: submissions.length,
+        currentStudentName: studentName,
+        startedAt
+      });
+
+      const result = await new Promise((resolve) => {
+        const fakeReq = { params: { submissionId: submission.id } };
+        const fakeRes = {
+          json: (data) => resolve({ statusCode: 200, data }),
+          status: (statusCode) => ({
+            json: (data) => resolve({ statusCode, data })
+          })
+        };
+
+        exports.runTestCases(fakeReq, fakeRes).catch((error) => {
+          resolve({
+            statusCode: 500,
+            data: { message: error.message || "Error running tests" }
+          });
+        });
+      });
+
+      const payload = result.data || {};
+      const status =
+        result.statusCode >= 400 ? "error"
+          : payload.message === "Compilation Failed" ? "compilation-error"
+            : "evaluated";
+
+      studentResults.push({
+        submissionId: submission.id,
+        studentName,
+        status,
+        passCount: payload.passCount || 0,
+        totalCount: payload.totalCount || 0,
+        marksObtained: payload.marksObtained || 0,
+        errorMessage: payload.errorMessage || payload.message || null
+      });
+
+      bulkTestProgress.set(assignmentKey, {
+        running: true,
+        processedCount: index + 1,
+        totalCount: submissions.length,
+        currentStudentName: studentName,
+        startedAt
+      });
+    }
+
+    const updatedSubmissions = await Submission.findAll({
+      where: { assignmentId },
+      include: [{ model: User, as: "student", attributes: ["name", "email"] }],
+      order: [["submittedAt", "DESC"], ["id", "DESC"]]
+    });
+
+    const totalTime = Date.now() - bulkStartTime;
+
+    bulkTestProgress.set(assignmentKey, {
+      running: false,
+      processedCount: submissions.length,
+      totalCount: submissions.length,
+      currentStudentName: null,
+      startedAt: bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString(),
+      completedAt: new Date().toISOString()
+    });
+
+    return res.json({
+      message: "Bulk tests completed successfully",
+      results: studentResults,
+      totalSubmissions: submissions.length,
+      totalTime: `${totalTime}ms`,
+      updatedSubmissions
+    });
+  } catch (error) {
+    console.error("Critical Bulk test error:", error);
+    return res.status(500).json({ message: "Error during bulk tests: " + error.message });
+  } finally {
+    stopKeepAlive();
+    runningTests.delete(assignmentKey);
+  }
+};
 
 // Run test cases for all submissions in an assignment
 exports.runBulkTests = async (req, res) => {
