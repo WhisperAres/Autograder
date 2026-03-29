@@ -142,6 +142,7 @@ export default function AdminDashboard() {
   const [selectedUserRole, setSelectedUserRole] = useState("");
   const [submissionMarks, setSubmissionMarks] = useState("");
   const [testResults, setTestResults] = useState(null);
+  const [runningSubmissionId, setRunningSubmissionId] = useState(null);
   const [bulkTestsRunning, setBulkTestsRunning] = useState(false);
   const [bulkTestResults, setBulkTestResults] = useState(null);
   const [bulkProcessedCount, setBulkProcessedCount] = useState(0);
@@ -479,6 +480,7 @@ export default function AdminDashboard() {
 
   // Run test cases
   const handleRunTests = async (submissionId) => {
+    setRunningSubmissionId(submissionId);
     try {
       const response = await api.post(`/admin/page/grade-submission/${submissionId}/run-tests`);
       const data = response.data;
@@ -486,6 +488,8 @@ export default function AdminDashboard() {
       showModal("Success", `Tests completed: ${data.passCount}/${data.totalCount} passed`, "success");
     } catch (err) {
       setError("Error running tests: " + err.message);
+    } finally {
+      setRunningSubmissionId(null);
     }
   };
 
@@ -1145,9 +1149,10 @@ export default function AdminDashboard() {
                                         e.stopPropagation();
                                         handleRunTests(submission.id);
                                       }}
+                                      disabled={runningSubmissionId === submission.id}
                                       style={{ flex: 1, fontSize: "0.85rem", padding: "8px" }}
                                     >
-                                      ▶️ Run Tests
+                                      {runningSubmissionId === submission.id ? "⏳ Running..." : "▶️ Run Tests"}
                                     </button>
                                   </div>
 

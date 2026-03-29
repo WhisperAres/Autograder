@@ -88,7 +88,42 @@ const transformJUnitStyle = (code) => {
     return parts;
   };
 
-  const keywords = ['assertTrue', 'assertFalse', 'assertEquals', 'assertNotNull', 'assertNull'];
+  const isMessageArg = (arg) => /^["']/.test(String(arg || '').trim());
+  const buildFailureMessage = (customMessage, fallbackMessage) => (
+    customMessage ? `String.valueOf(${customMessage})` : fallbackMessage
+  );
+  const normalizeArgs = (parts, expectedCount) => {
+    if (parts.length === expectedCount + 1 && isMessageArg(parts[0])) {
+      return { customMessage: parts[0], args: parts.slice(1) };
+    }
+    if (parts.length === expectedCount + 1 && isMessageArg(parts[parts.length - 1])) {
+      return { customMessage: parts[parts.length - 1], args: parts.slice(0, -1) };
+    }
+    return { customMessage: null, args: parts };
+  };
+  const wrapDeepValue = (value) => `new Object[]{${value}}`;
+
+  const keywords = [
+    'assertThrows',
+    'assertDoesNotThrow',
+    'assertInstanceOf',
+    'assertLinesMatch',
+    'assertIterableEquals',
+    'assertNotEqualsArray',
+    'assertArrayNotEquals',
+    'assertArrayEquals',
+    'assertEqualsArray',
+    'assertEqualArray',
+    'assertFalse',
+    'assertTrue',
+    'assertNotEquals',
+    'assertEquals',
+    'assertNull',
+    'assertNotNull',
+    'assertSame',
+    'assertNotSame',
+    'fail'
+  ];
   let i = 0;
   let out = '';
   while (i < code.length) {
@@ -109,19 +144,89 @@ const transformJUnitStyle = (code) => {
 
         const argsStr = code.substring(j + 1, k);
         let replacement = '';
-        if (kw === 'assertTrue') {
-          replacement = `if (!(${argsStr})) throw new AssertionError("assertTrue failed");`;
+        if (kw === 'fail') {
+          const parts = splitTopLevelArgs(argsStr);
+          const customMessage = parts[0] || `"Test failed"`;
+          replacement = `throw new AssertionError(String.valueOf(${customMessage}));`;
+        } else if (kw === 'assertTrue') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 1);
+          const condition = args[0] || 'false';
+          replacement = `if (!(${condition})) throw new AssertionError(${buildFailureMessage(customMessage, `"assertTrue failed"`) });`;
         } else if (kw === 'assertFalse') {
-          replacement = `if ((${argsStr})) throw new AssertionError("assertFalse failed");`;
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 1);
+          const condition = args[0] || 'false';
+          replacement = `if ((${condition})) throw new AssertionError(${buildFailureMessage(customMessage, `"assertFalse failed"`) });`;
         } else if (kw === 'assertNotNull') {
-          replacement = `if (${argsStr} == null) throw new AssertionError("assertNotNull failed");`;
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 1);
+          const value = args[0] || 'null';
+          replacement = `if (${value} == null) throw new AssertionError(${buildFailureMessage(customMessage, `"assertNotNull failed"`) });`;
         } else if (kw === 'assertNull') {
-          replacement = `if (${argsStr} != null) throw new AssertionError("assertNull failed");`;
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 1);
+          const value = args[0] || 'null';
+          replacement = `if (${value} != null) throw new AssertionError(${buildFailureMessage(customMessage, `"assertNull failed"`) });`;
+        } else if (kw === 'assertNotEquals') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (java.util.Arrays.deepEquals(new Object[]{${expected}}, new Object[]{${actual}})) throw new AssertionError(${buildFailureMessage(customMessage, `"assertNotEquals failed: both were " + java.util.Arrays.deepToString(new Object[]{${actual}})`) });`;
+        } else if (kw === 'assertSame') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (${expected} != ${actual}) throw new AssertionError(${buildFailureMessage(customMessage, `"assertSame failed"`) });`;
+        } else if (kw === 'assertNotSame') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (${expected} == ${actual}) throw new AssertionError(${buildFailureMessage(customMessage, `"assertNotSame failed"`) });`;
+        } else if (kw === 'assertInstanceOf') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expectedType = args[0] || 'Object.class';
+          const actual = args[1] || 'null';
+          replacement = `if (!(${expectedType}.isInstance(${actual}))) throw new AssertionError(${buildFailureMessage(customMessage, `"assertInstanceOf failed"`) });`;
+        } else if (kw === 'assertArrayEquals' || kw === 'assertEqualsArray' || kw === 'assertEqualArray') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (!java.util.Arrays.deepEquals(${wrapDeepValue(expected)}, ${wrapDeepValue(actual)})) throw new AssertionError(${buildFailureMessage(customMessage, `"${kw} failed: expected " + java.util.Arrays.deepToString(${wrapDeepValue(expected)}) + " got " + java.util.Arrays.deepToString(${wrapDeepValue(actual)})`) });`;
+        } else if (kw === 'assertNotEqualsArray' || kw === 'assertArrayNotEquals') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (java.util.Arrays.deepEquals(${wrapDeepValue(expected)}, ${wrapDeepValue(actual)})) throw new AssertionError(${buildFailureMessage(customMessage, `"${kw} failed: arrays matched"`) });`;
+        } else if (kw === 'assertIterableEquals') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (!java.util.Objects.equals(new java.util.ArrayList<>(${expected}), new java.util.ArrayList<>(${actual}))) throw new AssertionError(${buildFailureMessage(customMessage, `"assertIterableEquals failed"`) });`;
+        } else if (kw === 'assertLinesMatch') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expected = args[0] || 'null';
+          const actual = args[1] || 'null';
+          replacement = `if (!java.util.Objects.equals(String.join("\\n", ${expected}), String.join("\\n", ${actual}))) throw new AssertionError(${buildFailureMessage(customMessage, `"assertLinesMatch failed"`) });`;
         } else if (kw === 'assertEquals') {
           const parts = splitTopLevelArgs(argsStr);
-          const a = parts[0] || '';
-          const b = parts[1] || '';
-          replacement = `if (!String.valueOf(${a}).equals(String.valueOf(${b}))) throw new AssertionError("assertEquals failed: expected " + String.valueOf(${a}) + " got " + String.valueOf(${b}));`;
+          if (parts.length >= 3 && !isMessageArg(parts[0]) && !isMessageArg(parts[parts.length - 1])) {
+            const expected = parts[0] || '0';
+            const actual = parts[1] || '0';
+            const delta = parts[2] || '0';
+            replacement = `if (Math.abs(((Number)(${expected})).doubleValue() - ((Number)(${actual})).doubleValue()) > ((Number)(${delta})).doubleValue()) throw new AssertionError("assertEquals failed with delta");`;
+          } else {
+            const { customMessage, args } = normalizeArgs(parts, 2);
+            const expected = args[0] || 'null';
+            const actual = args[1] || 'null';
+            replacement = `if (!java.util.Arrays.deepEquals(${wrapDeepValue(expected)}, ${wrapDeepValue(actual)})) throw new AssertionError(${buildFailureMessage(customMessage, `"assertEquals failed: expected " + java.util.Arrays.deepToString(${wrapDeepValue(expected)}) + " got " + java.util.Arrays.deepToString(${wrapDeepValue(actual)})`) });`;
+          }
+        }
+        else if (kw === 'assertThrows') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 2);
+          const expectedType = args[0] || 'Throwable.class';
+          const executable = args[1] || '() -> {}';
+          replacement = `try { ${executable}.run(); throw new AssertionError(${buildFailureMessage(customMessage, `"assertThrows failed: exception was not thrown"`) }); } catch (Throwable e) { if (!${expectedType}.isInstance(e)) throw new AssertionError(${buildFailureMessage(customMessage, `"assertThrows failed: wrong exception type " + e.getClass().getName()`) }); }`;
+        } else if (kw === 'assertDoesNotThrow') {
+          const { customMessage, args } = normalizeArgs(splitTopLevelArgs(argsStr), 1);
+          const executable = args[0] || '() -> {}';
+          replacement = `try { ${executable}.run(); } catch (Throwable e) { throw new AssertionError(${buildFailureMessage(customMessage, `"assertDoesNotThrow failed: " + e.getMessage()`) }); }`;
         }
 
         out += replacement;

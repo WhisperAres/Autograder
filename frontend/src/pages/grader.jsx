@@ -441,7 +441,7 @@ export default function GraderDashboard() {
       >{darkMode ? '☀️' : '🌙'}</button>
 
       <div className="grader-workspace">
-        <div className="grader-main-layout">
+        <div className={`grader-main-layout ${submissions.length === 0 ? 'grader-main-layout-full' : ''}`}>
           {submissions.length > 0 && (
             <div className="submissions-list-panel grader-submissions-panel">
               <h2>Submissions</h2>
