@@ -270,7 +270,7 @@ export default function GraderDashboard() {
     const mergedFiles = appendUploadFiles(e.target.files);
     e.target.value = "";
     if (mergedFiles.length > 0) {
-      uploadSelectedFiles(mergedFiles);
+      void uploadSelectedFiles(mergedFiles);
     }
   };
 
@@ -278,8 +278,16 @@ export default function GraderDashboard() {
     const mergedFiles = appendUploadFiles(e.target.files);
     e.target.value = "";
     if (mergedFiles.length > 0) {
-      uploadSelectedFiles(mergedFiles);
+      void uploadSelectedFiles(mergedFiles);
     }
+  };
+
+  const openGraderFilePicker = () => {
+    graderFileInputRef.current?.click();
+  };
+
+  const openGraderFolderPicker = () => {
+    graderFolderInputRef.current?.click();
   };
 
   const readDroppedEntry = async (entry, parentPath = "") => {
@@ -351,7 +359,7 @@ export default function GraderDashboard() {
     const droppedFiles = await extractDroppedFiles(e.dataTransfer?.items, e.dataTransfer?.files);
     const mergedFiles = appendUploadFiles(droppedFiles);
     if (mergedFiles.length > 0) {
-      uploadSelectedFiles(mergedFiles);
+      await uploadSelectedFiles(mergedFiles);
     }
   };
 
@@ -489,8 +497,8 @@ export default function GraderDashboard() {
                 <input ref={graderFolderInputRef} id="grader-folder-input" type="file" style={{ display: 'none' }} multiple webkitdirectory="" directory="" onChange={handleGraderFolderChange} />
 
                 <div className="grader-upload-actions">
-                  <label htmlFor="grader-file-input" className="grader-upload-picker">Add files</label>
-                  <label htmlFor="grader-folder-input" className="grader-upload-picker">Add folder</label>
+                  <button type="button" className="grader-upload-picker" onClick={openGraderFilePicker}>Add files</button>
+                  <button type="button" className="grader-upload-picker" onClick={openGraderFolderPicker}>Add folder</button>
                   <button type="button" className="grader-upload-clear" onClick={clearQueuedUploads} disabled={uploadFiles.length === 0}>Clear selected</button>
                 </div>
 
