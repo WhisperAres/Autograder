@@ -476,9 +476,7 @@ export default function GraderDashboard() {
                 <div className="grader-upload-header">
                   <div>
                     <h3 className="grader-upload-title">Upload Author Solution</h3>
-                    <p className="grader-upload-subtitle">Files upload immediately after selection. Add more later to extend the same selected set.</p>
                   </div>
-                  <div className="grader-upload-status">{uploading ? 'Uploading...' : 'Ready'}</div>
                 </div>
 
                 <input ref={graderFileInputRef} id="grader-file-input" type="file" style={{ display: 'none' }} multiple onChange={handleGraderFileChange} />
@@ -503,9 +501,6 @@ export default function GraderDashboard() {
                   onDrop={handleUploadDrop}
                 >
                   <div className="grader-upload-count">{uploadFiles.length > 0 ? `${uploadFiles.length} item(s) selected` : 'Drop files or folders here'}</div>
-                  <div className="grader-upload-hint">
-                    Drag multiple folders here to upload them together. Using drag and drop also avoids the browser&apos;s extra folder-access warning.
-                  </div>
                 </div>
 
                 {uploadFiles.length > 0 && (
