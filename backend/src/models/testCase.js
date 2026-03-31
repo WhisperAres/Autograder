@@ -21,9 +21,24 @@ const TestCase = sequelize.define('TestCase', {
     allowNull: true,
     comment: 'Test code with assertions (e.g., assertEquals, assertTrue)'
   },
+  input: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    defaultValue: "",
+  },
+  expectedOutput: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    defaultValue: "",
+  },
   marks: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 1,
+  },
+  isHidden: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
   },
 }, {
   tableName: 'test_cases',

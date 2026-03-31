@@ -1372,7 +1372,7 @@ exports.getTestCases = async (req, res) => {
 exports.createTestCase = async (req, res) => {
   try {
     const { assignmentId } = req.params;
-    const { testName, testCode, marks, isHidden } = req.body;
+    const { testName, testCode, marks, isHidden, input, expectedOutput } = req.body;
 
     if (!testName) {
       return res.status(400).json({ message: "Test case name is required" });
@@ -1413,6 +1413,8 @@ exports.createTestCase = async (req, res) => {
       assignmentId: parseInt(assignmentId),
       testName,
       testCode,
+      input: typeof input === "string" ? input : "",
+      expectedOutput: typeof expectedOutput === "string" ? expectedOutput : "",
       marks: newMarks,
       isHidden: isHidden === 'true' || isHidden === true,
     });
@@ -1434,7 +1436,7 @@ exports.createTestCase = async (req, res) => {
 exports.updateTestCase = async (req, res) => {
   try {
     const { testCaseId } = req.params;
-    const { testName, testCode, marks, isHidden } = req.body;
+    const { testName, testCode, marks, isHidden, input, expectedOutput } = req.body;
 
     const testCase = await TestCase.findByPk(testCaseId);
     if (!testCase) {
@@ -1479,6 +1481,8 @@ exports.updateTestCase = async (req, res) => {
 
     if (testName) testCase.testName = testName;
     if (testCode) testCase.testCode = testCode;
+    if (input !== undefined) testCase.input = typeof input === "string" ? input : "";
+    if (expectedOutput !== undefined) testCase.expectedOutput = typeof expectedOutput === "string" ? expectedOutput : "";
     if (isHidden !== undefined) testCase.isHidden = isHidden;
 
     await testCase.save();

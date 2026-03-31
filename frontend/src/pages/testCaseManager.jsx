@@ -31,6 +31,8 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
   const [newTestCase, setNewTestCase] = useState({
     testName: "",
     testCode: "",
+    input: "",
+    expectedOutput: "",
     marks: 1,
     isHidden: false,
   });
@@ -77,6 +79,8 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
       const payload = {
         testName: newTestCase.testName,
         testCode: newTestCase.testCode,
+        input: newTestCase.input || "",
+        expectedOutput: newTestCase.expectedOutput || "",
         marks: newTestCase.marks,
         isHidden: newTestCase.isHidden,
       };
@@ -95,6 +99,8 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
       setNewTestCase({
         testName: "",
         testCode: "",
+        input: "",
+        expectedOutput: "",
         marks: 1,
         isHidden: false,
       });
@@ -140,6 +146,8 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
     setNewTestCase({
       testName: testCase.testName,
       testCode: testCase.testCode,
+      input: testCase.input || "",
+      expectedOutput: testCase.expectedOutput || "",
       marks: testCase.marks || 1,
       isHidden: testCase.isHidden || false,
     });
@@ -151,6 +159,8 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
     setNewTestCase({
       testName: "",
       testCode: "",
+      input: "",
+      expectedOutput: "",
       marks: 1,
       isHidden: false,
     });
