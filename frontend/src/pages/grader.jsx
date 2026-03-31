@@ -49,6 +49,7 @@ export default function GraderDashboard() {
   const navigate = useNavigate();
   const graderFileInputRef = useRef(null);
   const graderFolderInputRef = useRef(null);
+  const uploadFilesRef = useRef([]);
 
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
@@ -67,6 +68,10 @@ export default function GraderDashboard() {
     else document.documentElement.removeAttribute("data-theme");
     localStorage.setItem("darkMode", JSON.stringify(darkMode));
   }, [darkMode]);
+
+  useEffect(() => {
+    uploadFilesRef.current = uploadFiles;
+  }, [uploadFiles]);
 
   useEffect(() => {
     const fetchAssignments = async () => {
@@ -156,6 +161,7 @@ export default function GraderDashboard() {
     setCodeFiles([]);
     setCodeContent("");
     setTestResults([]);
+    uploadFilesRef.current = [];
     setUploadFiles([]);
     navigate(`/grader/grade-submissions/${assignment.id}`);
     fetchSubmissionsForAssignment(assignment.id);
@@ -168,6 +174,7 @@ export default function GraderDashboard() {
     setCodeFiles([]);
     setCodeContent("");
     setTestResults([]);
+    uploadFilesRef.current = [];
     navigate("/grader/dashboard");
   };
 
@@ -253,11 +260,9 @@ export default function GraderDashboard() {
   };
 
   const appendUploadFiles = (incomingFiles) => {
-    let mergedFiles = [];
-    setUploadFiles((currentFiles) => {
-      mergedFiles = mergeUploadFiles(currentFiles, incomingFiles);
-      return mergedFiles;
-    });
+    const mergedFiles = mergeUploadFiles(uploadFilesRef.current, incomingFiles);
+    uploadFilesRef.current = mergedFiles;
+    setUploadFiles(mergedFiles);
     return mergedFiles;
   };
 
@@ -357,6 +362,7 @@ export default function GraderDashboard() {
   };
 
   const clearQueuedUploads = () => {
+    uploadFilesRef.current = [];
     setUploadFiles([]);
   };
 
@@ -554,9 +560,6 @@ export default function GraderDashboard() {
                   <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', height: '50px' }}>
                       <span style={{ fontFamily: 'monospace', fontSize: '13px', color: 'var(--primary)', fontWeight: '600' }}>{codeName}</span>
-                      <button className="btn btn-primary" onClick={() => handleRunTests(selectedAssignment)} disabled={runningTests} style={{ padding: '8px 20px', fontSize: '13px', width: 'auto', minWidth: '120px', borderRadius: '6px' }}>
-                        {runningTests ? '⏳ Running...' : '▶ Run Tests'}
-                      </button>
                     </div>
 
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
