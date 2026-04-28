@@ -17,13 +17,6 @@
   --navbar-text-color: #cbd5e1;
 }
 
-[data-theme="light"] {
-  --navbar-bg: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  --navbar-border: #e5e7eb;
-  --navbar-title-color: #059669;
-  --navbar-text-color: #374151;
-}
-
 .navbar {
   background: var(--navbar-bg);
   border-bottom: 2px solid var(--navbar-border);

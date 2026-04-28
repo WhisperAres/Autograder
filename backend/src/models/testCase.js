@@ -8,6 +8,11 @@ const TestCase = sequelize.define('TestCase', {
     primaryKey: true,
     autoIncrement: true,
   },
+  courseId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    comment: 'The course this test case belongs to',
+  },
   assignmentId: {
     type: DataTypes.INTEGER,
     allowNull: false,

@@ -6,6 +6,8 @@ const TestCase = require("../models/testCase");
 const TestResult = require("../models/testResult");
 const GraderSolution = require("../models/graderSolution");
 const GraderSolutionFile = require("../models/graderSolutionFile");
+const Course = require("../models/course");
+const CourseUser = require("../models/courseUser");
 const bcrypt = require("bcryptjs");
 const os = require("os");
 const path = require("path");
@@ -62,6 +64,46 @@ const getJavacExecutable = () => {
 
 const JAVA_CMD = getJavaExecutable();
 const JAVAC_CMD = getJavacExecutable();
+
+// ==================== HELPER FUNCTIONS FOR COURSE-BASED FILTERING ====================
+
+// Helper: Get courseId from request and verify admin access
+const getCourseIdAndVerify = async (req) => {
+  const courseId = req.query.courseId || req.body.courseId;
+  if (!courseId) {
+    throw {
+      status: 400,
+      message: "courseId parameter is required"
+    };
+  }
+
+  const userId = req.user.id;
+
+  // Check if user is admin of this course
+  const course = await Course.findByPk(courseId);
+  if (!course) {
+    throw {
+      status: 404,
+      message: "Course not found"
+    };
+  }
+
+  // Verify admin access (user must be course admin or global admin)
+  if (course.adminId !== userId && req.user.role !== 'admin') {
+    // Double check: also verify in CourseUser table
+    const courseUser = await CourseUser.findOne({
+      where: { courseId, userId, role: 'admin' }
+    });
+    if (!courseUser) {
+      throw {
+        status: 403,
+        message: "You do not have admin access to this course"
+      };
+    }
+  }
+
+  return courseId;
+};
 
 // Transform simple JUnit-style assertions into plain Java checks that throw AssertionError
 const transformJUnitStyle = (code) => {
@@ -483,11 +525,29 @@ const fastBulkInsertResults = async (testResults) => {
 // Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] }
+    const courseId = await getCourseIdAndVerify(req);
+    
+    // Get all users in this course
+    const courseUsers = await CourseUser.findAll({
+      where: { courseId },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: { exclude: ['password'] }
+      }],
+      attributes: ['role']
     });
+
+    const users = courseUsers.map(cu => ({
+      ...cu.user.dataValues,
+      courseRole: cu.role
+    }));
+
     res.json(users);
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error fetching users:", error);
     res.status(500).json({ message: "Error fetching users" });
   }
@@ -496,6 +556,7 @@ exports.getAllUsers = async (req, res) => {
 // Create new user (student, grader, or admin)
 exports.createUser = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const { email, name, role } = req.body;
 
     if (!email || !name || !role) {
@@ -523,6 +584,13 @@ exports.createUser = async (req, res) => {
       password: hashedPassword
     });
 
+    // Add user to course
+    await CourseUser.create({
+      courseId,
+      userId: user.id,
+      role
+    });
+
     res.status(201).json({
       message: "User created successfully",
       user: {
@@ -530,10 +598,14 @@ exports.createUser = async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        courseRole: role,
         tempPassword: tempPassword // Send to admin to share with user
       }
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error creating user:", error);
     res.status(500).json({ message: "Error creating user" });
   }
@@ -613,19 +685,33 @@ exports.deleteUser = async (req, res) => {
 // Get users by role
 exports.getUsersByRole = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const { role } = req.params;
 
     if (!['student', 'grader', 'admin'].includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
-    const users = await User.findAll({
-      where: { role },
-      attributes: { exclude: ['password'] }
+    const courseUsers = await CourseUser.findAll({
+      where: { courseId, role },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: { exclude: ['password'] }
+      }],
+      attributes: ['role']
     });
+
+    const users = courseUsers.map(cu => ({
+      ...cu.user.dataValues,
+      courseRole: cu.role
+    }));
 
     res.json(users);
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error fetching users by role:", error);
     res.status(500).json({ message: "Error fetching users" });
   }
@@ -636,12 +722,17 @@ exports.getUsersByRole = async (req, res) => {
 // Get all assignments
 exports.getAssignments = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const assignments = await Assignment.findAll({
+      where: { courseId },
       include: [{ model: TestCase, as: 'testCases' }],
       order: [['dueDate', 'ASC']]
     });
     res.json(assignments);
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error fetching assignments:", error);
     res.status(500).json({ message: "Error fetching assignments" });
   }
@@ -650,6 +741,7 @@ exports.getAssignments = async (req, res) => {
 // Create new assignment
 exports.createAssignment = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const { title, description, dueDate, totalMarks } = req.body;
 
     if (!title || !dueDate) {
@@ -663,6 +755,7 @@ exports.createAssignment = async (req, res) => {
     }
 
     const assignment = await Assignment.create({
+      courseId,
       title: title.trim(),
       description: description ? description.trim() : "",
       dueDate: parsedDate,
@@ -674,6 +767,9 @@ exports.createAssignment = async (req, res) => {
       assignment
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error creating assignment:", error);
     res.status(500).json({
       message: "Error creating assignment",
@@ -685,12 +781,18 @@ exports.createAssignment = async (req, res) => {
 // Update assignment
 exports.updateAssignment = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const { assignmentId } = req.params;
     const { title, description, dueDate, totalMarks } = req.body;
 
     const assignment = await Assignment.findByPk(assignmentId);
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    // Verify assignment belongs to this course
+    if (assignment.courseId !== courseId) {
+      return res.status(403).json({ message: "You don't have access to this assignment" });
     }
 
     await assignment.update({
@@ -705,6 +807,9 @@ exports.updateAssignment = async (req, res) => {
       assignment
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error updating assignment:", error);
     res.status(500).json({ message: "Error updating assignment" });
   }
@@ -713,11 +818,17 @@ exports.updateAssignment = async (req, res) => {
 // Delete assignment
 exports.deleteAssignment = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
     const { assignmentId } = req.params;
 
     const assignment = await Assignment.findByPk(assignmentId);
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    // Verify assignment belongs to this course
+    if (assignment.courseId !== courseId) {
+      return res.status(403).json({ message: "You don't have access to this assignment" });
     }
 
     // Also delete related submissions, code files, test cases, test results
@@ -744,6 +855,9 @@ exports.deleteAssignment = async (req, res) => {
 
     res.json({ message: "Assignment deleted successfully" });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error deleting assignment:", error);
     res.status(500).json({ message: "Error deleting assignment" });
   }
@@ -1330,15 +1444,36 @@ exports.downloadMarksCSV = async (req, res) => {
 // Get dashboard statistics
 exports.getDashboardStats = async (req, res) => {
   try {
-    const totalUsers = await User.count();
-    const totalStudents = await User.count({ where: { role: 'student' } });
-    const totalGraders = await User.count({ where: { role: 'grader' } });
-    const totalAdmins = await User.count({ where: { role: 'admin' } });
-    const totalAssignments = await Assignment.count();
-    const totalSubmissions = await Submission.count();
-    const gradedSubmissions = await Submission.count({ where: { status: 'graded' } });
+    const courseId = await getCourseIdAndVerify(req);
+
+    // Get course-specific statistics
+    const totalAssignments = await Assignment.count({ where: { courseId } });
+    
+    // Get submissions for assignments in this course
+    const assignments = await Assignment.findAll({ where: { courseId }, attributes: ['id'] });
+    const assignmentIds = assignments.map(a => a.id);
+    
+    const totalSubmissions = assignmentIds.length > 0 
+      ? await Submission.count({ where: { assignmentId: assignmentIds } })
+      : 0;
+    
+    const gradedSubmissions = assignmentIds.length > 0
+      ? await Submission.count({ where: { assignmentId: assignmentIds, status: 'graded' } })
+      : 0;
+    
+    // Get users in this course
+    const courseUsers = await CourseUser.findAll({
+      where: { courseId },
+      attributes: ['userId', 'role']
+    });
+
+    const totalUsers = courseUsers.length;
+    const totalStudents = courseUsers.filter(cu => cu.role === 'student').length;
+    const totalGraders = courseUsers.filter(cu => cu.role === 'grader').length;
+    const totalAdmins = courseUsers.filter(cu => cu.role === 'admin').length;
 
     res.json({
+      courseId,
       totalUsers,
       totalStudents,
       totalGraders,
@@ -1349,6 +1484,9 @@ exports.getDashboardStats = async (req, res) => {
       pendingGrading: totalSubmissions - gradedSubmissions
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error("Error fetching stats:", error);
     res.status(500).json({ message: "Error fetching stats" });
   }
@@ -1599,128 +1737,157 @@ exports.getBulkTestProgress = async (req, res) => {
     });
   }
 
-  return res.json(progress);
+  // Return full progress object with all details
+  return res.json({
+    running: progress.running || false,
+    processedCount: progress.processedCount || 0,
+    totalCount: progress.totalCount || 0,
+    currentStudentName: progress.currentStudentName || null,
+    startedAt: progress.startedAt,
+    completedAt: progress.completedAt,
+    totalTime: progress.totalTime,
+    error: progress.error,
+    success: progress.success,
+    results: progress.results
+  });
 };
 
 exports.runBulkTestsStandard = async (req, res) => {
-  const bulkStartTime = Date.now();
   const { assignmentId } = req.params;
   const assignmentKey = String(assignmentId);
-  const stopKeepAlive = startKeepAlive(req, `bulk-standard-${assignmentId}`);
 
   if (runningTests.has(assignmentKey)) {
     return res.status(409).json({ message: "Tests already running for this assignment. Please wait." });
   }
   runningTests.add(assignmentKey);
 
-  try {
-    const submissions = await Submission.findAll({
-      where: { assignmentId },
-      include: [{ model: User, as: "student", attributes: ["name", "email"] }],
-      order: [["submittedAt", "ASC"], ["id", "ASC"]]
-    });
+  // Return immediately with 202 Accepted while tests run in background
+  res.status(202).json({ 
+    message: "Bulk tests started. Check progress with polling endpoint.",
+    running: true,
+    assignmentId 
+  });
 
-    if (submissions.length === 0) {
-      runningTests.delete(assignmentKey);
-      return res.json({ message: "No submissions found", results: [] });
-    }
+  // Run tests in background AFTER response is sent
+  setImmediate(async () => {
+    const bulkStartTime = Date.now();
+    const stopKeepAlive = startKeepAlive(req, `bulk-standard-${assignmentId}`);
 
-    bulkTestProgress.set(assignmentKey, {
-      running: true,
-      processedCount: 0,
-      totalCount: submissions.length,
-      currentStudentName: null,
-      startedAt: new Date().toISOString()
-    });
+    try {
+      const submissions = await Submission.findAll({
+        where: { assignmentId },
+        include: [{ model: User, as: "student", attributes: ["name", "email"] }],
+        order: [["submittedAt", "ASC"], ["id", "ASC"]]
+      });
 
-    const studentResults = [];
-
-    for (let index = 0; index < submissions.length; index += 1) {
-      const submission = submissions[index];
-      const studentName = submission.student?.name || "Unknown student";
-      const startedAt = bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString();
+      if (submissions.length === 0) {
+        bulkTestProgress.set(assignmentKey, {
+          running: false,
+          processedCount: 0,
+          totalCount: 0,
+          currentStudentName: null,
+          error: "No submissions found"
+        });
+        runningTests.delete(assignmentKey);
+        stopKeepAlive();
+        return;
+      }
 
       bulkTestProgress.set(assignmentKey, {
         running: true,
-        processedCount: index,
+        processedCount: 0,
         totalCount: submissions.length,
-        currentStudentName: studentName,
-        startedAt
+        currentStudentName: null,
+        startedAt: new Date().toISOString()
       });
 
-      const result = await new Promise((resolve) => {
-        const fakeReq = { params: { submissionId: submission.id } };
-        const fakeRes = {
-          json: (data) => resolve({ statusCode: 200, data }),
-          status: (statusCode) => ({
-            json: (data) => resolve({ statusCode, data })
-          })
-        };
+      const studentResults = [];
 
-        exports.runTestCases(fakeReq, fakeRes).catch((error) => {
-          resolve({
-            statusCode: 500,
-            data: { message: error.message || "Error running tests" }
+      for (let index = 0; index < submissions.length; index += 1) {
+        const submission = submissions[index];
+        const studentName = submission.student?.name || "Unknown student";
+        const startedAt = bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString();
+
+        // Update progress BEFORE running tests for this student
+        bulkTestProgress.set(assignmentKey, {
+          running: true,
+          processedCount: index,
+          totalCount: submissions.length,
+          currentStudentName: studentName,
+          startedAt
+        });
+
+        const result = await new Promise((resolve) => {
+          const fakeReq = { params: { submissionId: submission.id } };
+          const fakeRes = {
+            json: (data) => resolve({ statusCode: 200, data }),
+            status: (statusCode) => ({
+              json: (data) => resolve({ statusCode, data })
+            })
+          };
+
+          exports.runTestCases(fakeReq, fakeRes).catch((error) => {
+            resolve({
+              statusCode: 500,
+              data: { message: error.message || "Error running tests" }
+            });
           });
         });
-      });
 
-      const payload = result.data || {};
-      const status =
-        result.statusCode >= 400 ? "error"
-          : payload.message === "Compilation Failed" ? "compilation-error"
-            : "evaluated";
+        const payload = result.data || {};
+        const status =
+          result.statusCode >= 400 ? "error"
+            : payload.message === "Compilation Failed" ? "compilation-error"
+              : "evaluated";
 
-      studentResults.push({
-        submissionId: submission.id,
-        studentName,
-        status,
-        passCount: payload.passCount || 0,
-        totalCount: payload.totalCount || 0,
-        marksObtained: payload.marksObtained || 0,
-        errorMessage: payload.errorMessage || payload.message || null
-      });
+        studentResults.push({
+          submissionId: submission.id,
+          studentName,
+          status,
+          passCount: payload.passCount || 0,
+          totalCount: payload.totalCount || 0,
+          marksObtained: payload.marksObtained || 0,
+          errorMessage: payload.errorMessage || payload.message || null
+        });
 
+        // Update progress AFTER running tests for this student
+        bulkTestProgress.set(assignmentKey, {
+          running: true,
+          processedCount: index + 1,
+          totalCount: submissions.length,
+          currentStudentName: studentName,
+          startedAt
+        });
+      }
+
+      const totalTime = Date.now() - bulkStartTime;
+
+      // Final state: tests completed
       bulkTestProgress.set(assignmentKey, {
-        running: true,
-        processedCount: index + 1,
+        running: false,
+        processedCount: submissions.length,
         totalCount: submissions.length,
-        currentStudentName: studentName,
-        startedAt
+        currentStudentName: null,
+        startedAt: bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        totalTime: `${totalTime}ms`,
+        results: studentResults,
+        success: true
       });
+
+      console.log(`[BULK TEST] Completed bulk tests for assignment ${assignmentId} in ${totalTime}ms`);
+    } catch (error) {
+      console.error("Critical Bulk test error:", error);
+      bulkTestProgress.set(assignmentKey, {
+        running: false,
+        error: error.message || "Error during bulk tests",
+        failedAt: new Date().toISOString()
+      });
+    } finally {
+      stopKeepAlive();
+      runningTests.delete(assignmentKey);
     }
-
-    const updatedSubmissions = await Submission.findAll({
-      where: { assignmentId },
-      include: [{ model: User, as: "student", attributes: ["name", "email"] }],
-      order: [["submittedAt", "DESC"], ["id", "DESC"]]
-    });
-
-    const totalTime = Date.now() - bulkStartTime;
-
-    bulkTestProgress.set(assignmentKey, {
-      running: false,
-      processedCount: submissions.length,
-      totalCount: submissions.length,
-      currentStudentName: null,
-      startedAt: bulkTestProgress.get(assignmentKey)?.startedAt || new Date().toISOString(),
-      completedAt: new Date().toISOString()
-    });
-
-    return res.json({
-      message: "Bulk tests completed successfully",
-      results: studentResults,
-      totalSubmissions: submissions.length,
-      totalTime: `${totalTime}ms`,
-      updatedSubmissions
-    });
-  } catch (error) {
-    console.error("Critical Bulk test error:", error);
-    return res.status(500).json({ message: "Error during bulk tests: " + error.message });
-  } finally {
-    stopKeepAlive();
-    runningTests.delete(assignmentKey);
-  }
+  });
 };
 
 // Run test cases for all submissions in an assignment

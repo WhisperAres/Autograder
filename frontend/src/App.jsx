@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
+import Home from './pages/home'
 import Login from './pages/login'
+import Signup from './pages/signup'
 import ForgotPassword from './pages/forgotPassword'
 import Dashboard from './pages/dashboard'
 import GraderDashboard from './pages/grader'
@@ -128,6 +130,14 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ?
+            (userRole === 'grader' ? <Navigate to="/grader/dashboard" replace={true} /> : <Navigate to={`/${userRole}`} replace={true} />) :
+            <Home />
+          }
+        />
         <Route 
           path="/login" 
           element={
@@ -135,6 +145,14 @@ function App() {
             (userRole === 'grader' ? <Navigate to="/grader/dashboard" replace={true} /> : <Navigate to={`/${userRole}`} replace={true} />) : 
             <Login setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} setUser={setUser} />
           } 
+        />
+        <Route
+          path="/signup"
+          element={
+            isAuthenticated ?
+            <Navigate to={`/${userRole}`} replace={true} /> :
+            <Signup setIsAuthenticated={setIsAuthenticated} setUserRole={setUserRole} setUser={setUser} />
+          }
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -377,14 +395,6 @@ function App() {
           }
         />
 
-        <Route 
-          path="/" 
-          element={
-            isAuthenticated ? 
-            <Navigate to={`/${userRole}`} /> : 
-            <Navigate to="/login" />
-          } 
-        />
       </Routes>
     </Router>
   )

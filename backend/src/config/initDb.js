@@ -9,6 +9,8 @@
 
 const sequelize = require('./database');
 const User = require('../models/user');
+const Course = require('../models/course');
+const CourseUser = require('../models/courseUser');
 const Assignment = require('../models/assignment');
 const Submission = require('../models/submission');
 const CodeFile = require('../models/codeFile');
@@ -27,6 +29,25 @@ const initializeDatabase = async () => {
     console.log('✅ Database connection successful');
 
     // Setup associations
+
+    // Course associations
+    Course.hasMany(CourseUser, { foreignKey: 'courseId', as: 'courseUsers' });
+    Course.hasMany(Assignment, { foreignKey: 'courseId', as: 'assignments' });
+    Course.belongsTo(User, { foreignKey: 'adminId', as: 'admin' });
+
+    CourseUser.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+    CourseUser.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+    User.hasMany(Course, { foreignKey: 'adminId', as: 'createdCourses' });
+    User.hasMany(CourseUser, { foreignKey: 'userId', as: 'enrolledCourses' });
+
+    // Assignment associations
+    Assignment.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+    Assignment.hasMany(TestCase, { foreignKey: 'assignmentId' });
+    Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
+    Assignment.hasMany(GraderSolution, { foreignKey: 'assignmentId', as: 'graderSolutions' });
+
+    // Submission associations
     Submission.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
     Submission.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
     Submission.hasMany(CodeFile, { foreignKey: 'submissionId', as: 'codeFiles' });
@@ -34,12 +55,13 @@ const initializeDatabase = async () => {
     
     CodeFile.belongsTo(Submission, { foreignKey: 'submissionId' });
     
+    // TestCase associations
     TestCase.belongsTo(Assignment, { foreignKey: 'assignmentId' });
+    TestCase.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+
+    // TestResult associations
     TestResult.belongsTo(Submission, { foreignKey: 'submissionId' });
     TestResult.belongsTo(TestCase, { foreignKey: 'testCaseId', as: 'testCase' });
-    
-    Assignment.hasMany(TestCase, { foreignKey: 'assignmentId' });
-    Assignment.hasMany(Submission, { foreignKey: 'assignmentId', as: 'submissions' });
     
     // Grader Solution associations
     GraderSolution.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
@@ -64,18 +86,34 @@ const initializeDatabase = async () => {
       const adminPassword = await bcrypt.hash('admin123', 10);
 
       // Create only admin user
-      await User.create({
+      const adminUser = await User.create({
         email: 'admin@uni.edu',
         password: adminPassword,
         name: 'Admin User',
         role: 'admin',
       });
 
-      // Create sample assignments
+      // Create sample course
+      const course = await Course.create({
+        name: 'Introduction to Programming',
+        code: 'CS101',
+        description: 'Learn programming basics with Java and JavaScript',
+        adminId: adminUser.id,
+      });
+
+      // Add admin to course
+      await CourseUser.create({
+        courseId: course.id,
+        userId: adminUser.id,
+        role: 'admin',
+      });
+
+      // Create sample assignments for the course
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 7); // Due in 7 days
 
       await Assignment.create({
+        courseId: course.id,
         title: 'Assignment 1: Sum Function',
         description: 'Write a JavaScript function that takes two numbers and returns their sum.',
         dueDate: dueDate,
@@ -83,6 +121,7 @@ const initializeDatabase = async () => {
       });
 
       await Assignment.create({
+        courseId: course.id,
         title: 'Assignment 2: Array Operations',
         description: 'Implement functions to manipulate arrays.',
         dueDate: dueDate,
@@ -95,7 +134,7 @@ const initializeDatabase = async () => {
       console.log('   Email:    admin@uni.edu');
       console.log('   Password: admin123');
       console.log('');
-      console.log('💡 Add more users from the Admin Dashboard');
+      console.log('💡 Create new courses from the home page');
     } else {
       console.log(`✅ Database already has ${userCount} users`);
     }

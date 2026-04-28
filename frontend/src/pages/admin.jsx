@@ -129,6 +129,13 @@ export default function AdminDashboard() {
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
   }, [darkMode]);
 
+  // Course and data states
+  const [courses, setCourses] = useState([]);
+  const [selectedCourseId, setSelectedCourseId] = useState(() => {
+    const saved = localStorage.getItem("selectedCourseId");
+    return saved ? parseInt(saved) : null;
+  });
+
   // Form states
   const [newAssignment, setNewAssignment] = useState({ title: "", description: "", dueDate: "", totalMarks: 100 });
   const [editingAssignment, setEditingAssignment] = useState(null);
@@ -185,31 +192,101 @@ export default function AdminDashboard() {
 
   const startBulkProgressPolling = (assignmentId) => {
     stopBulkProgressPolling();
+    let lastProgressTime = Date.now();
+    let hasShownCompletion = false;
 
     const poll = async () => {
       try {
         const response = await api.get(`/admin/page/submissions-list/${assignmentId}/run-all-tests/status`);
         const progress = response.data || {};
+        
+        // Update progress state
         setBulkProcessedCount(progress.processedCount || 0);
         setBulkTotalCount(progress.totalCount || 0);
         setBulkCurrentStudentName(progress.currentStudentName || "");
+        lastProgressTime = Date.now();
 
+        // Handle completion
         if (!progress.running && bulkProgressIntervalRef.current) {
           stopBulkProgressPolling();
+          setBulkTestsRunning(false);
+          
+          // Show completion message and refresh data
+          if (!hasShownCompletion) {
+            hasShownCompletion = true;
+            
+            if (progress.error) {
+              setError(`Tests failed: ${progress.error}`);
+            } else {
+              setError("");
+              if (progress.totalCount > 0) {
+                showModal("Success", `✅ Bulk tests completed!\n${progress.totalCount} student(s) processed\nTime: ${progress.totalTime || "Unknown"}`);
+              }
+            }
+
+            // Refresh submissions data after tests complete
+            if (selectedAssignment) {
+              try {
+                const submissionsRes = await api.get(`/admin/page/submissions-list/${selectedAssignment.id}`);
+                if (submissionsRes.status === 200) {
+                  setSubmissions(submissionsRes.data);
+                }
+              } catch (err) {
+                console.error("Error refreshing submissions after bulk tests:", err);
+              }
+            }
+          }
         }
-      } catch (_) {
-        // Best-effort progress polling only.
+      } catch (err) {
+        console.error("Error polling progress:", err);
+        // Continue polling even if there's an error (server might be busy)
       }
     };
 
+    // Poll immediately, then every 500ms (faster updates for better UX)
     poll();
-    bulkProgressIntervalRef.current = setInterval(poll, 1000);
+    bulkProgressIntervalRef.current = setInterval(poll, 500);
   };
+
+  // Fetch user's courses
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await api.get("/courses/my-courses");
+        let allCourses = [];
+        
+        if (response.data.createdCourses) {
+          allCourses = [...response.data.createdCourses, ...response.data.enrolledCourses];
+        } else {
+          allCourses = response.data;
+        }
+        
+        setCourses(allCourses);
+        
+        if (allCourses.length > 0) {
+          const courseToUse = selectedCourseId 
+            ? allCourses.find(c => c.id === selectedCourseId) 
+            : allCourses[0];
+          
+          if (courseToUse) {
+            setSelectedCourseId(courseToUse.id);
+            localStorage.setItem("selectedCourseId", courseToUse.id.toString());
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching courses:", err);
+        setError("Failed to load courses");
+      }
+    };
+
+    fetchCourses();
+  }, [token]);
 
   // Fetch all data
   useEffect(() => {
+    if (!selectedCourseId) return;
     fetchAllData();
-  }, [token]);
+  }, [token, selectedCourseId]);
 
   useEffect(() => {
     return () => {
@@ -260,11 +337,12 @@ export default function AdminDashboard() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      const courseIdParam = `?courseId=${selectedCourseId}`;
       const [statsRes, assignRes, usersRes, submissionsRes] = await Promise.all([
-        api.get("/admin/page/dashboard"),
-        api.get("/admin/page/assignments-list"),
-        api.get("/admin/page/users-management"),
-        api.get("/admin/page/submissions-list"),
+        api.get(`/admin/page/dashboard${courseIdParam}`),
+        api.get(`/admin/page/assignments-list${courseIdParam}`),
+        api.get(`/admin/page/users-management${courseIdParam}`),
+        api.get(`/admin/page/submissions-list${courseIdParam}`),
       ]);
 
       setStats(statsRes.data);
@@ -291,7 +369,7 @@ export default function AdminDashboard() {
       const [dateStr, timeStr] = newAssignment.dueDate.split('T');
       const utcDate = convertISTToUTC(dateStr, timeStr);
 
-      const response = await api.post("/admin/page/assignments-list", {
+      const response = await api.post(`/admin/page/assignments-list?courseId=${selectedCourseId}`, {
         ...newAssignment,
         dueDate: utcDate
       });
@@ -328,7 +406,7 @@ export default function AdminDashboard() {
       const [dateStr, timeStr] = editingAssignment.dueDate.split('T');
       const utcDate = convertISTToUTC(dateStr, timeStr);
 
-      const response = await api.patch(`/admin/page/assignments-list/${editingAssignment.id}`, {
+      const response = await api.patch(`/admin/page/assignments-list/${editingAssignment.id}?courseId=${selectedCourseId}`, {
         title: editingAssignment.title,
         description: editingAssignment.description,
         dueDate: utcDate,
@@ -361,7 +439,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      const response = await api.post("/admin/page/users-management", newUser);
+      const response = await api.post(`/admin/page/users-management?courseId=${selectedCourseId}`, newUser);
       const data = response.data;
       setUsers([...users, data.user]);
       setNewUser({ email: "", name: "", role: "student" });
@@ -376,7 +454,7 @@ export default function AdminDashboard() {
   // Update user role
   const handleUpdateUserRole = async (userId, role) => {
     try {
-      const response = await api.patch(`/admin/page/users-management/${userId}/role`, { role });
+      const response = await api.patch(`/admin/page/users-management/${userId}/role?courseId=${selectedCourseId}`, { role });
       const data = response.data;
       setUsers(users.map(u => u.id === userId ? data.user : u));
       showModal("User Role Updated", "The user's role has been successfully updated.", "success");
@@ -399,7 +477,7 @@ export default function AdminDashboard() {
             setIsModalOpen(false);
 
             try {
-              await api.delete(`/admin/page/users-management/${userId}`);
+              await api.delete(`/admin/page/users-management/${userId}?courseId=${selectedCourseId}`);
               setUsers(prev => prev.filter(u => u.id !== userId));
 
               showModal(
@@ -425,7 +503,7 @@ export default function AdminDashboard() {
   // Update submission marks
   const handleUpdateMarks = async (submissionId, marks) => {
     try {
-      const response = await api.patch(`/admin/page/grade-submission/${submissionId}/marks`, { marks: parseFloat(marks) });
+      const response = await api.patch(`/admin/page/grade-submission/${submissionId}/marks?courseId=${selectedCourseId}`, { marks: parseFloat(marks) });
       const data = response.data;
       setSubmissions(submissions.map(s => s.id === submissionId ? data.submission : s));
       setSubmissionMarks("");
@@ -438,7 +516,7 @@ export default function AdminDashboard() {
   // Toggle allow students to view marks for an assignment
   const handleToggleCanViewMarks = async (assignmentId, canViewMarks) => {
     try {
-      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/toggle-visibility`, { canViewMarks });
+      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/toggle-visibility?courseId=${selectedCourseId}`, { canViewMarks });
       const data = response.data;
       // Update local state with server response
       setAssignments(assignments.map(a =>
@@ -453,7 +531,7 @@ export default function AdminDashboard() {
   // Toggle assignment visibility (show/hide to students)
   const handleToggleAssignmentVisibility = async (assignmentId, isHidden) => {
     try {
-      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/hide`, { isHidden });
+      const response = await api.patch(`/admin/page/assignments-list/${assignmentId}/hide?courseId=${selectedCourseId}`, { isHidden });
       const data = response.data;
       // Update local state with server response
       setAssignments(assignments.map(a =>
@@ -468,7 +546,7 @@ export default function AdminDashboard() {
   // Toggle allow students to view marks for a specific submission
   const handleToggleViewMarks = async (submissionId, currentViewMarks) => {
     try {
-      await api.patch(`/admin/page/grade-submission/${submissionId}/visibility`, { canView: !currentViewMarks });
+      await api.patch(`/admin/page/grade-submission/${submissionId}/visibility?courseId=${selectedCourseId}`, { canView: !currentViewMarks });
       // Update local state
       setSubmissions(submissions.map(s =>
         s.id === submissionId ? { ...s, viewMarks: !currentViewMarks } : s
@@ -482,7 +560,7 @@ export default function AdminDashboard() {
   const handleRunTests = async (submissionId) => {
     setRunningSubmissionId(submissionId);
     try {
-      const response = await api.post(`/admin/page/grade-submission/${submissionId}/run-tests`);
+      const response = await api.post(`/admin/page/grade-submission/${submissionId}/run-tests?courseId=${selectedCourseId}`);
       const data = response.data;
       setTestResults(data.results);
       showModal("Success", `Tests completed: ${data.passCount}/${data.totalCount} passed`, "success");
@@ -507,42 +585,53 @@ export default function AdminDashboard() {
     startBulkProgressPolling(selectedAssignment.id);
 
     try {
-      const response = await api.post(`/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests`);
-      const data = response.data;
-      setBulkTestResults(data);
-      setError("");
-      setBulkProcessedCount(data.totalSubmissions || assignmentSubmissions.length);
-      setBulkTotalCount(data.totalSubmissions || assignmentSubmissions.length);
-      setBulkCurrentStudentName("");
+      const response = await api.post(`/admin/page/submissions-list/${selectedAssignment.id}/run-all-tests?courseId=${selectedCourseId}`);
+      
+      // Handle 202 Accepted (background processing) - this is the expected response
+      if (response.status === 202) {
+        console.log("Bulk tests started in background. Polling for progress...");
+        // Tests are running in background, polling will track progress
+        return;
+      }
 
-      // Small delay to ensure database changes are committed
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Legacy: Handle 200 OK (immediate completion, if backend still returns this way)
+      if (response.status === 200) {
+        const data = response.data;
+        setBulkTestResults(data);
+        setBulkProcessedCount(data.totalSubmissions || assignmentSubmissions.length);
+        setBulkTotalCount(data.totalSubmissions || assignmentSubmissions.length);
+        setBulkCurrentStudentName("");
 
-      // If backend returned updated submissions, use them immediately
-      if (data && data.updatedSubmissions) {
-        setSubmissions(data.updatedSubmissions);
-      } else {
         // Refresh submissions for this specific assignment
         const submissionsRes = await api.get(`/admin/page/submissions-list/${selectedAssignment.id}`);
         if (submissionsRes.status === 200) {
           setSubmissions(submissionsRes.data);
         }
-      }
 
-      showModal("Success", `Tests completed! ${data.totalSubmissions} students processed.`);
+        showModal("Success", `Tests completed! ${data.totalSubmissions} students processed.`);
+        setBulkTestsRunning(false);
+        stopBulkProgressPolling();
+      }
     } catch (err) {
-      setError("Error running bulk tests: " + err.message);
-    } finally {
-      stopKeepAlivePings();
-      stopBulkProgressPolling();
-      setBulkTestsRunning(false);
+      // Check if error is a 409 (tests already running)
+      if (err.response?.status === 409) {
+        setError("Tests are already running for this assignment. Please wait.");
+        // Re-enable polling in case tests were already in progress
+        if (!bulkProgressIntervalRef.current) {
+          startBulkProgressPolling(selectedAssignment.id);
+        }
+      } else {
+        setError("Error running bulk tests: " + (err.message || err.response?.data?.message || "Unknown error"));
+        setBulkTestsRunning(false);
+        stopBulkProgressPolling();
+      }
     }
   };
 
   // Download marks CSV
   const handleDownloadCSV = async (assignmentId) => {
     try {
-      const response = await api.get(`/admin/page/assignments-list/${assignmentId}/export`, {
+      const response = await api.get(`/admin/page/assignments-list/${assignmentId}/export?courseId=${selectedCourseId}`, {
         responseType: 'blob'
       });
 
@@ -572,7 +661,7 @@ export default function AdminDashboard() {
           onClick: async () => {
             setIsModalOpen(false);
             try {
-              await api.delete(`/admin/page/assignments-list/${assignmentId}`);
+              await api.delete(`/admin/page/assignments-list/${assignmentId}?courseId=${selectedCourseId}`);
               setAssignments(prev => prev.filter(a => a.id !== assignmentId));
               setSelectedAssignment(null);
 
@@ -642,8 +731,7 @@ export default function AdminDashboard() {
   const filteredAdminUsers = adminUsers.filter(user => matchesUserSearch(user, adminSearchQuery));
 
   return (
-    <div className="
-    ">
+    <div className="admin-dashboard">
       {/* Theme Toggle */}
       <button
         onClick={() => setDarkMode(!darkMode)}
@@ -655,6 +743,38 @@ export default function AdminDashboard() {
 
       <div className="dashboard-header">
         <h1>Admin Dashboard</h1>
+        
+        {/* Course Selector */}
+        {courses.length > 0 && (
+          <div className="course-selector" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label htmlFor="course-select" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Course:</label>
+            <select 
+              id="course-select"
+              value={selectedCourseId || ''}
+              onChange={(e) => {
+                const courseId = parseInt(e.target.value);
+                setSelectedCourseId(courseId);
+                localStorage.setItem("selectedCourseId", courseId.toString());
+              }}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.25rem',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}
+            >
+              {courses.map(course => (
+                <option key={course.id} value={course.id}>
+                  {course.name} {course.code ? `(${course.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        
         <p>Manage assignments, users, grades, and reports</p>
       </div>
 
@@ -999,6 +1119,20 @@ export default function AdminDashboard() {
                     {bulkTestsRunning ? `⏳ Running... ${bulkProcessedCount}/${bulkTotalCount || assignmentSubmissions.length}` : " ▶ Run Tests"}
                   </button>
                 </div>
+
+                {error && error.includes("Tests are already running") && (
+                  <div style={{
+                    margin: "10px 0 14px",
+                    padding: "12px",
+                    background: "rgba(249, 115, 22, 0.1)",
+                    border: "1px solid rgb(249, 115, 22)",
+                    borderRadius: "4px",
+                    color: "rgb(234, 88, 12)",
+                    fontSize: "0.9rem"
+                  }}>
+                    ⚠️ {error}
+                  </div>
+                )}
 
                 {bulkTestsRunning && (
                   <div style={{ margin: "10px 0 14px", fontSize: "0.9rem", color: "var(--text-muted)" }}>

@@ -1,0 +1,250 @@
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const User = require("../models/user");
+const Course = require("../models/course");
+const CourseUser = require("../models/courseUser");
+require('dotenv').config();
+
+// Sign up a new course admin with course creation
+exports.signupCourseAdmin = async (req, res) => {
+  try {
+    const { email, password, name, courseName, courseCode, courseDescription } = req.body;
+
+    // Validate inputs
+    if (!email || !password || !name || !courseName) {
+      return res.status(400).json({
+        message: "Email, password, name, and course name are required",
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists with this email" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user with admin role
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      name,
+      role: "admin", // Course admins are admins of their course
+    });
+
+    // Create course
+    const course = await Course.create({
+      name: courseName,
+      code: courseCode || null,
+      description: courseDescription || null,
+      adminId: user.id,
+    });
+
+    // Add user to course as admin
+    await CourseUser.create({
+      courseId: course.id,
+      userId: user.id,
+      role: "admin",
+    });
+
+    // Generate tokens
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.REFRESH_SECRET || "your_refresh_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      message: "Course and admin created successfully",
+      token,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+      course: {
+        id: course.id,
+        name: course.name,
+        code: course.code,
+      },
+    });
+  } catch (error) {
+    console.error("Signup error:", error);
+    res.status(500).json({ message: "Signup failed: " + error.message });
+  }
+};
+
+// Get all courses for a user
+exports.getUserCourses = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get courses created by this user (admin)
+    const createdCourses = await Course.findAll({
+      where: { adminId: userId },
+      attributes: ["id", "name", "code", "description", "createdAt"],
+    });
+
+    // Get courses where user is enrolled (admin, grader, or student)
+    const enrolledCourses = await CourseUser.findAll({
+      where: { userId },
+      include: [
+        {
+          model: Course,
+          as: "course",
+          attributes: ["id", "name", "code", "description", "createdAt"],
+        },
+      ],
+      attributes: ["role", "joinedAt"],
+    });
+
+    const enrolledCoursesFormatted = enrolledCourses.map((cu) => ({
+      ...cu.course.dataValues,
+      userRole: cu.role,
+      joinedAt: cu.joinedAt,
+    }));
+
+    res.json({
+      createdCourses,
+      enrolledCourses: enrolledCoursesFormatted,
+    });
+  } catch (error) {
+    console.error("Error fetching courses:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching courses: " + error.message });
+  }
+};
+
+// Get course details
+exports.getCourseDetails = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    const course = await Course.findByPk(courseId, {
+      include: [
+        {
+          model: CourseUser,
+          as: "courseUsers",
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "name", "email"],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "admin",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Check if user has access to this course
+    const userInCourse = course.courseUsers.some((cu) => cu.userId === userId);
+    const isAdmin = course.adminId === userId;
+
+    if (!userInCourse && !isAdmin) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json(course);
+  } catch (error) {
+    console.error("Error fetching course details:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching course details: " + error.message });
+  }
+};
+
+// Update course
+exports.updateCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { name, code, description } = req.body;
+    const userId = req.user.id;
+
+    const course = await Course.findByPk(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Check if user is admin of this course
+    if (course.adminId !== userId) {
+      return res
+        .status(403)
+        .json({ message: "Only course admin can update course details" });
+    }
+
+    if (name) course.name = name;
+    if (code) course.code = code;
+    if (description !== undefined) course.description = description;
+
+    await course.save();
+
+    res.json({
+      message: "Course updated successfully",
+      course,
+    });
+  } catch (error) {
+    console.error("Error updating course:", error);
+    res
+      .status(500)
+      .json({ message: "Error updating course: " + error.message });
+  }
+};
+
+// Delete course (admin only)
+exports.deleteCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    const course = await Course.findByPk(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Check if user is admin of this course
+    if (course.adminId !== userId) {
+      return res
+        .status(403)
+        .json({ message: "Only course admin can delete course" });
+    }
+
+    // Delete all related data
+    await CourseUser.destroy({ where: { courseId } });
+    await course.destroy();
+
+    res.json({ message: "Course deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting course:", error);
+    res
+      .status(500)
+      .json({ message: "Error deleting course: " + error.message });
+  }
+};
