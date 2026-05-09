@@ -132,11 +132,24 @@ export default function AdminDashboard() {
   const [bulkProcessedCount, setBulkProcessedCount] = useState(0);
   const [bulkTotalCount, setBulkTotalCount] = useState(0);
   const [bulkCurrentStudentName, setBulkCurrentStudentName] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalType, setModalType] = useState("info");
+  const [modalActions, setModalActions] = useState([]);
   const keepAliveIntervalRef = useRef(null);
   const bulkProgressIntervalRef = useRef(null);
   const studentSearchRef = useRef(null);
   const graderSearchRef = useRef(null);
   const adminSearchRef = useRef(null);
+
+  const showModal = (title, message, type = "info", actions = []) => {
+    setModalTitle(title || "");
+    setModalMessage(message || "");
+    setModalType(type || "info");
+    setModalActions(actions || []);
+    setIsModalOpen(true);
+  };
 
   const stopKeepAlivePings = () => {
     if (keepAliveIntervalRef.current) {
