@@ -39,7 +39,7 @@ exports.requestPasswordReset = async (req, res) => {
       expiresAt,
     });
 
-    const resetLink = `${getFrontendUrl()}/reset-password?token=${token}`;
+    const resetLink = `${getFrontendUrl(req)}/reset-password?token=${token}`;
 
     await sendEmail({
       to: user.email,

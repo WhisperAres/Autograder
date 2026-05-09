@@ -4,13 +4,25 @@ const TestCase = require("../models/testCase");
 exports.getAllAssignments = async (req, res) => {
   try {
     const assignments = await Assignment.findAll({
-      where: { isHidden: false },
       include: [{ model: TestCase, as: "testCases" }],
       order: [["id", "DESC"]]
     });
-    res.json(assignments);
+    const visibleAssignments = assignments.filter((a) => a.isHidden !== true);
+    res.json(visibleAssignments);
   } catch (error) {
     console.error("Error fetching assignments:", error);
+    // Backward compatibility: older DBs may not have isHidden yet.
+    if (error?.original?.code === "42703" || String(error?.message || "").includes("isHidden")) {
+      try {
+        const assignments = await Assignment.findAll({
+          include: [{ model: TestCase, as: "testCases" }],
+          order: [["id", "DESC"]]
+        });
+        return res.json(assignments);
+      } catch (fallbackError) {
+        console.error("Fallback assignment fetch failed:", fallbackError);
+      }
+    }
     res.status(500).json({ message: "Error fetching assignments" });
   }
 };

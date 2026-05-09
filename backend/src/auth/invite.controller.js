@@ -24,7 +24,7 @@ exports.sendInvites = async (req, res) => {
       return res.status(400).json({ message: 'No valid email addresses provided' });
     }
 
-    const frontendUrl = getFrontendUrl();
+    const frontendUrl = getFrontendUrl(req);
     const inviteDurationHours = parseInt(process.env.INVITE_EXPIRY_HOURS, 10) || 168;
     const invites = [];
     const results = {

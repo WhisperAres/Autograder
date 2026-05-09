@@ -30,8 +30,20 @@ const sendEmail = async (mailOptions) => {
   }
 };
 
-const getFrontendUrl = () => {
-  return process.env.FRONTEND_URL || 'https://autograder-4usv.onrender.com';
+const getFrontendUrl = (req) => {
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL;
+  }
+
+  if (req) {
+    const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.get("host");
+    if (host) {
+      return `${proto}://${host}`;
+    }
+  }
+
+  return "http://localhost:5173";
 };
 
 module.exports = {
