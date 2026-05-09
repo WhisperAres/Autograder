@@ -8,6 +8,7 @@ const GraderSolution = require("../models/graderSolution");
 const GraderSolutionFile = require("../models/graderSolutionFile");
 const Course = require("../models/course");
 const CourseUser = require("../models/courseUser");
+const sequelize = require("../config/database");
 const bcrypt = require("bcryptjs");
 const os = require("os");
 const path = require("path");
@@ -723,8 +724,17 @@ exports.getUsersByRole = async (req, res) => {
 exports.getAssignments = async (req, res) => {
   try {
     const courseId = await getCourseIdAndVerify(req);
+    const tableDescription = await sequelize.getQueryInterface().describeTable("assignments");
+    const baseAttrs = ["id", "courseId", "title", "description", "dueDate", "totalMarks"];
+    const optionalAttrs = ["canViewMarks", "isHidden"];
+    const assignmentAttributes = [
+      ...baseAttrs.filter((attr) => tableDescription[attr]),
+      ...optionalAttrs.filter((attr) => tableDescription[attr]),
+    ];
+
     const assignments = await Assignment.findAll({
       where: { courseId },
+      attributes: assignmentAttributes,
       include: [{ model: TestCase, as: 'testCases' }],
       order: [['dueDate', 'ASC']]
     });
