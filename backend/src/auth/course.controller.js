@@ -11,16 +11,17 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret_change_
 exports.signupCourseAdmin = async (req, res) => {
   try {
     const { email, password, name, courseName, courseCode, courseDescription } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
     // Validate inputs
-    if (!email || !password || !name || !courseName) {
+    if (!normalizedEmail || !password || !name || !courseName) {
       return res.status(400).json({
         message: "Email, password, name, and course name are required",
       });
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(400).json({ message: "User already exists with this email" });
     }
@@ -30,7 +31,7 @@ exports.signupCourseAdmin = async (req, res) => {
 
     // Create user with admin role
     const user = await User.create({
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       name,
       role: "admin", // Course admins are admins of their course

@@ -9,13 +9,19 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret_change_
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email: normalizedEmail } });
     if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (!user.password || typeof user.password !== "string") {
+      console.error(`Login rejected for user ${user.id}: password hash missing/invalid`);
       return res.status(401).json({ message: "Invalid email or password" });
     }
 

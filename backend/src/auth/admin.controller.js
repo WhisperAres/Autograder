@@ -68,9 +68,20 @@ const JAVAC_CMD = getJavacExecutable();
 
 // ==================== HELPER FUNCTIONS FOR COURSE-BASED FILTERING ====================
 
+const parseCourseId = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const hasColumn = async (tableName, columnName) => {
+  const tableDescription = await sequelize.getQueryInterface().describeTable(tableName);
+  return Boolean(tableDescription[columnName]);
+};
+
 // Helper: Get courseId from request and verify admin access
 const getCourseIdAndVerify = async (req) => {
-  const courseId = req.query.courseId || req.body.courseId;
+  const rawCourseId = req.query.courseId || req.body.courseId;
+  const courseId = parseCourseId(rawCourseId);
   if (!courseId) {
     throw {
       status: 400,
@@ -559,8 +570,9 @@ exports.createUser = async (req, res) => {
   try {
     const courseId = await getCourseIdAndVerify(req);
     const { email, name, role } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!email || !name || !role) {
+    if (!normalizedEmail || !name || !role) {
       return res.status(400).json({ message: "Email, name, and role required" });
     }
 
@@ -569,7 +581,7 @@ exports.createUser = async (req, res) => {
     }
 
     // Check if email already exists
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -579,7 +591,7 @@ exports.createUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     const user = await User.create({
-      email,
+      email: normalizedEmail,
       name,
       role,
       password: hashedPassword
@@ -731,13 +743,35 @@ exports.getAssignments = async (req, res) => {
       ...baseAttrs.filter((attr) => tableDescription[attr]),
       ...optionalAttrs.filter((attr) => tableDescription[attr]),
     ];
+    const supportsCourseId = Boolean(tableDescription.courseId);
 
-    const assignments = await Assignment.findAll({
-      where: { courseId },
+    const whereClause = supportsCourseId ? { courseId } : {};
+    let assignments = await Assignment.findAll({
+      where: whereClause,
       attributes: assignmentAttributes,
       include: [{ model: TestCase, as: 'testCases' }],
       order: [['dueDate', 'ASC']]
     });
+
+    // One-time compatibility backfill: attach legacy assignments (courseId NULL) to selected course.
+    if (supportsCourseId && assignments.length === 0) {
+      const legacyAssignments = await Assignment.findAll({
+        where: { courseId: null },
+        attributes: ["id"],
+        order: [["id", "ASC"]],
+      });
+      if (legacyAssignments.length > 0) {
+        const legacyIds = legacyAssignments.map((a) => a.id);
+        await Assignment.update({ courseId }, { where: { id: legacyIds } });
+        assignments = await Assignment.findAll({
+          where: { courseId },
+          attributes: assignmentAttributes,
+          include: [{ model: TestCase, as: "testCases" }],
+          order: [["dueDate", "ASC"]],
+        });
+      }
+    }
+
     res.json(assignments);
   } catch (error) {
     if (error.status) {
@@ -764,13 +798,18 @@ exports.createAssignment = async (req, res) => {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
-    const assignment = await Assignment.create({
-      courseId,
+    const supportsCourseId = await hasColumn("assignments", "courseId");
+    const payload = {
       title: title.trim(),
       description: description ? description.trim() : "",
       dueDate: parsedDate,
       totalMarks: totalMarks || 100
-    });
+    };
+    if (supportsCourseId) {
+      payload.courseId = courseId;
+    }
+
+    const assignment = await Assignment.create(payload);
 
     res.status(201).json({
       message: "Assignment created successfully",
@@ -801,7 +840,7 @@ exports.updateAssignment = async (req, res) => {
     }
 
     // Verify assignment belongs to this course
-    if (assignment.courseId !== courseId) {
+    if (assignment.courseId != null && Number(assignment.courseId) !== Number(courseId)) {
       return res.status(403).json({ message: "You don't have access to this assignment" });
     }
 
@@ -837,7 +876,7 @@ exports.deleteAssignment = async (req, res) => {
     }
 
     // Verify assignment belongs to this course
-    if (assignment.courseId !== courseId) {
+    if (assignment.courseId != null && Number(assignment.courseId) !== Number(courseId)) {
       return res.status(403).json({ message: "You don't have access to this assignment" });
     }
 

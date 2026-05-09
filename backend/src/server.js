@@ -20,8 +20,9 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    await sequelize.sync();
-    console.log("✅ Database tables synchronized");
+    const shouldAlterSchema = (process.env.DB_SYNC_ALTER || "true").toLowerCase() === "true";
+    await sequelize.sync(shouldAlterSchema ? { alter: true } : undefined);
+    console.log(`✅ Database tables synchronized${shouldAlterSchema ? " (alter mode)" : ""}`);
 
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
