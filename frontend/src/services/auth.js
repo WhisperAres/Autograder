@@ -4,9 +4,13 @@ import axios from "axios";
 // 🚀 RUNTIME URL DETECTION (The "Nuclear" Fix)
 // This ignores Vercel settings and checks the browser URL directly.
 // ============================================================
-const API_URL = window.location.hostname.includes("localhost")
-  ? "http://localhost:5000/api"
-  : "https://autograder-4usv.onrender.com/api";
+const isLocalHost = window.location.hostname.includes("localhost");
+const envApiUrl = import.meta.env.VITE_API_URL;
+const sameOriginApiUrl = `${window.location.origin}/api`;
+
+const API_URL = isLocalHost
+  ? (envApiUrl || "http://localhost:5000/api")
+  : (envApiUrl || sameOriginApiUrl);
 
 console.log("🌐 Frontend connected to:", API_URL);
 // ============================================================

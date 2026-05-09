@@ -36,6 +36,12 @@
   transition: background-color 0.2s, color 0.2s;
 }
 
+.loading {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 24px 0;
+}
+
 /* Theme Toggle */
 .theme-toggle {
   position: fixed;
