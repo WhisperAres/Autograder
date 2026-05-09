@@ -21,10 +21,18 @@ function App() {
     const storedUser = localStorage.getItem('user')
     
     if (token && storedUser) {
-      const parsed = JSON.parse(storedUser)
-      const normalizedRole = (parsed.role === 'ta' || parsed.role === 'TA') ? 'grader' : parsed.role;
-      const userData = { ...parsed, role: normalizedRole };
-      return { isAuth: true, role: userData.role, user: userData }
+      try {
+        const parsed = JSON.parse(storedUser)
+        const normalizedRole = (parsed.role === 'ta' || parsed.role === 'TA') ? 'grader' : parsed.role;
+        const userData = { ...parsed, role: normalizedRole };
+        return { isAuth: true, role: userData.role, user: userData }
+      } catch (error) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('user')
+        localStorage.removeItem('selectedCourseId')
+        localStorage.removeItem('selectedCourse')
+      }
     }
     return { isAuth: false, role: null, user: null }
   }

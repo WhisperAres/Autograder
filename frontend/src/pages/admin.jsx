@@ -231,11 +231,16 @@ export default function AdminDashboard() {
       try {
         const response = await api.get("/courses/my-courses");
         let allCourses = [];
-        
-        if (response.data.createdCourses) {
-          allCourses = response.data.courses || [...response.data.createdCourses, ...response.data.enrolledCourses];
+
+        const payload = response.data || {};
+        if (Array.isArray(payload)) {
+          allCourses = payload;
+        } else if (Array.isArray(payload.courses)) {
+          allCourses = payload.courses;
         } else {
-          allCourses = response.data;
+          const created = Array.isArray(payload.createdCourses) ? payload.createdCourses : [];
+          const enrolled = Array.isArray(payload.enrolledCourses) ? payload.enrolledCourses : [];
+          allCourses = [...created, ...enrolled];
         }
         
         setCourses(allCourses);
@@ -262,6 +267,8 @@ export default function AdminDashboard() {
       } catch (err) {
         console.error("Error fetching courses:", err);
         setError("Failed to load courses");
+      } finally {
+        setLoading(false);
       }
     };
 
