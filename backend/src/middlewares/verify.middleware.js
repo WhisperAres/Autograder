@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const JWT_SECRET = (process.env.JWT_SECRET || "dev_jwt_secret_change_me").trim();
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -6,13 +7,6 @@ const authMiddleware = (req, res, next) => {
 
     if (!token) {
       return res.status(401).json({ message: "No token provided" });
-    }
-
-    const secret = (process.env.JWT_SECRET || '').trim();
-    
-    if (!secret) {
-      console.error("JWT_SECRET is not configured");
-      return res.status(500).json({ message: "Server configuration error" });
     }
 
     // Decode header to inspect algorithm without verifying
@@ -32,7 +26,7 @@ const authMiddleware = (req, res, next) => {
       }
       decoded = jwt.verify(token, pubKey, { algorithms: [alg] });
     } else {
-      decoded = jwt.verify(token, secret);
+      decoded = jwt.verify(token, JWT_SECRET);
     }
     req.user = decoded;
     next();

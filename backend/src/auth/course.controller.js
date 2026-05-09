@@ -4,6 +4,8 @@ const User = require("../models/user");
 const Course = require("../models/course");
 const CourseUser = require("../models/courseUser");
 require('dotenv').config();
+const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret_change_me";
 
 // Sign up a new course admin with course creation
 exports.signupCourseAdmin = async (req, res) => {
@@ -57,13 +59,13 @@ exports.signupCourseAdmin = async (req, res) => {
         role: user.role,
         name: user.name,
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "1h" }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.REFRESH_SECRET || "your_refresh_secret_key",
+      REFRESH_SECRET,
       { expiresIn: "7d" }
     );
 
