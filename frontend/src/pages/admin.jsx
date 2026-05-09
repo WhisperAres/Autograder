@@ -262,6 +262,8 @@ export default function AdminDashboard() {
       } catch (err) {
         console.error("Error fetching courses:", err);
         setError("Failed to load courses");
+      } finally {
+        setLoading(false);
       }
     };
 
