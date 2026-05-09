@@ -1,34 +1,17 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./home.css";
 
 export default function Home() {
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem("darkMode");
-    return saved ? JSON.parse(saved) : false;
-  });
   const navigate = useNavigate();
 
-  // Apply theme to document root
+  // Apply dark theme by default
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.setAttribute("data-theme", "dark");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
-    }
-    localStorage.setItem("darkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   return (
     <div className="home-container">
-      {/* Theme Toggle */}
-      <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle home-theme-toggle"
-        title="Toggle theme"
-      >
-        {darkMode ? "☀️" : "🌙"}
-      </button>
 
       {/* Navigation Bar */}
       <nav className="home-navbar">

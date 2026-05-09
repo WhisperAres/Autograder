@@ -32,10 +32,11 @@ export default function StudentSignup() {
   const [success, setSuccess] = useState('');
   const [tokenValid, setTokenValid] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : true;
-  });
+
+  // Apply dark theme by default
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }, []);
 
   // Validate token on component mount
   useEffect(() => {
@@ -106,7 +107,7 @@ export default function StudentSignup() {
   };
 
   return (
-    <div className="signup-container" data-theme={darkMode ? 'dark' : 'light'}>
+    <div className="signup-container">
       <div className="signup-card">
         <div className="signup-header">
           <h1>Create Your Account</h1>

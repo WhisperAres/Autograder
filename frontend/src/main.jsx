@@ -4,7 +4,6 @@ import App from './App';
 import './index.css';
 
 document.documentElement.setAttribute('data-theme', 'dark');
-localStorage.setItem('darkMode', 'true');
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

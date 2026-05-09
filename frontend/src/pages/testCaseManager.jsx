@@ -3,7 +3,7 @@ import Modal from "../components/Modal";
 import api from "../services/auth"; // Updated import
 import "./testCaseManager.css";
 
-export default function TestCaseManager({ assignment, onBack, darkMode, setDarkMode }) {
+export default function TestCaseManager({ assignment, onBack }) {
   const [testCases, setTestCases] = useState([]);
   const [selectedTestCase, setSelectedTestCase] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,6 +17,11 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState('info');
   const [modalActions, setModalActions] = useState([]);
+
+  // Apply dark theme by default
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   // Helper function to show modal
   const showModal = (title, message, type = 'info', actions = []) => {
@@ -185,14 +190,6 @@ export default function TestCaseManager({ assignment, onBack, darkMode, setDarkM
           <div className="tcm-title">
             <h3>{assignment.title}</h3>
           </div>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="theme-toggle"               
-            style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-            title="Toggle theme"
-          >
-            {darkMode ? "☀️" : "🌙"}
-          </button>
         </div>
 
         <div className="tcm-content">

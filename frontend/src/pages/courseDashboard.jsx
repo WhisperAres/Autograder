@@ -7,10 +7,6 @@ export default function CourseDashboard() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem("darkMode");
-    return saved ? JSON.parse(saved) : false;
-  });
   const [user, setUser] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [newCourse, setNewCourse] = useState({
@@ -21,14 +17,10 @@ export default function CourseDashboard() {
 
   const navigate = useNavigate();
 
+  // Apply dark theme by default
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.setAttribute("data-theme", "dark");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
-    }
-    localStorage.setItem("darkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -68,15 +60,6 @@ export default function CourseDashboard() {
 
   return (
     <div className="course-dashboard">
-      {/* Theme Toggle */}
-      <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle"
-        title="Toggle theme"
-      >
-        {darkMode ? "☀️" : "🌙"}
-      </button>
-
       {/* Header */}
       <header className="dashboard-header">
         <div className="header-content">

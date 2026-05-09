@@ -34,10 +34,6 @@ export default function GraderDashboard() {
   const [runningTests, setRunningTests] = useState(false);
   const [testResults, setTestResults] = useState([]);
   const [showTestCaseManager, setShowTestCaseManager] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem("darkMode");
-    return saved ? JSON.parse(saved) : true;
-  });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -63,11 +59,10 @@ export default function GraderDashboard() {
     if (!localStorage.getItem('token')) { navigate('/login', { replace: true }); }
   }, [navigate]);
 
+  // Apply dark theme by default
   useEffect(() => {
-    if (darkMode) document.documentElement.setAttribute("data-theme", "dark");
-    else document.documentElement.removeAttribute("data-theme");
-    localStorage.setItem("darkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   useEffect(() => {
     uploadFilesRef.current = uploadFiles;
@@ -399,8 +394,6 @@ export default function GraderDashboard() {
     return (
       <TestCaseManager
         assignment={selectedAssignment}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
         onBack={() => {
           setShowTestCaseManager(false);
           setSelectedAssignment(null);
@@ -421,9 +414,6 @@ export default function GraderDashboard() {
   if (!selectedAssignment) {
     return (
       <div className="grader-dashboard">
-        <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-        >{darkMode ? '☀️' : '🌙'}</button>
-
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
           {assignments.length === 0 ? (
             <div className="empty-state"><p>No assignments available</p></div>
@@ -451,8 +441,6 @@ export default function GraderDashboard() {
   return (
     <div className="grader-dashboard">
       <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>
-      <button onClick={() => setDarkMode(!darkMode)} className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-      >{darkMode ? '☀️' : '🌙'}</button>
 
       <div className="grader-workspace">
         <div className={`grader-main-layout ${submissions.length === 0 ? 'grader-main-layout-full' : ''}`}>

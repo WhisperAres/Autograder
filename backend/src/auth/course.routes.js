@@ -9,6 +9,7 @@ const router = express.Router();
 router.post("/signup", courseController.signupCourseAdmin);
 
 // Protected routes
+router.post("/", verifyToken, courseController.createCourse);
 router.get("/my-courses", verifyToken, courseController.getUserCourses);
 router.get("/:courseId", verifyToken, courseController.getCourseDetails);
 router.patch("/:courseId", verifyToken, courseController.updateCourse);

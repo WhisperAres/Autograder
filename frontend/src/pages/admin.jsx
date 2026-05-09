@@ -97,37 +97,13 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : true;
-  });
   const token = localStorage.getItem("token");
   const params = useParams();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalTitle, setModalTitle] = useState("");
-  const [modalMessage, setModalMessage] = useState("");
-  const [modalType, setModalType] = useState("info");
-  const [modalActions, setModalActions] = useState([]);
-
-  const showModal = (title, message, type = "info", actions = []) => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalType(type);
-    setModalActions(actions.length > 0 ? actions : [{ label: 'OK', onClick: () => setIsModalOpen(false) }]);
-    setIsModalOpen(true);
-  };
-
-
-  // Apply theme to document root
+  // Apply dark theme by default
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }, []);
 
   // Course and data states
   const [courses, setCourses] = useState([]);
@@ -140,6 +116,7 @@ export default function AdminDashboard() {
   const [newAssignment, setNewAssignment] = useState({ title: "", description: "", dueDate: "", totalMarks: 100 });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [newUser, setNewUser] = useState({ email: "", name: "", role: "student" });
+  const [newCourse, setNewCourse] = useState({ name: "", code: "", description: "" });
   const [studentSearchInput, setStudentSearchInput] = useState("");
   const [graderSearchInput, setGraderSearchInput] = useState("");
   const [adminSearchInput, setAdminSearchInput] = useState("");
@@ -381,6 +358,36 @@ export default function AdminDashboard() {
       fetchAllData();
     } catch (err) {
       setError("Error creating assignment: " + err.message);
+    }
+  };
+
+  // Create new course
+  const handleCreateCourse = async (e) => {
+    e.preventDefault();
+    if (!newCourse.name) {
+      setError("Course name is required");
+      return;
+    }
+
+    try {
+      const response = await api.post("/courses", newCourse);
+      const data = response.data;
+      // Refetch courses to ensure consistency
+      const coursesResponse = await api.get("/courses/my-courses");
+      let allCourses = [];
+      if (coursesResponse.data.createdCourses) {
+        allCourses = [...coursesResponse.data.createdCourses, ...coursesResponse.data.enrolledCourses];
+      } else {
+        allCourses = coursesResponse.data;
+      }
+      setCourses(allCourses);
+      setNewCourse({ name: "", code: "", description: "" });
+      setSelectedCourseId(data.course.id);
+      localStorage.setItem("selectedCourseId", data.course.id.toString());
+      setError("");
+      showModal("Success", "Course created successfully!", "success");
+    } catch (err) {
+      setError("Error creating course: " + err.message);
     }
   };
 
@@ -705,8 +712,6 @@ export default function AdminDashboard() {
           assignment={selectedAssignment}
           token={token}
           onBack={() => setShowStudentDetail(false)}
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
         />
       );
     }
@@ -732,15 +737,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-dashboard">
-      {/* Theme Toggle */}
-      <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-        title="Toggle theme"
-      >
-        {darkMode ? "☀️" : "🌙"}
-      </button>
-
       <div className="dashboard-header">
         <h1>Admin Dashboard</h1>
         
@@ -772,8 +768,54 @@ export default function AdminDashboard() {
                 </option>
               ))}
             </select>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => document.getElementById("createCourseForm").style.display = 
+                document.getElementById("createCourseForm").style.display === "none" ? "block" : "none"}
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              + New Course
+            </button>
           </div>
         )}
+        
+        {/* Create Course Form */}
+        <form id="createCourseForm" onSubmit={handleCreateCourse} className="form-panel" style={{ display: "none", marginBottom: "1rem" }}>
+          <h3>Create New Course</h3>
+          <div className="form-group">
+            <label style={{color: "var(--primary)"}}>Course Name *</label>
+            <input
+              type="text"
+              value={newCourse.name}
+              onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+              placeholder="Course name"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label style={{color: "var(--primary)"}}>Course Code</label>
+            <input
+              type="text"
+              value={newCourse.code}
+              onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
+              placeholder="Course code (optional)"
+            />
+          </div>
+          <div className="form-group">
+            <label style={{color: "var(--primary)"}}>Description</label>
+            <textarea
+              value={newCourse.description}
+              onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+              placeholder="Course description (optional)"
+              rows="3"
+              style={{backgroundColor: "var(--bg-primary)", color: "var(--text)"}}
+            ></textarea>
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">Create Course</button>
+            <button type="button" className="btn btn-secondary" onClick={() => document.getElementById("createCourseForm").style.display = "none"}>Cancel</button>
+          </div>
+        </form>
         
         <p>Manage assignments, users, grades, and reports</p>
       </div>

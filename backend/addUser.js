@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * User Management Script
  * Add new users to the database with bcrypt hashed passwords

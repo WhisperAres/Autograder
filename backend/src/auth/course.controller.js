@@ -89,6 +89,49 @@ exports.signupCourseAdmin = async (req, res) => {
   }
 };
 
+// Create a new course for an existing admin
+exports.createCourse = async (req, res) => {
+  try {
+    const { name, code, description } = req.body;
+    const adminId = req.user.id;
+
+    // Validate inputs
+    if (!name) {
+      return res.status(400).json({
+        message: "Course name is required",
+      });
+    }
+
+    // Create course
+    const course = await Course.create({
+      name,
+      code: code || null,
+      description: description || null,
+      adminId,
+    });
+
+    // Add admin to course
+    await CourseUser.create({
+      courseId: course.id,
+      userId: adminId,
+      role: "admin",
+    });
+
+    res.status(201).json({
+      message: "Course created successfully",
+      course: {
+        id: course.id,
+        name: course.name,
+        code: course.code,
+        description: course.description,
+      },
+    });
+  } catch (error) {
+    console.error("Create course error:", error);
+    res.status(500).json({ message: "Failed to create course: " + error.message });
+  }
+};
+
 // Get all courses for a user
 exports.getUserCourses = async (req, res) => {
   try {

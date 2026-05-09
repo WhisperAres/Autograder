@@ -10,10 +10,6 @@ export default function InviteStudents() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [results, setResults] = useState(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : true;
-  });
 
   const handleGoBack = () => {
     navigate('/admin/dashboard');
@@ -64,7 +60,7 @@ export default function InviteStudents() {
   };
 
   return (
-    <div className="invite-container" data-theme={darkMode ? 'dark' : 'light'}>
+    <div className="invite-container">
       <div className="invite-header">
         <button className="back-button" onClick={handleGoBack}>
           ← Back to Admin Dashboard

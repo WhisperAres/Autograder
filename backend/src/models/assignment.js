@@ -27,7 +27,7 @@ const Assignment = sequelize.define('Assignment', {
   },
   totalMarks: {
     type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 100,
+    defaultValue: 10,
   },
   canViewMarks: {
     type: DataTypes.BOOLEAN,

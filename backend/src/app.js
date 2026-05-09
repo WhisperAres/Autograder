@@ -58,18 +58,13 @@ CourseUser.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
 User.hasMany(CourseUser, { foreignKey: 'userId', as: 'courseUsers' });
 
 // Middleware
-app.use(cors());
+app.use(cors()); //frontend can call backend APIs
 app.use(express.json());
 
 // Lightweight public health endpoint used for keep-alive pings
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, timestamp: new Date().toISOString() });
 });
-
-// // Routes
-// app.get("/", (req, res) => {
-//     res.send("Backend is running");
-// });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/password-reset", passwordResetRoutes);

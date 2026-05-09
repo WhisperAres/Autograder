@@ -9,19 +9,11 @@ export default function ForgotPassword() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [devLink, setDevLink] = useState("");
-    const [darkMode, setDarkMode] = useState(() => {
-        const saved = localStorage.getItem("darkMode");
-        return saved ? JSON.parse(saved) : false;
-    });
 
+    // Apply dark theme by default
     useEffect(() => {
-        if (darkMode) {
-            document.documentElement.setAttribute("data-theme", "dark");
-        } else {
-            document.documentElement.removeAttribute("data-theme");
-        }
-        localStorage.setItem("darkMode", JSON.stringify(darkMode));
-    }, [darkMode]);
+        document.documentElement.setAttribute("data-theme", "dark");
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -45,14 +37,6 @@ export default function ForgotPassword() {
 
     return (
         <div className="login-container">
-            <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="theme-toggle" style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-        title="Toggle theme"
-      >
-        {darkMode ? "☀️" : "🌙"}
-      </button>
-
             <div className="login-wrapper">
                 <div className="login-card">
                     <div className="login-header">

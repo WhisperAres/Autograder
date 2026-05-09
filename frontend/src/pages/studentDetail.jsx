@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../services/auth"; // Updated import
 import "./studentDetail.css";
 
-export default function StudentDetail({ submission, assignment, onBack, darkMode, setDarkMode }) {
+export default function StudentDetail({ submission, assignment, onBack }) {
   const [codeFiles, setCodeFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [codeContent, setCodeContent] = useState("");
@@ -11,6 +11,11 @@ export default function StudentDetail({ submission, assignment, onBack, darkMode
   const [testResults, setTestResults] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Apply dark theme by default
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -97,20 +102,6 @@ export default function StudentDetail({ submission, assignment, onBack, darkMode
             {submission.student?.name || submission.studentEmail} - {assignment.title}
           </span>
         </div>
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          style={{
-            padding: "8px 12px",
-            background: "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "1.2rem"
-          }}
-          title="Toggle theme"
-        >
-          {darkMode ? "☀️" : "🌙"}
-        </button>
       </div>
 
       {error && <div style={{ padding: "12px 20px", background: "rgba(239, 68, 68, 0.1)", color: "#dc2626" }}>{error}</div>}

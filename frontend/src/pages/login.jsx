@@ -8,21 +8,12 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [darkMode, setDarkMode] = useState(() => {
-        const saved = localStorage.getItem('darkMode');
-        return saved ? JSON.parse(saved) : false;
-    });
     const navigate = useNavigate();
 
-    // Apply theme to document root
+    // Apply dark theme by default
     useEffect(() => {
-        if (darkMode) {
-            document.documentElement.setAttribute('data-theme', 'dark');
-        } else {
-            document.documentElement.removeAttribute('data-theme');
-        }
-        localStorage.setItem('darkMode', JSON.stringify(darkMode));
-    }, [darkMode]);
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -52,16 +43,6 @@ export default function Login({ setIsAuthenticated, setUserRole, setUser }) {
 
     return (
         <div className="login-container">
-            {/* Theme Toggle */}
-            <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="theme-toggle"
-                style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-                title="Toggle theme"
-            >
-                {darkMode ? "☀️" : "🌙"}
-            </button>
-
             <div className="login-wrapper">
                 {/* Main Login Card */}
                 <div className="login-card">

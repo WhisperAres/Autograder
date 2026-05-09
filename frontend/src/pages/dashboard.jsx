@@ -39,10 +39,6 @@ export default function Dashboard({ handleLogout, user }) {
   const [codeContent, setCodeContent] = useState("");
   const [codeName, setCodeName] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
-  });
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,15 +56,10 @@ export default function Dashboard({ handleLogout, user }) {
     setIsModalOpen(true);
   };
 
-  // Apply theme to document root and save preference
+  // Apply dark theme by default
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }, []);
 
   // Fetch assignments and submissions
   useEffect(() => {
@@ -328,14 +319,6 @@ export default function Dashboard({ handleLogout, user }) {
           <h1 className="brand">Autograder</h1>
           <div className="navbar-actions">
             <span className="user-email">{user?.email || "User"}</span>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="theme-toggle navbar-toggle"
-              style={{ padding: '10px', borderRadius: '50%', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', fontSize: '1.2rem' }}
-              title="Toggle theme"
-            >
-              <span className="theme-icon">{darkMode ? '☀️' : '🌙'}</span>
-            </button>
             <button onClick={handleLogout} className="btn-logout">Logout</button>
           </div>
         </div>
