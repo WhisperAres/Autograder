@@ -7,7 +7,11 @@ if (process.env.SENDGRID_API_KEY) {
 
 const sendEmail = async (mailOptions) => {
   try {
-    if (process.env.NODE_ENV !== 'production') {
+    const shouldLogOnly =
+      String(process.env.EMAIL_LOG_ONLY || "").toLowerCase() === "true" ||
+      (!process.env.SENDGRID_API_KEY && process.env.NODE_ENV !== "production");
+
+    if (shouldLogOnly) {
       console.log('Email would be sent in production:');
       console.log('To:', mailOptions.to);
       console.log('Subject:', mailOptions.subject);

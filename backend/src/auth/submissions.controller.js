@@ -3,6 +3,7 @@ const Submission = require('../models/submission');
 const CodeFile = require('../models/codeFile');
 const Assignment = require('../models/assignment');
 const FileService = require('../services/fileService');
+const sequelize = require('../config/database');
 
 const normalizeSubmissionPath = (rawPath, fallbackName = 'uploaded-file') => {
   const originalValue = String(rawPath || fallbackName).trim();
@@ -142,10 +143,15 @@ exports.uploadSubmission = async (req, res) => {
 exports.getStudentSubmissions = async (req, res) => {
   try {
     const studentId = req.user.id;
+    const tableDescription = await sequelize.getQueryInterface().describeTable('submissions');
+    const baseAttrs = ['id', 'assignmentId', 'studentId', 'marks', 'totalMarks', 'status'];
+    const optionalAttrs = ['studentEmail', 'viewMarks', 'viewTestResults', 'submittedAt'];
+    const attributes = [...baseAttrs, ...optionalAttrs.filter((attr) => tableDescription[attr])];
 
     // Fetch submissions for this student
     const submissions = await Submission.findAll({
       where: { studentId },
+      attributes,
     });
 
     // For each submission, fetch all files
@@ -165,7 +171,7 @@ exports.getStudentSubmissions = async (req, res) => {
           marks: submission.marks,
           totalMarks: submission.totalMarks,
           status: submission.status,
-          viewMarks: submission.viewMarks,
+          viewMarks: Boolean(submission.viewMarks),
         };
       })
     );

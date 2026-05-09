@@ -2,6 +2,8 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const User = require("../models/user");
 require('dotenv').config();
+const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret_change_me";
 
 // Updated Login: Issues two tokens
 exports.login = async (req, res) => {
@@ -25,14 +27,14 @@ exports.login = async (req, res) => {
     // Access Token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "1h" } 
     );
 
     // Refresh Token
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.REFRESH_SECRET || "your_refresh_secret_key",
+      REFRESH_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -58,14 +60,14 @@ exports.refreshToken = async (req, res) => {
   if (!refreshToken) return res.status(401).json({ message: "Refresh Token Required" });
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET || "your_refresh_secret_key");
+    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
     const user = await User.findByPk(decoded.id);
     
     if (!user) return res.status(403).json({ message: "User not found" });
 
     const newAccessToken = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "15m" }
     );
 
