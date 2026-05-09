@@ -156,15 +156,29 @@ exports.getUserCourses = async (req, res) => {
       attributes: ["role", "joinedAt"],
     });
 
-    const enrolledCoursesFormatted = enrolledCourses.map((cu) => ({
-      ...cu.course.dataValues,
-      userRole: cu.role,
-      joinedAt: cu.joinedAt,
-    }));
+    const enrolledCoursesFormatted = enrolledCourses
+      .filter((cu) => cu.course)
+      .map((cu) => ({
+        ...cu.course.dataValues,
+        userRole: cu.role,
+        joinedAt: cu.joinedAt,
+      }));
+
+    // Merge while removing duplicates (admins are often both creator + enrolled).
+    const byCourseId = new Map();
+    for (const course of createdCourses) {
+      byCourseId.set(course.id, { ...course.dataValues, userRole: "admin" });
+    }
+    for (const course of enrolledCoursesFormatted) {
+      if (!byCourseId.has(course.id)) {
+        byCourseId.set(course.id, course);
+      }
+    }
 
     res.json({
       createdCourses,
       enrolledCourses: enrolledCoursesFormatted,
+      courses: Array.from(byCourseId.values()),
     });
   } catch (error) {
     console.error("Error fetching courses:", error);

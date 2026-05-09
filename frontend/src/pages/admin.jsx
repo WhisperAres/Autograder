@@ -233,7 +233,7 @@ export default function AdminDashboard() {
         let allCourses = [];
         
         if (response.data.createdCourses) {
-          allCourses = [...response.data.createdCourses, ...response.data.enrolledCourses];
+          allCourses = response.data.courses || [...response.data.createdCourses, ...response.data.enrolledCourses];
         } else {
           allCourses = response.data;
         }
@@ -262,8 +262,6 @@ export default function AdminDashboard() {
       } catch (err) {
         console.error("Error fetching courses:", err);
         setError("Failed to load courses");
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -387,7 +385,7 @@ export default function AdminDashboard() {
       const coursesResponse = await api.get("/courses/my-courses");
       let allCourses = [];
       if (coursesResponse.data.createdCourses) {
-        allCourses = [...coursesResponse.data.createdCourses, ...coursesResponse.data.enrolledCourses];
+        allCourses = coursesResponse.data.courses || [...coursesResponse.data.createdCourses, ...coursesResponse.data.enrolledCourses];
       } else {
         allCourses = coursesResponse.data;
       }
@@ -752,7 +750,7 @@ export default function AdminDashboard() {
       <div className="dashboard-header">
         <h1>Admin Dashboard</h1>
         
-        {/* Course Selector - Show if courses exist */}
+        {/* Course Selector */}
         {courses.length > 0 && (
           <div className="course-selector" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <label htmlFor="course-select" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Course:</label>
@@ -782,10 +780,8 @@ export default function AdminDashboard() {
             </select>
             <button 
               className="btn btn-secondary" 
-              onClick={() => {
-                const form = document.getElementById("createCourseForm");
-                form.style.display = form.style.display === "none" ? "block" : "none";
-              }}
+              onClick={() => document.getElementById("createCourseForm").style.display = 
+                document.getElementById("createCourseForm").style.display === "none" ? "block" : "none"}
               style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
             >
               + New Course
@@ -793,36 +789,8 @@ export default function AdminDashboard() {
           </div>
         )}
         
-        {/* No Courses Message - Show if no courses exist */}
-        {courses.length === 0 && (
-          <div style={{
-            background: 'var(--bg-secondary)',
-            border: '2px solid var(--border)',
-            borderRadius: '8px',
-            padding: '2rem',
-            marginBottom: '1rem',
-            textAlign: 'center'
-          }}>
-            <h2 style={{ color: 'var(--text-primary)', marginBottom: '1rem' }}>No Courses Yet</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '1rem' }}>
-              Welcome! You need to create a course to get started. Create your first course below to begin managing assignments and students.
-            </p>
-            <button 
-              className="btn btn-primary" 
-              onClick={() => {
-                const form = document.getElementById("createCourseForm");
-                form.style.display = "block";
-                form.scrollIntoView({ behavior: 'smooth' });
-              }}
-              style={{ fontSize: '1rem', padding: '0.75rem 1.5rem' }}
-            >
-              Create Your First Course
-            </button>
-          </div>
-        )}
-        
         {/* Create Course Form */}
-        <form id="createCourseForm" onSubmit={handleCreateCourse} className="form-panel" style={{ display: courses.length === 0 ? "block" : "none", marginBottom: "1rem" }}>
+        <form id="createCourseForm" onSubmit={handleCreateCourse} className="form-panel" style={{ display: "none", marginBottom: "1rem" }}>
           <h3>Create New Course</h3>
           <div className="form-group">
             <label style={{color: "var(--primary)"}}>Course Name *</label>
@@ -855,9 +823,7 @@ export default function AdminDashboard() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">Create Course</button>
-            {courses.length > 0 && (
-              <button type="button" className="btn btn-secondary" onClick={() => document.getElementById("createCourseForm").style.display = "none"}>Cancel</button>
-            )}
+            <button type="button" className="btn btn-secondary" onClick={() => document.getElementById("createCourseForm").style.display = "none"}>Cancel</button>
           </div>
         </form>
         
@@ -866,8 +832,8 @@ export default function AdminDashboard() {
 
       {error && <div className="error-message">{error}</div>}
 
-      {/* Main Tabs or Assignment Header - Only show if courses exist */}
-      {courses.length > 0 && !selectedAssignment ? (
+      {/* Main Tabs or Assignment Header */}
+      {!selectedAssignment ? (
         <>
           {/* Main Tabs */}
           <div className="main-tabs">
@@ -892,7 +858,7 @@ export default function AdminDashboard() {
             </button>
           </div>
         </>
-      ) : courses.length > 0 && (
+      ) : (
         <>
           {/* Assignment Header with Back Button */}
           <div style={{
@@ -925,8 +891,8 @@ export default function AdminDashboard() {
         </>
       )}
 
-      {/* ASSIGNMENTS TAB - Only show if courses exist */}
-      {activeTab === "assignments" && courses.length > 0 && (
+      {/* ASSIGNMENTS TAB */}
+      {activeTab === "assignments" && (
         <div className="admin-content">
           {!selectedAssignment ? (
             <>
@@ -1670,8 +1636,8 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* USERS TAB - Only show if courses exist */}
-      {activeTab === "users" && courses.length > 0 && (
+      {/* USERS TAB */}
+      {activeTab === "users" && (
         <div className="users-section">
           <div className="section-header">
             <h2>User Management</h2>

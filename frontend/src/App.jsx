@@ -161,7 +161,7 @@ function App() {
           element={
             isAuthenticated && userRole === 'student' ?
             <Navigate to="/student/dashboard" /> :
-            <Navigate to="/login" />
+            <Navigate to="/" replace={true} />
           }
         />
 
@@ -170,7 +170,7 @@ function App() {
           element={
             isAuthenticated && userRole === 'student' ?
             <Dashboard handleLogout={handleLogout} user={user} /> :
-            <Navigate to="/login" />
+            <Navigate to="/" replace={true} />
           }
         />
 
@@ -198,7 +198,7 @@ function App() {
             isAuthenticated && userRole === 'grader' ? (
               <Navigate to="/grader/dashboard" />
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
@@ -220,7 +220,7 @@ function App() {
                 <GraderDashboard />
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
@@ -242,7 +242,7 @@ function App() {
                 <GraderDashboard />
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
@@ -264,7 +264,7 @@ function App() {
                 <GraderDashboard />
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
@@ -286,7 +286,7 @@ function App() {
                 <GraderDashboard />
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
@@ -296,7 +296,7 @@ function App() {
           element={
             isAuthenticated && userRole === 'admin' ?
             <Navigate to="/admin/dashboard" /> :
-            <Navigate to="/login" />
+            <Navigate to="/" replace={true} />
           }
         />
 
@@ -317,7 +317,7 @@ function App() {
                 <AdminDashboard />
               </div>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/" replace={true} />
             )
           }
         />
