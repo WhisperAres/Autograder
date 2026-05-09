@@ -22,6 +22,8 @@ const clearAuthStorage = () => {
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
     localStorage.removeItem("lastActivityAt");
+    localStorage.removeItem("selectedCourseId");
+    localStorage.removeItem("selectedCourse");
 };
 
 // Request Interceptor: Attach token to every request
@@ -92,7 +94,7 @@ export const resetPassword = async (token, password) => {
 export const logout = () => {
     clearAuthStorage();
     window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT));
-    window.location.replace("/login");
+    window.location.replace("/");
 };
 
 export const getToken = () => localStorage.getItem("token");

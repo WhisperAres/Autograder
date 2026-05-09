@@ -239,16 +239,25 @@ export default function AdminDashboard() {
         }
         
         setCourses(allCourses);
-        
+
         if (allCourses.length > 0) {
-          const courseToUse = selectedCourseId 
-            ? allCourses.find(c => c.id === selectedCourseId) 
+          const validSelectedCourseId = Number.isInteger(selectedCourseId)
+            ? allCourses.find(c => c.id === selectedCourseId)?.id
+            : null;
+
+          const courseToUse = validSelectedCourseId
+            ? allCourses.find(c => c.id === validSelectedCourseId)
             : allCourses[0];
-          
+
           if (courseToUse) {
             setSelectedCourseId(courseToUse.id);
             localStorage.setItem("selectedCourseId", courseToUse.id.toString());
+          } else {
+            setSelectedCourseId(allCourses[0].id);
+            localStorage.setItem("selectedCourseId", allCourses[0].id.toString());
           }
+        } else {
+          localStorage.removeItem("selectedCourseId");
         }
       } catch (err) {
         console.error("Error fetching courses:", err);
@@ -386,6 +395,7 @@ export default function AdminDashboard() {
       localStorage.setItem("selectedCourseId", data.course.id.toString());
       setError("");
       showModal("Success", "Course created successfully!", "success");
+      await fetchAllData();
     } catch (err) {
       setError("Error creating course: " + err.message);
     }
