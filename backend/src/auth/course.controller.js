@@ -146,6 +146,20 @@ exports.getUserCourses = async (req, res) => {
       attributes: ["id", "name", "code", "description", "createdAt"],
     });
 
+    // Backfill course_users rows for admin-owned courses if missing.
+    for (const course of createdCourses) {
+      const existingAdminLink = await CourseUser.findOne({
+        where: { courseId: course.id, userId, role: "admin" },
+      });
+      if (!existingAdminLink) {
+        await CourseUser.create({
+          courseId: course.id,
+          userId,
+          role: "admin",
+        });
+      }
+    }
+
     // Get courses where user is enrolled (admin, grader, or student)
     const enrolledCourses = await CourseUser.findAll({
       where: { userId },
@@ -166,6 +180,32 @@ exports.getUserCourses = async (req, res) => {
         userRole: cu.role,
         joinedAt: cu.joinedAt,
       }));
+
+    // Legacy compatibility: if an admin user has no course at all, create one.
+    if (
+      req.user.role === "admin" &&
+      createdCourses.length === 0 &&
+      enrolledCoursesFormatted.length === 0
+    ) {
+      const legacyCourse = await Course.create({
+        name: "Legacy Course",
+        code: `LEGACY-${userId}`,
+        description: "Auto-created course for legacy data compatibility.",
+        adminId: userId,
+      });
+
+      await CourseUser.create({
+        courseId: legacyCourse.id,
+        userId,
+        role: "admin",
+      });
+
+      return res.json({
+        createdCourses: [legacyCourse],
+        enrolledCourses: [{ ...legacyCourse.dataValues, userRole: "admin" }],
+        courses: [{ ...legacyCourse.dataValues, userRole: "admin" }],
+      });
+    }
 
     // Merge while removing duplicates (admins are often both creator + enrolled).
     const byCourseId = new Map();

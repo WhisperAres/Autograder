@@ -18,15 +18,35 @@ app.get('/*path', (req, res) => {
 const startServer = async () => {
   try {
     await sequelize.authenticate();
-    console.log("✅ Database connection established");
+    console.log("Database connection established");
 
-    const shouldAlterSchema = (process.env.DB_SYNC_ALTER || "true").toLowerCase() === "true";
-    await sequelize.sync(shouldAlterSchema ? { alter: true } : undefined);
-    console.log(`✅ Database tables synchronized${shouldAlterSchema ? " (alter mode)" : ""}`);
+    const shouldAlterSchema = (process.env.DB_SYNC_ALTER || "false").toLowerCase() === "true";
+    if (shouldAlterSchema) {
+      try {
+        await sequelize.sync({ alter: true });
+        console.log("Database tables synchronized (alter mode)");
+      } catch (alterError) {
+        const msg = String(alterError?.message || "");
+        const isLegacyNullConstraint =
+          msg.includes("contains null values") ||
+          msg.includes("column \"courseId\"");
+
+        if (!isLegacyNullConstraint) {
+          throw alterError;
+        }
+
+        console.warn("Schema alter failed due to legacy NULL data. Starting with safe sync mode.");
+        await sequelize.sync();
+        console.log("Database tables synchronized (safe mode)");
+      }
+    } else {
+      await sequelize.sync();
+      console.log("Database tables synchronized (safe mode)");
+    }
 
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
 
     server.on('error', (err) => {
@@ -34,7 +54,7 @@ const startServer = async () => {
       process.exit(1);
     });
   } catch (error) {
-    console.error("❌ Server initialization error:", error.message);
+    console.error("Server initialization error:", error.message);
     console.error("\n Database Connection Failed!");
     console.error("Make sure PostgreSQL is running with correct credentials in .env file:");
     console.error("  - DB_HOST=localhost");
@@ -48,3 +68,4 @@ const startServer = async () => {
 };
 
 startServer();
+
