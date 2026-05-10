@@ -90,15 +90,31 @@ exports.sendInvites = async (req, res) => {
         invites.push({ email, inviteLink });
       } catch (error) {
         console.error(`Error processing invite for ${email}:`, error);
+        const sendgridErrors = error?.response?.body?.errors;
+        const firstSendgridMessage = Array.isArray(sendgridErrors) && sendgridErrors.length > 0
+          ? sendgridErrors[0]?.message
+          : null;
+        const reason =
+          firstSendgridMessage ||
+          error.message ||
+          "Unknown email provider error";
+
         results.failed.push({
           email,
-          reason: error.message,
+          reason,
         });
       }
     }
 
+    const allFailed = results.success.length === 0 && results.failed.length > 0;
+    const hasUnauthorizedFailure = results.failed.some((f) =>
+      String(f.reason || "").toLowerCase().includes("unauthorized")
+    );
+
     res.json({
-      message: 'Invitations processed',
+      message: allFailed && hasUnauthorizedFailure
+        ? 'Invitations failed: email provider unauthorized. Check SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
+        : 'Invitations processed',
       results: {
         successCount: results.success.length,
         failureCount: results.failed.length,

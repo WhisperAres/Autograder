@@ -971,9 +971,33 @@ exports.toggleAssignmentVisibility = async (req, res) => {
 // Get all submissions with marks
 exports.getAllSubmissions = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerify(req);
+    const assignments = await Assignment.findAll({
+      where: { courseId },
+      attributes: ["id"],
+    });
+    const assignmentIds = assignments.map((a) => a.id);
+    if (assignmentIds.length === 0) {
+      return res.json([]);
+    }
+
+    const submissionTable = await sequelize.getQueryInterface().describeTable("submissions");
+    const submissionBaseAttrs = ["id", "assignmentId", "studentId", "marks", "totalMarks", "status"];
+    const submissionOptionalAttrs = ["studentEmail", "viewMarks", "viewTestResults", "submittedAt"];
+    const submissionAttributes = [
+      ...submissionBaseAttrs.filter((attr) => submissionTable[attr]),
+      ...submissionOptionalAttrs.filter((attr) => submissionTable[attr]),
+    ];
+
     const submissions = await Submission.findAll({
+      where: { assignmentId: assignmentIds },
+      attributes: submissionAttributes,
       include: [
-        { model: Assignment, as: 'assignment' },
+        {
+          model: Assignment,
+          as: 'assignment',
+          attributes: ["id", "title", "dueDate", "totalMarks", "courseId"],
+        },
         { model: User, as: 'student', attributes: ['id', 'name', 'email'] },
         { model: CodeFile, as: 'codeFiles' }
       ],
@@ -989,10 +1013,20 @@ exports.getAllSubmissions = async (req, res) => {
 // Get submissions for specific assignment
 exports.getSubmissionsByAssignment = async (req, res) => {
   try {
+    await getCourseIdAndVerify(req);
     const { assignmentId } = req.params;
+
+    const submissionTable = await sequelize.getQueryInterface().describeTable("submissions");
+    const submissionBaseAttrs = ["id", "assignmentId", "studentId", "marks", "totalMarks", "status"];
+    const submissionOptionalAttrs = ["studentEmail", "viewMarks", "viewTestResults", "submittedAt"];
+    const submissionAttributes = [
+      ...submissionBaseAttrs.filter((attr) => submissionTable[attr]),
+      ...submissionOptionalAttrs.filter((attr) => submissionTable[attr]),
+    ];
 
     const submissions = await Submission.findAll({
       where: { assignmentId },
+      attributes: submissionAttributes,
       include: [
         { model: User, as: 'student', attributes: ['id', 'name', 'email'] },
         { model: CodeFile, as: 'codeFiles' }

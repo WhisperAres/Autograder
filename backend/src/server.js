@@ -101,6 +101,14 @@ const runCompatibilityMigrations = async () => {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   });
+  await ensureColumn("submissions", "viewTestResults", {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  });
+  await ensureColumn("test_cases", "courseId", {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  });
 
   await ensureLegacyCourseMapping();
 };
