@@ -1,9 +1,39 @@
 const Assignment = require("../models/assignment");
 const TestCase = require("../models/testCase");
+const CourseUser = require("../models/courseUser");
+const sequelize = require("../config/database");
+
+const parseCourseId = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
 exports.getAllAssignments = async (req, res) => {
   try {
+    const requestedCourseId = parseCourseId(req.query.courseId);
+    const assignmentTable = await sequelize.getQueryInterface().describeTable("assignments");
+    const supportsCourseId = Boolean(assignmentTable.courseId);
+
+    let where = {};
+    if (supportsCourseId) {
+      const userCourses = await CourseUser.findAll({
+        where: { userId: req.user.id },
+        attributes: ["courseId"],
+      });
+      const enrolledCourseIds = userCourses.map((c) => c.courseId);
+
+      if (requestedCourseId) {
+        if (!enrolledCourseIds.includes(requestedCourseId)) {
+          return res.status(403).json({ message: "You are not enrolled in this course" });
+        }
+        where.courseId = requestedCourseId;
+      } else if (enrolledCourseIds.length > 0) {
+        where.courseId = enrolledCourseIds;
+      }
+    }
+
     const assignments = await Assignment.findAll({
+      where,
       include: [{ model: TestCase, as: "testCases" }],
       order: [["id", "DESC"]]
     });

@@ -1,0 +1,73 @@
+.course-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 12px 0 28px;
+}
+
+.course-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.course-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.course-list {
+  display: grid;
+  gap: 10px;
+}
+
+.course-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--bg-primary);
+}
+
+.course-item h4 {
+  margin: 0 0 4px 0;
+  font-size: 1.05rem;
+}
+
+.course-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.course-shell .form-group input,
+.course-shell .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.course-shell .form-group textarea {
+  resize: vertical;
+  min-height: 82px;
+}
+
+@media (max-width: 800px) {
+  .course-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .course-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+

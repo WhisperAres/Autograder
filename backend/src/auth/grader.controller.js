@@ -5,6 +5,7 @@ const TestCase = require("../models/testCase");
 const TestResult = require("../models/testResult");
 const GraderSolution = require("../models/graderSolution");
 const GraderSolutionFile = require("../models/graderSolutionFile");
+const CourseUser = require("../models/courseUser");
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -26,6 +27,21 @@ const getJavacExecutable = () => {
 
 const JAVA_CMD = getJavaExecutable();
 const JAVAC_CMD = getJavacExecutable();
+
+const parseCourseId = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const getAllowedCourseIds = async (userId) => {
+  const links = await CourseUser.findAll({
+    where: { userId },
+    attributes: ["courseId", "role"],
+  });
+  return links
+    .filter((l) => l.role === "grader" || l.role === "admin")
+    .map((l) => l.courseId);
+};
 
 // Safe file cleanup with timeout
 const safeDeletedir = (dirpath) => {
@@ -437,7 +453,21 @@ const collectJavaTypeImports = (javaFiles = []) => {
 // Get all assignments (for grader to select from)
 exports.getAssignments = async (req, res) => {
   try {
-    const assignments = await Assignment.findAll();
+    const requestedCourseId = parseCourseId(req.query.courseId);
+    const allowedCourseIds = await getAllowedCourseIds(req.user.id);
+    let where = {};
+    if (requestedCourseId) {
+      if (!allowedCourseIds.includes(requestedCourseId)) {
+        return res.status(403).json({ message: "You do not have access to this course" });
+      }
+      where.courseId = requestedCourseId;
+    } else if (allowedCourseIds.length > 0) {
+      where.courseId = allowedCourseIds;
+    } else {
+      return res.json([]);
+    }
+
+    const assignments = await Assignment.findAll({ where });
     res.json(assignments);
   } catch (error) {
     console.error("Error fetching assignments:", error);
@@ -448,7 +478,26 @@ exports.getAssignments = async (req, res) => {
 // Get all submissions
 exports.getAllSubmissions = async (req, res) => {
   try {
+    const requestedCourseId = parseCourseId(req.query.courseId);
+    const allowedCourseIds = await getAllowedCourseIds(req.user.id);
+    let assignmentIds = [];
+    if (requestedCourseId) {
+      if (!allowedCourseIds.includes(requestedCourseId)) {
+        return res.status(403).json({ message: "You do not have access to this course" });
+      }
+      const scopedAssignments = await Assignment.findAll({ where: { courseId: requestedCourseId }, attributes: ["id"] });
+      assignmentIds = scopedAssignments.map((a) => a.id);
+    } else {
+      const scopedAssignments = await Assignment.findAll({ where: { courseId: allowedCourseIds }, attributes: ["id"] });
+      assignmentIds = scopedAssignments.map((a) => a.id);
+    }
+
+    if (assignmentIds.length === 0) {
+      return res.json([]);
+    }
+
     const submissions = await Submission.findAll({
+      where: { assignmentId: assignmentIds },
       include: [
         { model: Assignment, as: "assignment" },
         { model: CodeFile, as: "codeFiles" }
@@ -466,6 +515,14 @@ exports.getAllSubmissions = async (req, res) => {
 exports.getSubmissionsByAssignment = async (req, res) => {
   try {
     const { assignmentId } = req.params;
+    const assignment = await Assignment.findByPk(assignmentId);
+    if (!assignment) {
+      return res.json([]);
+    }
+    const allowedCourseIds = await getAllowedCourseIds(req.user.id);
+    if (!allowedCourseIds.includes(assignment.courseId)) {
+      return res.status(403).json({ message: "You do not have access to this course" });
+    }
     const submissions = await Submission.findAll({
       where: { assignmentId },
       include: [

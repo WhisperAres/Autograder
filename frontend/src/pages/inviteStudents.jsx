@@ -36,7 +36,14 @@ export default function InviteStudents() {
 
     setLoading(true);
     try {
-      const response = await api.post('/invite/send', {
+      const selectedCourseId = localStorage.getItem('selectedCourseId');
+      if (!selectedCourseId) {
+        setError('Please select a course before inviting students.');
+        setLoading(false);
+        return;
+      }
+
+      const response = await api.post(`/invite/send?courseId=${selectedCourseId}`, {
         emails: emailList,
       });
 

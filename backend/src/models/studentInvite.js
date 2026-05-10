@@ -12,6 +12,10 @@ const StudentInvite = sequelize.define('StudentInvite', {
     type: DataTypes.STRING(255),
     allowNull: false,
   },
+  courseId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   token: {
     type: DataTypes.STRING(255),
     allowNull: false,

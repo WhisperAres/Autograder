@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import api from "../services/auth";
 import "./dashboard.css";
@@ -26,6 +26,7 @@ const displayDateAsIST = (utcDateStr) => {
 
 export default function Dashboard({ handleLogout, user }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,10 @@ export default function Dashboard({ handleLogout, user }) {
   const [codeContent, setCodeContent] = useState("");
   const [codeName, setCodeName] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState(() => {
+    const saved = localStorage.getItem("selectedCourseId");
+    return saved ? parseInt(saved, 10) : null;
+  });
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,6 +66,14 @@ export default function Dashboard({ handleLogout, user }) {
     document.documentElement.setAttribute('data-theme', 'dark');
   }, []);
 
+  useEffect(() => {
+    const fromQuery = parseInt(searchParams.get("courseId"), 10);
+    if (!Number.isNaN(fromQuery) && fromQuery > 0) {
+      setSelectedCourseId(fromQuery);
+      localStorage.setItem("selectedCourseId", String(fromQuery));
+    }
+  }, [searchParams]);
+
   // Fetch assignments and submissions
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -68,13 +81,18 @@ export default function Dashboard({ handleLogout, user }) {
       navigate("/login");
       return;
     }
+    if (!selectedCourseId) {
+      navigate("/student/courses");
+      return;
+    }
 
     const fetchData = async () => {
       try {
-        const assignmentsRes = await api.get("/student/page/dashboard");
+        const courseQuery = `?courseId=${selectedCourseId}`;
+        const assignmentsRes = await api.get(`/student/page/dashboard${courseQuery}`);
         setAssignments(assignmentsRes.data);
 
-        const submissionsRes = await api.get("/student/page/dashboard/submissions");
+        const submissionsRes = await api.get(`/student/page/dashboard/submissions${courseQuery}`);
         setSubmissions(submissionsRes.data);
 
         setLoading(false);
@@ -90,7 +108,7 @@ export default function Dashboard({ handleLogout, user }) {
     const interval = setInterval(fetchData, 5000);
 
     return () => clearInterval(interval);
-  }, [navigate]);
+  }, [navigate, selectedCourseId]);
 
   // Respond to route params
   const { assignmentId, submissionId } = useParams();
@@ -153,7 +171,7 @@ export default function Dashboard({ handleLogout, user }) {
     setFiles([]);
     setShowTestResults(false);
     setCodeContent("");
-    navigate('/student/dashboard');
+    navigate(`/student/dashboard?courseId=${selectedCourseId}`);
   };
 
   const appendSelectedFiles = (incomingFiles) => {
@@ -213,7 +231,7 @@ export default function Dashboard({ handleLogout, user }) {
       setFiles([]);
       showModal('Success', 'Files uploaded successfully!', 'success');
 
-      const submissionsRes = await api.get("/student/page/dashboard/submissions");
+      const submissionsRes = await api.get(`/student/page/dashboard/submissions?courseId=${selectedCourseId}`);
       setSubmissions(submissionsRes.data);
 
       const updatedSubmission = submissionsRes.data.find(
@@ -290,7 +308,7 @@ export default function Dashboard({ handleLogout, user }) {
                 setCodeContent("");
               }
 
-              const submissionsRes = await api.get("/student/page/dashboard/submissions");
+              const submissionsRes = await api.get(`/student/page/dashboard/submissions?courseId=${selectedCourseId}`);
               setSubmissions(submissionsRes.data);
 
               showModal('Success', 'File deleted successfully!', 'success');

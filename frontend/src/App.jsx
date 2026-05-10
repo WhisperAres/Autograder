@@ -7,8 +7,10 @@ import Signup from './pages/signup'
 import ForgotPassword from './pages/forgotPassword'
 import Dashboard from './pages/dashboard'
 import GraderDashboard from './pages/grader'
+import GraderCourses from './pages/graderCourses'
 import AdminDashboard from './pages/admin'
 import AdminCourses from './pages/adminCourses'
+import StudentCourses from './pages/studentCourses'
 import InviteStudents from './pages/inviteStudents'
 import StudentSignup from './pages/studentSignup'
 import ResetPassword from './pages/resetPassword'
@@ -169,7 +171,16 @@ function App() {
           path="/student"
           element={
             isAuthenticated && userRole === 'student' ?
-            <Navigate to="/student/dashboard" /> :
+            <Navigate to="/student/courses" /> :
+            <Navigate to="/" replace={true} />
+          }
+        />
+
+        <Route
+          path="/student/courses"
+          element={
+            isAuthenticated && userRole === 'student' ?
+            <StudentCourses /> :
             <Navigate to="/" replace={true} />
           }
         />
@@ -205,7 +216,29 @@ function App() {
           path="/grader"
           element={
             isAuthenticated && userRole === 'grader' ? (
-              <Navigate to="/grader/dashboard" />
+              <Navigate to="/grader/courses" />
+            ) : (
+              <Navigate to="/" replace={true} />
+            )
+          }
+        />
+
+        <Route
+          path="/grader/courses"
+          element={
+            isAuthenticated && userRole === 'grader' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Grader</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <GraderCourses />
+              </div>
             ) : (
               <Navigate to="/" replace={true} />
             )

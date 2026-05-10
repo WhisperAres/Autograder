@@ -81,7 +81,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="home-footer">
-        <p>&copy; 2026 Autograder. Automated Education Platform.</p>
+        <p>&copy; Autograder. Created by Ajay and Khush.</p>
       </footer>
     </div>
   );

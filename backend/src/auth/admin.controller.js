@@ -582,37 +582,51 @@ exports.createUser = async (req, res) => {
 
     // Check if email already exists
     const existingUser = await User.findOne({ where: { email: normalizedEmail } });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
+    let user = existingUser;
+    let tempPassword = null;
+
+    if (!user) {
+      // Generate temporary password for new accounts only
+      tempPassword = "TempPass123!";
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      user = await User.create({
+        email: normalizedEmail,
+        name,
+        role,
+        password: hashedPassword
+      });
+    } else {
+      // Keep profile fresh when assigning existing user into another course.
+      await user.update({
+        name: name || user.name,
+        role: role === 'admin' ? 'admin' : (role === 'grader' && user.role === 'student' ? 'grader' : user.role),
+      });
     }
 
-    // Generate temporary password
-    const tempPassword = "TempPass123!";
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    const user = await User.create({
-      email: normalizedEmail,
-      name,
-      role,
-      password: hashedPassword
+    // Add (or update) user in this specific course
+    const existingCourseLink = await CourseUser.findOne({
+      where: { courseId, userId: user.id },
     });
-
-    // Add user to course
-    await CourseUser.create({
-      courseId,
-      userId: user.id,
-      role
-    });
+    if (!existingCourseLink) {
+      await CourseUser.create({
+        courseId,
+        userId: user.id,
+        role
+      });
+    } else if (existingCourseLink.role !== role) {
+      await existingCourseLink.update({ role });
+    }
 
     res.status(201).json({
-      message: "User created successfully",
+      message: existingUser ? "User added to course successfully" : "User created successfully",
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
         courseRole: role,
-        tempPassword: tempPassword // Send to admin to share with user
+        ...(tempPassword ? { tempPassword } : {}),
       }
     });
   } catch (error) {

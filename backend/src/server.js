@@ -105,6 +105,10 @@ const runCompatibilityMigrations = async () => {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   });
+  await ensureColumn("student_invites", "courseId", {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  });
   await ensureColumn("test_cases", "courseId", {
     type: DataTypes.INTEGER,
     allowNull: true,

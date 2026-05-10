@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const StudentInvite = require('../models/studentInvite');
 const User = require('../models/user');
+const Course = require('../models/course');
+const CourseUser = require('../models/courseUser');
 const bcrypt = require('bcryptjs');
 const { sendEmail, getFrontendUrl } = require('../utils/email');
 require('dotenv').config();
@@ -9,8 +11,51 @@ const generateInviteToken = () => {
   return crypto.randomBytes(32).toString('hex');
 };
 
+const parseCourseId = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const getCourseIdAndVerifyAdmin = async (req) => {
+  const rawCourseId = req.query.courseId || req.body.courseId;
+  const courseId = parseCourseId(rawCourseId);
+  if (!courseId) {
+    throw { status: 400, message: 'courseId parameter is required' };
+  }
+
+  const course = await Course.findByPk(courseId);
+  if (!course) {
+    throw { status: 404, message: 'Course not found' };
+  }
+
+  const userId = req.user?.id;
+  if (!userId) {
+    throw { status: 401, message: 'Unauthorized' };
+  }
+
+  if (Number(course.adminId) !== Number(userId)) {
+    const adminLink = await CourseUser.findOne({
+      where: { courseId, userId, role: 'admin' },
+    });
+    if (!adminLink) {
+      throw { status: 403, message: 'You do not have admin access to this course' };
+    }
+  }
+
+  return courseId;
+};
+
+const ensureCourseEnrollment = async (courseId, userId, role = 'student') => {
+  if (!courseId) return;
+  const existing = await CourseUser.findOne({ where: { courseId, userId } });
+  if (!existing) {
+    await CourseUser.create({ courseId, userId, role });
+  }
+};
+
 exports.sendInvites = async (req, res) => {
   try {
+    const courseId = await getCourseIdAndVerifyAdmin(req);
     const { emails } = req.body;
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
@@ -32,19 +77,40 @@ exports.sendInvites = async (req, res) => {
       failed: [],
     };
 
-    for (const email of validEmails) {
+    for (const rawEmail of validEmails) {
+      const email = String(rawEmail).trim().toLowerCase();
       try {
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
-          results.failed.push({
-            email,
-            reason: 'User already registered with this email',
+          await ensureCourseEnrollment(courseId, existingUser.id, 'student');
+
+          const loginLink = `${frontendUrl}/login`;
+          await sendEmail({
+            to: email,
+            subject: 'You were added to a new Autograder course',
+            html: `
+              <h2>You were added to a new course</h2>
+              <p>Your account is already registered.</p>
+              <p>Please login to access the newly assigned course.</p>
+              <a href="${loginLink}" style="
+                display: inline-block;
+                padding: 10px 20px;
+                background-color: #4CAF50;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+                margin: 10px 0;
+              ">Go to Login</a>
+            `,
+            text: `You were added to a new Autograder course. Login here: ${loginLink}`,
           });
+
+          results.success.push(email);
           continue;
         }
 
         const existingInvite = await StudentInvite.findOne({
-          where: { email, used: false },
+          where: { email, used: false, courseId },
         });
 
         let token;
@@ -56,6 +122,7 @@ exports.sendInvites = async (req, res) => {
 
           await StudentInvite.create({
             email,
+            courseId,
             token,
             expiresAt,
           });
@@ -124,6 +191,9 @@ exports.sendInvites = async (req, res) => {
       ...(process.env.NODE_ENV !== 'production' && { invites }),
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('Send invites error:', error);
     res.status(500).json({ message: 'Error sending invitations', error: error.message });
   }
@@ -190,7 +260,20 @@ exports.completeSignup = async (req, res) => {
 
     const existingUser = await User.findOne({ where: { email: invite.email } });
     if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      await ensureCourseEnrollment(invite.courseId, existingUser.id, 'student');
+      await StudentInvite.update(
+        { used: true, usedAt: new Date() },
+        { where: { id: invite.id } }
+      );
+      return res.json({
+        message: 'Account already exists. Course access granted.',
+        user: {
+          id: existingUser.id,
+          email: existingUser.email,
+          role: existingUser.role,
+          name: existingUser.name,
+        },
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -206,6 +289,8 @@ exports.completeSignup = async (req, res) => {
       { used: true, usedAt: new Date() },
       { where: { id: invite.id } }
     );
+
+    await ensureCourseEnrollment(invite.courseId, newUser.id, 'student');
 
     res.json({
       message: 'Account created successfully',

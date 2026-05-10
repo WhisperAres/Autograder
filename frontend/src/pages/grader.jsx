@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import TestCaseManager from "./testCaseManager";
 import Modal from "../components/Modal";
 import api, { logout } from "../services/auth";
@@ -43,9 +43,14 @@ export default function GraderDashboard() {
 
   const params = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const graderFileInputRef = useRef(null);
   const graderFolderInputRef = useRef(null);
   const uploadFilesRef = useRef([]);
+  const [selectedCourseId, setSelectedCourseId] = useState(() => {
+    const saved = localStorage.getItem("selectedCourseId");
+    return saved ? parseInt(saved, 10) : null;
+  });
 
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
@@ -65,6 +70,14 @@ export default function GraderDashboard() {
   }, []);
 
   useEffect(() => {
+    const fromQuery = parseInt(searchParams.get("courseId"), 10);
+    if (!Number.isNaN(fromQuery) && fromQuery > 0) {
+      setSelectedCourseId(fromQuery);
+      localStorage.setItem("selectedCourseId", String(fromQuery));
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     uploadFilesRef.current = uploadFiles;
   }, [uploadFiles]);
 
@@ -72,7 +85,11 @@ export default function GraderDashboard() {
     const fetchAssignments = async () => {
       setLoading(true);
       try {
-        const res = await api.get("/grader/page/dashboard");
+        if (!selectedCourseId) {
+          navigate("/grader/courses", { replace: true });
+          return;
+        }
+        const res = await api.get(`/grader/page/dashboard?courseId=${selectedCourseId}`);
         setAssignments(res.data || []);
       } catch (err) {
         showModal('Error', "Error loading assignments: " + err.message, 'error');
@@ -81,7 +98,7 @@ export default function GraderDashboard() {
       }
     };
     fetchAssignments();
-  }, []);
+  }, [selectedCourseId, navigate]);
 
   // frontend/src/pages/grader.jsx
 
@@ -137,7 +154,7 @@ export default function GraderDashboard() {
 
   const fetchSubmissionsForAssignment = async (assignmentId) => {
   try {
-    const res = await api.get(`/grader/page/submissions/${assignmentId}`);
+    const res = await api.get(`/grader/page/grade-submissions/${assignmentId}/list`);
     
     if (res.data && Array.isArray(res.data)) {
       setSubmissions(res.data);
@@ -158,7 +175,7 @@ export default function GraderDashboard() {
     setTestResults([]);
     uploadFilesRef.current = [];
     setUploadFiles([]);
-    navigate(`/grader/grade-submissions/${assignment.id}`);
+    navigate(`/grader/grade-submissions/${assignment.id}?courseId=${selectedCourseId}`);
     fetchSubmissionsForAssignment(assignment.id);
   };
 
@@ -170,7 +187,7 @@ export default function GraderDashboard() {
     setCodeContent("");
     setTestResults([]);
     uploadFilesRef.current = [];
-    navigate("/grader/dashboard");
+    navigate(`/grader/dashboard?courseId=${selectedCourseId}`);
   };
 
   const fetchCodeForSubmission = async (submissionId) => {

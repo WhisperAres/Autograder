@@ -2,8 +2,14 @@
 const Submission = require('../models/submission');
 const CodeFile = require('../models/codeFile');
 const Assignment = require('../models/assignment');
+const CourseUser = require('../models/courseUser');
 const FileService = require('../services/fileService');
 const sequelize = require('../config/database');
+
+const parseCourseId = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
 const normalizeSubmissionPath = (rawPath, fallbackName = 'uploaded-file') => {
   const originalValue = String(rawPath || fallbackName).trim();
@@ -56,6 +62,13 @@ exports.uploadSubmission = async (req, res) => {
     const assignment = await Assignment.findByPk(parseInt(assignmentId));
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    const enrollment = await CourseUser.findOne({
+      where: { courseId: assignment.courseId, userId: studentId },
+    });
+    if (!enrollment) {
+      return res.status(403).json({ message: "You are not enrolled in this course" });
     }
 
     // Check if submission is past due date
@@ -143,14 +156,47 @@ exports.uploadSubmission = async (req, res) => {
 exports.getStudentSubmissions = async (req, res) => {
   try {
     const studentId = req.user.id;
+    const requestedCourseId = parseCourseId(req.query.courseId);
     const tableDescription = await sequelize.getQueryInterface().describeTable('submissions');
     const baseAttrs = ['id', 'assignmentId', 'studentId', 'marks', 'totalMarks', 'status'];
     const optionalAttrs = ['studentEmail', 'viewMarks', 'viewTestResults', 'submittedAt'];
     const attributes = [...baseAttrs, ...optionalAttrs.filter((attr) => tableDescription[attr])];
 
+    const assignmentTable = await sequelize.getQueryInterface().describeTable("assignments");
+    const supportsCourseId = Boolean(assignmentTable.courseId);
+    let assignmentFilterIds = null;
+    if (supportsCourseId) {
+      const enrollments = await CourseUser.findAll({
+        where: { userId: studentId },
+        attributes: ["courseId"],
+      });
+      const enrolledCourseIds = enrollments.map((e) => e.courseId);
+
+      if (requestedCourseId) {
+        if (!enrolledCourseIds.includes(requestedCourseId)) {
+          return res.status(403).json({ message: "You are not enrolled in this course" });
+        }
+        const assignments = await Assignment.findAll({
+          where: { courseId: requestedCourseId },
+          attributes: ["id"],
+        });
+        assignmentFilterIds = assignments.map((a) => a.id);
+      } else if (enrolledCourseIds.length > 0) {
+        const assignments = await Assignment.findAll({
+          where: { courseId: enrolledCourseIds },
+          attributes: ["id"],
+        });
+        assignmentFilterIds = assignments.map((a) => a.id);
+      } else {
+        assignmentFilterIds = [];
+      }
+    }
+
     // Fetch submissions for this student
     const submissions = await Submission.findAll({
-      where: { studentId },
+      where: assignmentFilterIds
+        ? { studentId, assignmentId: assignmentFilterIds }
+        : { studentId },
       attributes,
     });
 

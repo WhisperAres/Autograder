@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/auth";
 import "./admin.css";
+import "./adminCourses.css";
 
 export default function AdminCourses() {
   const navigate = useNavigate();
@@ -72,81 +73,77 @@ export default function AdminCourses() {
 
   return (
     <div className="admin-dashboard">
-      <div className="dashboard-header">
-        <h1>Select a Course</h1>
-        <p>Choose one of your courses or create a new one.</p>
-      </div>
+      <div className="course-shell">
+        {error && <div className="alert alert-error">{error}</div>}
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="form-panel" style={{ marginBottom: "1rem" }}>
-        <h3>Create New Course</h3>
-        <form onSubmit={handleCreateCourse}>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Course Name *</label>
-              <input
-                type="text"
-                value={newCourse.name}
-                onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
-                placeholder="Course name"
-                disabled={creating}
-              />
-            </div>
-            <div className="form-group">
-              <label>Course Code</label>
-              <input
-                type="text"
-                value={newCourse.code}
-                onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
-                placeholder="CS101"
-                disabled={creating}
-              />
-            </div>
-          </div>
-          <div className="form-group">
-            <label>Description</label>
-            <textarea
-              value={newCourse.description}
-              onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
-              placeholder="Optional description"
-              rows="3"
-              disabled={creating}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary" disabled={creating}>
-            {creating ? "Creating..." : "Create Course"}
-          </button>
-        </form>
-      </div>
-
-      <div className="users-section">
-        <div className="section-header">
-          <h2>Your Courses</h2>
-        </div>
-        {loading ? (
-          <div className="loading">Loading courses...</div>
-        ) : courses.length === 0 ? (
-          <div className="empty-state">No courses found. Create your first course above.</div>
-        ) : (
-          <div className="users-list-panel">
-            {courses.map((course) => (
-              <div key={course.id} className="user-card">
-                <div className="user-info">
-                  <h4>{course.name}</h4>
-                  <p>{course.code || "No code"}{course.description ? ` â€¢ ${course.description}` : ""}</p>
-                </div>
-                <div className="user-actions">
-                  <button className="btn btn-primary" onClick={() => openCourse(course.id)}>
-                    Open Dashboard
-                  </button>
-                </div>
+        <div className="course-card">
+          <h3>Create New Course</h3>
+          <form onSubmit={handleCreateCourse}>
+            <div className="course-grid">
+              <div className="form-group">
+                <label>Course Name *</label>
+                <input
+                  type="text"
+                  value={newCourse.name}
+                  onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+                  placeholder="Course name"
+                  disabled={creating}
+                />
               </div>
-            ))}
+              <div className="form-group">
+                <label>Course Code</label>
+                <input
+                  type="text"
+                  value={newCourse.code}
+                  onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
+                  placeholder="CS101"
+                  disabled={creating}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Description</label>
+              <textarea
+                value={newCourse.description}
+                onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+                placeholder="Optional description"
+                rows="3"
+                disabled={creating}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={creating}>
+              {creating ? "Creating..." : "Create Course"}
+            </button>
+          </form>
+        </div>
+
+        <div className="course-card">
+          <div className="section-header">
+            <h2>Your Courses</h2>
           </div>
-        )}
+          {loading ? (
+            <div className="loading">Loading courses...</div>
+          ) : courses.length === 0 ? (
+            <div className="empty-state">No courses found. Create your first course above.</div>
+          ) : (
+            <div className="course-list">
+              {courses.map((course) => (
+                <div key={course.id} className="course-item">
+                  <div className="user-info">
+                    <h4>{course.name}</h4>
+                    <p>{course.code || "No code"}{course.description ? ` • ${course.description}` : ""}</p>
+                  </div>
+                  <div className="user-actions">
+                    <button className="btn btn-primary" onClick={() => openCourse(course.id)}>
+                      Open Dashboard
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
