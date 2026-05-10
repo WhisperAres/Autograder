@@ -8,6 +8,7 @@ import ForgotPassword from './pages/forgotPassword'
 import Dashboard from './pages/dashboard'
 import GraderDashboard from './pages/grader'
 import AdminDashboard from './pages/admin'
+import AdminCourses from './pages/adminCourses'
 import InviteStudents from './pages/inviteStudents'
 import StudentSignup from './pages/studentSignup'
 import ResetPassword from './pages/resetPassword'
@@ -303,8 +304,30 @@ function App() {
           path="/admin"
           element={
             isAuthenticated && userRole === 'admin' ?
-            <Navigate to="/admin/dashboard" /> :
+            <Navigate to="/admin/courses" /> :
             <Navigate to="/" replace={true} />
+          }
+        />
+
+        <Route
+          path="/admin/courses"
+          element={
+            isAuthenticated && userRole === 'admin' ? (
+              <div className="with-navbar">
+                <nav className="navbar">
+                  <div className="navbar-content">
+                    <h2 className="navbar-title">Autograder - Admin</h2>
+                    <div className="navbar-user">
+                      <span>{user?.name}</span>
+                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                    </div>
+                  </div>
+                </nav>
+                <AdminCourses />
+              </div>
+            ) : (
+              <Navigate to="/" replace={true} />
+            )
           }
         />
 

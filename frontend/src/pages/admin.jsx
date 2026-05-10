@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
 import api from "../services/auth"; // Updated import
@@ -99,6 +99,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const token = localStorage.getItem("token");
   const params = useParams();
+  const [searchParams] = useSearchParams();
 
   // Apply dark theme by default
   useEffect(() => {
@@ -111,6 +112,14 @@ export default function AdminDashboard() {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved) : null;
   });
+
+  useEffect(() => {
+    const fromQuery = parseInt(searchParams.get("courseId"), 10);
+    if (!Number.isNaN(fromQuery) && fromQuery > 0) {
+      setSelectedCourseId(fromQuery);
+      localStorage.setItem("selectedCourseId", String(fromQuery));
+    }
+  }, [searchParams]);
 
   // Form states
   const [newAssignment, setNewAssignment] = useState({ title: "", description: "", dueDate: "", totalMarks: 100 });
