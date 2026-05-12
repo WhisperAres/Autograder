@@ -803,11 +803,7 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
-      <div style={{ marginLeft: "2rem", marginTop: "1.5rem", marginBottom: "1.5rem" }}>
-        <h2>Admin Dashboard</h2>
-      </div>
-
-        {/* Course Selector */}
+      {/* Course Selector */}
         {courses.length > 0 && (
           <div className="course-selector" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <label htmlFor="course-select" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Course:</label>

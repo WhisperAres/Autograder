@@ -280,18 +280,7 @@ function App() {
           path="/admin/courses"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <AdminCourses />
-              </div>
+              <AdminCourses />
             ) : (
               <Navigate to="/" replace={true} />
             )
@@ -302,18 +291,7 @@ function App() {
           path="/admin/dashboard"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <AdminDashboard />
-              </div>
+              <AdminDashboard />
             ) : (
               <Navigate to="/" replace={true} />
             )
@@ -324,18 +302,7 @@ function App() {
           path="/admin/test-cases-management/:assignmentId"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <AdminDashboard />
-              </div>
+              <AdminDashboard />
             ) : (
               <Navigate to="/login" />
             )
@@ -346,18 +313,7 @@ function App() {
           path="/admin/grade-submission/:submissionId"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <AdminDashboard />
-              </div>
+              <AdminDashboard />
             ) : (
               <Navigate to="/login" />
             )
@@ -375,18 +331,7 @@ function App() {
           path="/admin/invite-students"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <InviteStudents />
-              </div>
+              <InviteStudents />
             ) : (
               <Navigate to="/login" />
             )
