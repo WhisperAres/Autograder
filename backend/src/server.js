@@ -34,13 +34,7 @@ const ensureLegacyCourseMapping = async () => {
     return;
   }
 
-  const [legacyRows] = await sequelize.query(
-    'SELECT id FROM "assignments" WHERE "courseId" IS NULL ORDER BY id ASC'
-  );
-  if (!legacyRows.length) {
-    return;
-  }
-
+  // Get legacy admin user
   let adminUser = await User.findOne({ where: { role: "admin" }, order: [["id", "ASC"]] });
   if (!adminUser) {
     const tempPasswordHash = await bcrypt.hash("TempPass123!", 10);
@@ -52,6 +46,7 @@ const ensureLegacyCourseMapping = async () => {
     });
   }
 
+  // Get or create legacy course
   let legacyCourse = await Course.findOne({
     where: { adminId: adminUser.id },
     order: [["id", "ASC"]],
@@ -66,12 +61,21 @@ const ensureLegacyCourseMapping = async () => {
     });
   }
 
-  await sequelize.query(
-    'UPDATE "assignments" SET "courseId" = :courseId WHERE "courseId" IS NULL',
-    { replacements: { courseId: legacyCourse.id } }
+  // Check if there are legacy assignments
+  const [legacyRows] = await sequelize.query(
+    'SELECT id FROM "assignments" WHERE "courseId" IS NULL ORDER BY id ASC'
   );
 
-  // Ensure admin is enrolled in the course (ignore if already present).
+  // Map legacy assignments to the course
+  if (legacyRows.length > 0) {
+    await sequelize.query(
+      'UPDATE "assignments" SET "courseId" = :courseId WHERE "courseId" IS NULL',
+      { replacements: { courseId: legacyCourse.id } }
+    );
+    console.log(`Mapped ${legacyRows.length} legacy assignments to course ${legacyCourse.id}`);
+  }
+
+  // Ensure admin is enrolled in the course
   await sequelize.query(
     `
     INSERT INTO "course_users" ("courseId", "userId", "role", "joinedAt")
@@ -84,37 +88,22 @@ const ensureLegacyCourseMapping = async () => {
     { replacements: { courseId: legacyCourse.id, userId: adminUser.id } }
   );
 
-  // Add all students to the legacy course
+  // Add ALL users as students to the legacy course (regardless of their global role)
   await sequelize.query(
     `
     INSERT INTO "course_users" ("courseId", "userId", "role", "joinedAt")
     SELECT :courseId, id, 'student', NOW()
     FROM "users"
-    WHERE role = 'student'
+    WHERE id != :adminId
     AND NOT EXISTS (
       SELECT 1 FROM "course_users"
       WHERE "courseId" = :courseId AND "userId" = "users".id
     )
     `,
-    { replacements: { courseId: legacyCourse.id } }
+    { replacements: { courseId: legacyCourse.id, adminId: adminUser.id } }
   );
 
-  // Add all graders to the legacy course
-  await sequelize.query(
-    `
-    INSERT INTO "course_users" ("courseId", "userId", "role", "joinedAt")
-    SELECT :courseId, id, 'grader', NOW()
-    FROM "users"
-    WHERE role = 'grader'
-    AND NOT EXISTS (
-      SELECT 1 FROM "course_users"
-      WHERE "courseId" = :courseId AND "userId" = "users".id
-    )
-    `,
-    { replacements: { courseId: legacyCourse.id } }
-  );
-
-  console.log(`Backfilled ${legacyRows.length} legacy assignments to course ${legacyCourse.id}`);
+  console.log(`Ensured all users are added to legacy course ${legacyCourse.id}`);
 };
 
 const runCompatibilityMigrations = async () => {
