@@ -227,18 +227,7 @@ function App() {
           path="/grader/courses"
           element={
             isAuthenticated && userRole === 'grader' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Grader</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <GraderCourses />
-              </div>
+              <GraderCourses />
             ) : (
               <Navigate to="/" replace={true} />
             )
@@ -249,18 +238,7 @@ function App() {
           path="/grader/dashboard"
           element={
             isAuthenticated && userRole === 'grader' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Grader</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <GraderDashboard />
-              </div>
+              <GraderDashboard />
             ) : (
               <Navigate to="/" replace={true} />
             )
@@ -271,18 +249,7 @@ function App() {
           path="/grader/test-solutions/:assignmentId"
           element={
             isAuthenticated && userRole === 'grader' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Grader</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <GraderDashboard />
-              </div>
+              <GraderDashboard />
             ) : (
               <Navigate to="/" replace={true} />
             )
@@ -293,40 +260,7 @@ function App() {
           path="/grader/grade-submissions/:assignmentId"
           element={
             isAuthenticated && userRole === 'grader' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Grader</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <GraderDashboard />
-              </div>
-            ) : (
-              <Navigate to="/" replace={true} />
-            )
-          }
-        />
-
-        <Route
-          path="/grader/dashboard"
-          element={
-            isAuthenticated && userRole === 'grader' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Grader</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
-                <GraderDashboard />
-              </div>
+              <GraderDashboard />
             ) : (
               <Navigate to="/" replace={true} />
             )

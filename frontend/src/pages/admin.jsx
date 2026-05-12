@@ -88,6 +88,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [submissions, setSubmissions] = useState([]);
 
   const [activeTab, setActiveTab] = useState("assignments");
@@ -106,6 +107,15 @@ export default function AdminDashboard() {
   // Apply dark theme by default
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
+
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
   }, []);
 
   // Course and data states
@@ -787,7 +797,7 @@ export default function AdminDashboard() {
           </div>
           <div className="navbar-actions">
             <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
-            <span className="user-email">{user?.email || "User"}</span>
+            <span className="user-email">{currentUser?.email || "User"}</span>
             <button className="btn-logout" onClick={logout}>Logout</button>
           </div>
         </div>

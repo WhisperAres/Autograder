@@ -56,6 +56,13 @@ export default function GraderDashboard() {
   const [currentUser, setCurrentUser] = useState(null);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
+  const parseAssignments = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.assignments)) return payload.assignments;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [];
+  };
+
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
     setModalMessage(message);
@@ -103,7 +110,7 @@ export default function GraderDashboard() {
           return;
         }
         const res = await api.get(`/grader/page/dashboard?courseId=${selectedCourseId}`);
-        setAssignments(res.data || []);
+        setAssignments(parseAssignments(res.data));
       } catch (err) {
         showModal('Error', "Error loading assignments: " + err.message, 'error');
       } finally {
