@@ -84,6 +84,36 @@ const ensureLegacyCourseMapping = async () => {
     { replacements: { courseId: legacyCourse.id, userId: adminUser.id } }
   );
 
+  // Add all students to the legacy course
+  await sequelize.query(
+    `
+    INSERT INTO "course_users" ("courseId", "userId", "role", "joinedAt")
+    SELECT :courseId, id, 'student', NOW()
+    FROM "users"
+    WHERE role = 'student'
+    AND NOT EXISTS (
+      SELECT 1 FROM "course_users"
+      WHERE "courseId" = :courseId AND "userId" = "users".id
+    )
+    `,
+    { replacements: { courseId: legacyCourse.id } }
+  );
+
+  // Add all graders to the legacy course
+  await sequelize.query(
+    `
+    INSERT INTO "course_users" ("courseId", "userId", "role", "joinedAt")
+    SELECT :courseId, id, 'grader', NOW()
+    FROM "users"
+    WHERE role = 'grader'
+    AND NOT EXISTS (
+      SELECT 1 FROM "course_users"
+      WHERE "courseId" = :courseId AND "userId" = "users".id
+    )
+    `,
+    { replacements: { courseId: legacyCourse.id } }
+  );
+
   console.log(`Backfilled ${legacyRows.length} legacy assignments to course ${legacyCourse.id}`);
 };
 
