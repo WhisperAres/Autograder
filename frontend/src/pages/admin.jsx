@@ -4,6 +4,7 @@ import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
 import api from "../services/auth"; // Updated import
 import "./admin.css";
+import "./dashboard.css";
 
 // Helper function: Convert IST time (user input) to UTC ISO string for storage
 const convertISTToUTC = (dateStr, timeStr) => {
@@ -779,15 +780,16 @@ export default function AdminDashboard() {
   return (
     <div className="admin-dashboard">
       <div className="dashboard-header">
-        <h1>Admin Dashboard</h1>
-        <p style={{ margin: "6px 0", color: "var(--primary)", fontWeight: 600 }}>
-          Current Course: {selectedCourse?.name || "Not selected"}
-        </p>
-        <div style={{ marginBottom: "0.75rem" }}>
-          <button className="btn btn-primary" onClick={() => navigate("/admin/courses")}>
-            Course List
-          </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h1 style={{ margin: 0 }}>Autograder</h1>
+            <button className="btn-course-list" onClick={() => navigate("/admin/courses")}>Course List</button>
+          </div>
+          <p style={{ margin: 0, color: "var(--primary)", fontWeight: 600 }}>
+            Course: {selectedCourse?.name || "Not selected"}
+          </p>
         </div>
+        <h1>Admin Dashboard</h1>
         
         {/* Course Selector */}
         {courses.length > 0 && (

@@ -352,10 +352,12 @@ export default function Dashboard({ handleLogout, user }) {
     <div className="dashboard-container" style={{ outline: '40px solid red' }}>
       <nav className="navbar">
         <div className="navbar-content">
-          <h1 className="brand">Autograder</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h1 className="brand">Autograder</h1>
+            <button onClick={() => navigate("/student/courses")} className="btn-course-list">Course List</button>
+          </div>
           <div className="navbar-actions">
             <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
-            <button onClick={() => navigate("/student/courses")} className="btn-logout">Course List</button>
             <span className="user-email">{user?.email || "User"}</span>
             <button onClick={handleLogout} className="btn-logout">Logout</button>
           </div>

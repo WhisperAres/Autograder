@@ -4,6 +4,7 @@ import TestCaseManager from "./testCaseManager";
 import Modal from "../components/Modal";
 import api, { logout } from "../services/auth";
 import "./grader.css";
+import "./dashboard.css";
 
 // Helper function: Display UTC time as IST for date display
 const displayDateAsIST = (utcDateStr) => {
@@ -476,10 +477,13 @@ export default function GraderDashboard() {
   return (
     <div className="grader-dashboard">
       <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <div style={{ color: "var(--primary)", fontWeight: 600 }}>
-          Current Course: {selectedCourse?.name || "Not selected"}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <h1 className="brand" style={{ margin: 0 }}>Autograder</h1>
+          <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate("/grader/courses")}>Course List</button>
+        <div style={{ color: "var(--primary)", fontWeight: 600 }}>
+          Course: {selectedCourse?.name || "Not selected"}
+        </div>
       </div>
       <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>
 
