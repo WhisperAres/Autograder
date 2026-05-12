@@ -481,8 +481,11 @@ export default function GraderDashboard() {
           <h1 className="brand" style={{ margin: 0 }}>Autograder</h1>
           <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
         </div>
-        <div style={{ color: "var(--primary)", fontWeight: 600 }}>
-          Course: {selectedCourse?.name || "Not selected"}
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ color: "var(--primary)", fontWeight: 600 }}>
+            Course: {selectedCourse?.name || "Not selected"}
+          </div>
+          <button className="btn-logout" onClick={handleLogout}>Logout</button>
         </div>
       </div>
       <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>

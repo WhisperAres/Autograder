@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
-import api from "../services/auth"; // Updated import
+import api, { logout } from "../services/auth";
 import "./admin.css";
 import "./dashboard.css";
 
@@ -785,9 +785,12 @@ export default function AdminDashboard() {
             <h1 style={{ margin: 0 }}>Autograder</h1>
             <button className="btn-course-list" onClick={() => navigate("/admin/courses")}>Course List</button>
           </div>
-          <p style={{ margin: 0, color: "var(--primary)", fontWeight: 600 }}>
-            Course: {selectedCourse?.name || "Not selected"}
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <p style={{ margin: 0, color: "var(--primary)", fontWeight: 600 }}>
+              Course: {selectedCourse?.name || "Not selected"}
+            </p>
+            <button className="btn-logout" onClick={logout}>Logout</button>
+          </div>
         </div>
         <h1>Admin Dashboard</h1>
         

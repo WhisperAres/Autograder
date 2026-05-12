@@ -44,6 +44,11 @@
   font-size: 0.92rem;
 }
 
+.course-card h3,
+.course-shell .form-group label {
+  color: #10b981;
+}
+
 .course-shell .form-group input,
 .course-shell .form-group textarea {
   width: 100%;
