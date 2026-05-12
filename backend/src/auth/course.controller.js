@@ -3,6 +3,15 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/user");
 const Course = require("../models/course");
 const CourseUser = require("../models/courseUser");
+const Assignment = require("../models/assignment");
+const Submission = require("../models/submission");
+const CodeFile = require("../models/codeFile");
+const TestCase = require("../models/testCase");
+const TestResult = require("../models/testResult");
+const GraderSolution = require("../models/graderSolution");
+const GraderSolutionFile = require("../models/graderSolutionFile");
+const StudentInvite = require("../models/studentInvite");
+const sequelize = require("../config/database");
 require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret_change_me";
@@ -336,9 +345,58 @@ exports.deleteCourse = async (req, res) => {
         .json({ message: "Only course admin can delete course" });
     }
 
-    // Delete all related data
-    await CourseUser.destroy({ where: { courseId } });
-    await course.destroy();
+    await sequelize.transaction(async (t) => {
+      const assignments = await Assignment.findAll({
+        where: { courseId },
+        attributes: ["id"],
+        transaction: t,
+      });
+      const assignmentIds = assignments.map((a) => a.id);
+
+      if (assignmentIds.length > 0) {
+        const submissions = await Submission.findAll({
+          where: { assignmentId: assignmentIds },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const submissionIds = submissions.map((s) => s.id);
+
+        const testCases = await TestCase.findAll({
+          where: { assignmentId: assignmentIds },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const testCaseIds = testCases.map((tc) => tc.id);
+
+        if (submissionIds.length > 0) {
+          await CodeFile.destroy({ where: { submissionId: submissionIds }, transaction: t });
+          await TestResult.destroy({ where: { submissionId: submissionIds }, transaction: t });
+        }
+
+        if (testCaseIds.length > 0) {
+          await TestResult.destroy({ where: { testCaseId: testCaseIds }, transaction: t });
+        }
+
+        const graderSolutions = await GraderSolution.findAll({
+          where: { assignmentId: assignmentIds },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const graderSolutionIds = graderSolutions.map((gs) => gs.id);
+
+        if (graderSolutionIds.length > 0) {
+          await GraderSolutionFile.destroy({ where: { solutionId: graderSolutionIds }, transaction: t });
+        }
+        await GraderSolution.destroy({ where: { assignmentId: assignmentIds }, transaction: t });
+        await Submission.destroy({ where: { assignmentId: assignmentIds }, transaction: t });
+        await TestCase.destroy({ where: { assignmentId: assignmentIds }, transaction: t });
+        await Assignment.destroy({ where: { id: assignmentIds }, transaction: t });
+      }
+
+      await StudentInvite.destroy({ where: { courseId }, transaction: t });
+      await CourseUser.destroy({ where: { courseId }, transaction: t });
+      await Course.destroy({ where: { id: courseId }, transaction: t });
+    });
 
     res.json({ message: "Course deleted successfully" });
   } catch (error) {

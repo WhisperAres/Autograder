@@ -44,6 +44,8 @@ export default function Dashboard({ handleLogout, user }) {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved, 10) : null;
   });
+  const [courses, setCourses] = useState([]);
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,6 +75,22 @@ export default function Dashboard({ handleLogout, user }) {
       localStorage.setItem("selectedCourseId", String(fromQuery));
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const res = await api.get("/courses/my-courses");
+        const payload = res.data || {};
+        const list = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload.courses)
+            ? payload.courses
+            : [...(payload.createdCourses || []), ...(payload.enrolledCourses || [])];
+        setCourses(list);
+      } catch (_) {}
+    };
+    fetchCourses();
+  }, []);
 
   // Fetch assignments and submissions
   useEffect(() => {
@@ -336,6 +354,8 @@ export default function Dashboard({ handleLogout, user }) {
         <div className="navbar-content">
           <h1 className="brand">Autograder</h1>
           <div className="navbar-actions">
+            <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
+            <button onClick={() => navigate("/student/courses")} className="btn-logout">Course List</button>
             <span className="user-email">{user?.email || "User"}</span>
             <button onClick={handleLogout} className="btn-logout">Logout</button>
           </div>

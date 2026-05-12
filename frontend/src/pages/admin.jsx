@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import Modal from "../components/Modal";
 import StudentDetail from "./studentDetail";
 import api from "../services/auth"; // Updated import
@@ -99,6 +99,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const token = localStorage.getItem("token");
   const params = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   // Apply dark theme by default
@@ -112,6 +113,7 @@ export default function AdminDashboard() {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved) : null;
   });
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
   useEffect(() => {
     const fromQuery = parseInt(searchParams.get("courseId"), 10);
@@ -778,6 +780,14 @@ export default function AdminDashboard() {
     <div className="admin-dashboard">
       <div className="dashboard-header">
         <h1>Admin Dashboard</h1>
+        <p style={{ margin: "6px 0", color: "var(--primary)", fontWeight: 600 }}>
+          Current Course: {selectedCourse?.name || "Not selected"}
+        </p>
+        <div style={{ marginBottom: "0.75rem" }}>
+          <button className="btn btn-primary" onClick={() => navigate("/admin/courses")}>
+            Course List
+          </button>
+        </div>
         
         {/* Course Selector */}
         {courses.length > 0 && (
@@ -820,9 +830,9 @@ export default function AdminDashboard() {
         
         {/* Create Course Form */}
         <form id="createCourseForm" onSubmit={handleCreateCourse} className="form-panel" style={{ display: "none", marginBottom: "1rem" }}>
-          <h3>Create New Course</h3>
+          <h3 style={{color: "#10b981"}}>Create New Course</h3>
           <div className="form-group">
-            <label style={{color: "var(--primary)"}}>Course Name *</label>
+            <label style={{color: "#10b981"}}>Course Name *</label>
             <input
               type="text"
               value={newCourse.name}
@@ -832,7 +842,7 @@ export default function AdminDashboard() {
             />
           </div>
           <div className="form-group">
-            <label style={{color: "var(--primary)"}}>Course Code</label>
+            <label style={{color: "#10b981"}}>Course Code</label>
             <input
               type="text"
               value={newCourse.code}
@@ -841,7 +851,7 @@ export default function AdminDashboard() {
             />
           </div>
           <div className="form-group">
-            <label style={{color: "var(--primary)"}}>Description</label>
+            <label style={{color: "#10b981"}}>Description</label>
             <textarea
               value={newCourse.description}
               onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}

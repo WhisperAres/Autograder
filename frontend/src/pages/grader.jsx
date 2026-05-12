@@ -51,6 +51,8 @@ export default function GraderDashboard() {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved, 10) : null;
   });
+  const [courses, setCourses] = useState([]);
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
   const showModal = (title, message, type = 'info', actions = []) => {
     setModalTitle(title);
@@ -99,6 +101,22 @@ export default function GraderDashboard() {
     };
     fetchAssignments();
   }, [selectedCourseId, navigate]);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const res = await api.get("/courses/my-courses");
+        const payload = res.data || {};
+        const list = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload.courses)
+            ? payload.courses
+            : [...(payload.createdCourses || []), ...(payload.enrolledCourses || [])];
+        setCourses(list);
+      } catch (_) {}
+    };
+    fetchCourses();
+  }, []);
 
   // frontend/src/pages/grader.jsx
 
@@ -457,6 +475,12 @@ export default function GraderDashboard() {
 
   return (
     <div className="grader-dashboard">
+      <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ color: "var(--primary)", fontWeight: 600 }}>
+          Current Course: {selectedCourse?.name || "Not selected"}
+        </div>
+        <button className="btn btn-primary" onClick={() => navigate("/grader/courses")}>Course List</button>
+      </div>
       <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>
 
       <div className="grader-workspace">

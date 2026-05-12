@@ -11,6 +11,7 @@ export default function AdminCourses() {
   const [error, setError] = useState("");
   const [newCourse, setNewCourse] = useState({ name: "", code: "", description: "" });
   const [creating, setCreating] = useState(false);
+  const [deletingCourseId, setDeletingCourseId] = useState(null);
 
   const parseCourses = (payload) => {
     if (Array.isArray(payload)) return payload;
@@ -68,6 +69,26 @@ export default function AdminCourses() {
       setError(err.response?.data?.message || "Failed to create course");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteCourse = async (courseId) => {
+    const ok = window.confirm("Delete this course and ALL related data (assignments, submissions, users in course, invites)? This cannot be undone.");
+    if (!ok) return;
+
+    setDeletingCourseId(courseId);
+    setError("");
+    try {
+      await api.delete(`/courses/${courseId}`);
+      const selected = localStorage.getItem("selectedCourseId");
+      if (selected && Number(selected) === Number(courseId)) {
+        localStorage.removeItem("selectedCourseId");
+      }
+      await fetchCourses();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete course");
+    } finally {
+      setDeletingCourseId(null);
     }
   };
 
@@ -136,6 +157,14 @@ export default function AdminCourses() {
                   <div className="user-actions">
                     <button className="btn btn-primary" onClick={() => openCourse(course.id)}>
                       Open Dashboard
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleDeleteCourse(course.id)}
+                      disabled={deletingCourseId === course.id}
+                      style={{ marginLeft: "8px" }}
+                    >
+                      {deletingCourseId === course.id ? "Deleting..." : "Delete Course"}
                     </button>
                   </div>
                 </div>
