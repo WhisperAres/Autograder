@@ -180,7 +180,7 @@ exports.sendInvites = async (req, res) => {
 
     res.json({
       message: allFailed && hasUnauthorizedFailure
-        ? 'Invitations failed: email provider unauthorized. Check BREVO_API_KEY, BREVO_SENDER_EMAIL and BREVO_SENDER_NAME.'
+        ? 'Invitations failed: email provider unauthorized. Check BREVO_SMTP_KEY, BREVO_SENDER_EMAIL and EMAIL_USER.'
         : 'Invitations processed',
       results: {
         successCount: results.success.length,
