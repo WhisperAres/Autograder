@@ -194,7 +194,6 @@ export default function AdminCourses() {
                       className="btn btn-danger"
                       onClick={() => handleDeleteCourse(course.id)}
                       disabled={deletingCourseId === course.id}
-                      style={{ marginLeft: "8px", marginTop: "8px" }}
                     >
                       {deletingCourseId === course.id ? "Deleting..." : "Delete Course"}
                     </button>

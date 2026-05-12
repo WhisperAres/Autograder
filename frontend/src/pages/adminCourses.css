@@ -1,21 +1,27 @@
 .course-shell {
   max-width: 980px;
-  margin: 0 auto;
-  padding: 12px 0 28px;
+  margin: 24px auto;
+  padding: 0 16px 28px;
 }
 
 .course-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.course-card h3 {
+  margin-top: 0;
+  margin-bottom: 18px;
+  color: #10b981;
 }
 
 .course-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 20px;
 }
 
 .course-list {
@@ -29,8 +35,9 @@
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 16px 18px;
   background: var(--bg-primary);
+  gap: 16px;
 }
 
 .course-item h4 {
@@ -44,9 +51,23 @@
   font-size: 0.92rem;
 }
 
+.user-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .course-card h3,
 .course-shell .form-group label {
   color: #10b981;
+}
+
+.course-shell .form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #10b981;
+  font-weight: 600;
 }
 
 .course-shell .form-group input,
