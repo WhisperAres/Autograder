@@ -77,7 +77,7 @@ The Autograder platform streamlines the process of coding assignment management 
 | **PostgreSQL** | Database (via Supabase) |
 | **JWT** | Authentication & authorization |
 | **Bcryptjs** | Password hashing |
-| **SendGrid/Nodemailer** | Email notifications |
+| **Brevo** | Email notifications |
 | **Multer** | File upload handling |
 
 ### Database & Infrastructure
@@ -132,8 +132,8 @@ The Autograder platform streamlines the process of coding assignment management 
          ┌───────────────┼───────────────┐
          │               │               │
     PostgreSQL      Email Service   File Storage
-         │            (SendGrid)        │
-    (Supabase)       (Nodemailer)   (Local/Cloud)
+         │             (Brevo)         │
+    (Supabase)                     (Local/Cloud)
 ```
 
 ### Data Flow Diagram

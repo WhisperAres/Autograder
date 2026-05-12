@@ -157,12 +157,10 @@ exports.sendInvites = async (req, res) => {
         invites.push({ email, inviteLink });
       } catch (error) {
         console.error(`Error processing invite for ${email}:`, error);
-        const sendgridErrors = error?.response?.body?.errors;
-        const firstSendgridMessage = Array.isArray(sendgridErrors) && sendgridErrors.length > 0
-          ? sendgridErrors[0]?.message
-          : null;
+        const brevoErrors = error?.response?.body?.errors || error?.response?.body?.message;
+        const errorMessage = typeof brevoErrors === 'string' ? brevoErrors : null;
         const reason =
-          firstSendgridMessage ||
+          errorMessage ||
           error.message ||
           "Unknown email provider error";
 
@@ -175,12 +173,14 @@ exports.sendInvites = async (req, res) => {
 
     const allFailed = results.success.length === 0 && results.failed.length > 0;
     const hasUnauthorizedFailure = results.failed.some((f) =>
-      String(f.reason || "").toLowerCase().includes("unauthorized")
+      String(f.reason || "").toLowerCase().includes("unauthorized") ||
+      String(f.reason || "").toLowerCase().includes("invalid") ||
+      String(f.reason || "").toLowerCase().includes("api")
     );
 
     res.json({
       message: allFailed && hasUnauthorizedFailure
-        ? 'Invitations failed: email provider unauthorized. Check SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
+        ? 'Invitations failed: email provider unauthorized. Check BREVO_API_KEY, BREVO_SENDER_EMAIL and BREVO_SENDER_NAME.'
         : 'Invitations processed',
       results: {
         successCount: results.success.length,

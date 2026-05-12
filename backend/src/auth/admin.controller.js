@@ -699,6 +699,25 @@ exports.deleteUser = async (req, res) => {
       console.warn('Warning deleting grader solutions for user', userId, e.message || e);
     }
 
+    // Delete password reset tokens for this user
+    try {
+      const PasswordResetToken = require("../models/passwordResetToken");
+      await PasswordResetToken.destroy({ where: { userId } });
+    } catch (e) {
+      console.warn('Warning deleting password reset tokens for user', userId, e.message || e);
+    }
+
+    // Delete student invites created by this user (if admin)
+    try {
+      const StudentInvite = require("../models/studentInvite");
+      await StudentInvite.destroy({ where: { createdBy: userId } });
+    } catch (e) {
+      console.warn('Warning deleting student invites for user', userId, e.message || e);
+    }
+
+    // Delete all course enrollments (CourseUser records) - IMPORTANT: must do this before deleting user
+    await CourseUser.destroy({ where: { userId } });
+
     // Finally delete the user
     await user.destroy();
 

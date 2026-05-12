@@ -1,15 +1,11 @@
-const sgMail = require('@sendgrid/mail');
+const brevo = require('brevo');
 require('dotenv').config();
-
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
 
 const sendEmail = async (mailOptions) => {
   try {
     const shouldLogOnly =
       String(process.env.EMAIL_LOG_ONLY || "").toLowerCase() === "true" ||
-      (!process.env.SENDGRID_API_KEY && process.env.NODE_ENV !== "production");
+      (!process.env.BREVO_API_KEY && process.env.NODE_ENV !== "production");
 
     if (shouldLogOnly) {
       console.log('Email would be sent in production:');
@@ -19,17 +15,26 @@ const sendEmail = async (mailOptions) => {
       return { messageId: 'dev-mode' };
     }
 
-    const msg = {
-      to: mailOptions.to,
-      from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
-      subject: mailOptions.subject,
-      html: mailOptions.html,
-      text: mailOptions.text,
-    };
+    // Initialize Brevo API client
+    const apiInstance = new brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(brevo.ApiClient.instance.authentications['api-key'], process.env.BREVO_API_KEY);
 
-    return await sgMail.send(msg);
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = mailOptions.subject;
+    sendSmtpEmail.htmlContent = mailOptions.html;
+    sendSmtpEmail.sender = {
+      name: process.env.BREVO_SENDER_NAME || 'Autograder',
+      email: process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER,
+    };
+    sendSmtpEmail.to = [{ email: mailOptions.to }];
+
+    if (mailOptions.text) {
+      sendSmtpEmail.textContent = mailOptions.text;
+    }
+
+    return await apiInstance.sendTransacEmail(sendSmtpEmail);
   } catch (error) {
-    console.error('SendGrid error:', error);
+    console.error('Brevo error:', error);
     throw error;
   }
 };
