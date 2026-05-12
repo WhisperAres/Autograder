@@ -175,7 +175,10 @@ exports.sendInvites = async (req, res) => {
     const hasUnauthorizedFailure = results.failed.some((f) =>
       String(f.reason || "").toLowerCase().includes("unauthorized") ||
       String(f.reason || "").toLowerCase().includes("invalid") ||
-      String(f.reason || "").toLowerCase().includes("api")
+      String(f.reason || "").toLowerCase().includes("api") ||
+      String(f.reason || "").toLowerCase().includes("authentication failed") ||
+      String(f.reason || "").toLowerCase().includes("eauth") ||
+      String(f.reason || "").toLowerCase().includes("535")
     );
 
     res.json({

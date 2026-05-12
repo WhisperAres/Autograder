@@ -707,12 +707,15 @@ exports.deleteUser = async (req, res) => {
       console.warn('Warning deleting password reset tokens for user', userId, e.message || e);
     }
 
-    // Delete student invites (no specific user reference - just delete all)
+    // Delete student invites associated with this user's email
     try {
       const StudentInvite = require("../models/studentInvite");
-      // Note: StudentInvite model doesn't have createdBy column
-      // Just log that invites for this email should be cleaned up separately if needed
-      console.log('Note: Student invites for user', userId, 'may need cleanup separately');
+      const deletedInviteCount = await StudentInvite.destroy({
+        where: { email: user.email }
+      });
+      if (deletedInviteCount > 0) {
+        console.log(`Deleted ${deletedInviteCount} student invite(s) for user ${userId} (${user.email})`);
+      }
     } catch (e) {
       console.warn('Warning with student invites cleanup for user', userId, e.message || e);
     }
