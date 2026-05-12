@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { logout } from "../services/auth";
+import api from "../services/auth";
 import "./admin.css";
 import "./adminCourses.css";
 import "./dashboard.css";
@@ -14,7 +14,6 @@ export default function AdminCourses() {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved, 10) : null;
   });
-  const [currentUser, setCurrentUser] = useState(null);
   const [newCourse, setNewCourse] = useState({ name: "", code: "", description: "" });
   const [creating, setCreating] = useState(false);
   const [deletingCourseId, setDeletingCourseId] = useState(null);
@@ -43,19 +42,8 @@ export default function AdminCourses() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", "dark");
 
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch {
-        setCurrentUser(null);
-      }
-    }
-
     fetchCourses();
   }, []);
-
-  const selectedCourse = courses.find((course) => course.id === selectedCourseId);
 
   const openCourse = (courseId) => {
     localStorage.setItem("selectedCourseId", String(courseId));
@@ -113,19 +101,6 @@ export default function AdminCourses() {
 
   return (
     <div className="admin-dashboard">
-      <nav className="navbar">
-        <div className="navbar-content">
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <h1 className="brand">Autograder</h1>
-            <button className="btn-course-list" onClick={() => navigate("/admin/courses")}>Course List</button>
-          </div>
-          <div className="navbar-actions">
-            <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
-            <span className="user-email">{currentUser?.email || "User"}</span>
-            <button className="btn-logout" onClick={logout}>Logout</button>
-          </div>
-        </div>
-      </nav>
       <div className="course-shell">
         {error && <div className="alert alert-error">{error}</div>}
 

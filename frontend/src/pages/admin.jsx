@@ -779,21 +779,24 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-dashboard">
-      <div className="dashboard-header">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "10px" }}>
+      <nav className="navbar">
+        <div className="navbar-content">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <h1 style={{ margin: 0 }}>Autograder</h1>
+            <h1 className="brand">Autograder</h1>
             <button className="btn-course-list" onClick={() => navigate("/admin/courses")}>Course List</button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <p style={{ margin: 0, color: "var(--primary)", fontWeight: 600 }}>
-              Course: {selectedCourse?.name || "Not selected"}
-            </p>
+          <div className="navbar-actions">
+            <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
+            <span className="user-email">{user?.email || "User"}</span>
             <button className="btn-logout" onClick={logout}>Logout</button>
           </div>
         </div>
-        <h1>Admin Dashboard</h1>
-        
+      </nav>
+
+      <div style={{ marginLeft: "2rem", marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+        <h2>Admin Dashboard</h2>
+      </div>
+
         {/* Course Selector */}
         {courses.length > 0 && (
           <div className="course-selector" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -872,7 +875,6 @@ export default function AdminDashboard() {
         </form>
         
         <p>Manage assignments, users, grades, and reports</p>
-      </div>
 
       {error && <div className="error-message">{error}</div>}
 

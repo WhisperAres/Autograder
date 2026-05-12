@@ -53,9 +53,15 @@
 
 .user-actions {
   display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
   gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.course-item .user-actions .btn {
+  white-space: nowrap;
 }
 
 .course-card h3,
@@ -95,5 +101,10 @@
     align-items: flex-start;
     gap: 10px;
   }
-}
 
+  .course-item .user-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

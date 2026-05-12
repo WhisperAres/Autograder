@@ -499,18 +499,19 @@ export default function GraderDashboard() {
 
   return (
     <div className="grader-dashboard">
-      <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <h1 className="brand" style={{ margin: 0 }}>Autograder</h1>
-          <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Course: {selectedCourse?.name || "Not selected"}
+      <nav className="navbar">
+        <div className="navbar-content">
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h1 className="brand">Autograder</h1>
+            <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
           </div>
-          <button className="btn-logout" onClick={handleLogout}>Logout</button>
+          <div className="navbar-actions">
+            <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
+            <span className="user-email">{currentUser?.email || "User"}</span>
+            <button className="btn-logout" onClick={handleLogout}>Logout</button>
+          </div>
         </div>
-      </div>
+      </nav>
       <button className="btn-back" style={{ marginTop: '20px', marginLeft: '20px' }} onClick={handleBackToAssignments}>← Back to Assignments</button>
 
       <div className="grader-workspace">
