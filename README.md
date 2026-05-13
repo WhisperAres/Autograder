@@ -449,6 +449,111 @@ If issues arise, check logs for DB connection errors or missing env vars.
 
 ---
 
+## Environment Variables
+
+### Required Environment Variables
+
+Create a `backend/.env` file with the following variables:
+
+```env
+# ========== Database Configuration ==========
+# PostgreSQL connection string (get from Supabase dashboard)
+DATABASE_URL=postgresql://postgres.xxxxx:your_password@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+
+# ========== JWT Configuration ==========
+# Generate a strong random secret using: openssl rand -hex 32
+JWT_SECRET=your_strong_random_jwt_secret_here
+
+# Generate another strong random secret for refresh tokens
+REFRESH_SECRET=your_strong_random_refresh_secret_here
+
+# ========== Brevo Email Configuration ==========
+# Get your API key from Brevo dashboard (https://app.brevo.com)
+BREVO_API_KEY=your_brevo_api_key_here
+
+# Verified sender email address (must be verified in Brevo)
+BREVO_SENDER_EMAIL=noreply@yourdomain.com
+
+# Display name for emails
+BREVO_SENDER_NAME=Autograder
+
+# ========== Application Configuration ==========
+# Server port
+PORT=5000
+
+# Environment mode (development or production)
+NODE_ENV=development
+```
+
+### Environment Variable Details
+
+| Variables |
+| `DATABASE_URL` |
+| `JWT_SECRET` |
+| `REFRESH_SECRET` | 
+| `BREVO_API_KEY` | 
+| `BREVO_SENDER_EMAIL` | 
+| `BREVO_SENDER_NAME` | 
+| `NODE_ENV`: |
+
+### How to Get Each Variable
+
+#### 1. DATABASE_URL (Supabase)
+1. Log in to Supabase (https://supabase.com)
+2. Select your project
+3. Go to **Settings** → **Database**
+4. Copy the connection string from "Connection pooling" or "Direct connection"
+5. The format is: `postgresql://user:password@host:port/database`
+
+#### 2. JWT_SECRET & REFRESH_SECRET
+Generate strong random strings in your terminal:
+```bash
+# On macOS/Linux:
+openssl rand -hex 32
+
+# On Windows (PowerShell):
+[System.Convert]::ToBase64String([System.Security.Cryptography.RNGCryptoServiceProvider]::new().GetBytes(32))
+```
+Copy the output and paste into `.env` file.
+
+#### 3. BREVO_API_KEY
+1. Log in to Brevo (https://app.brevo.com)
+2. Go to **SMTP & API** or **Settings** → **SMTP & API**
+3. Click on the **API** tab
+4. Generate a new API key or copy your existing one
+5. Paste it into `BREVO_API_KEY`
+
+#### 4. BREVO_SENDER_EMAIL
+1. In Brevo dashboard, go to **Senders** or **Sender Identity**
+2. Verify your sender email address (Brevo sends a confirmation link)
+3. Use the verified email address for `BREVO_SENDER_EMAIL`
+
+#### 5. BREVO_SENDER_NAME
+Choose any display name you want for emails. Example: "Autograder", "Course Platform", etc.
+
+#### 6. NODE_ENV
+- `NODE_ENV`: Use `development` for local testing, `production` for deployment
+
+### Deployment (Render) Environment Setup
+
+If deploying on Render:
+
+1. Go to your Render service
+2. Click **Settings** → **Environment**
+3. Add each variable from `.env` file:
+   - `DATABASE_URL`: Your Supabase connection string
+   - `JWT_SECRET`: Your generated secret
+   - `REFRESH_SECRET`: Your generated secret
+   - `BREVO_API_KEY`: Your Brevo API key
+   - `BREVO_SENDER_EMAIL`: Your verified sender email
+   - `BREVO_SENDER_NAME`: Display name
+   - `NODE_ENV`: Set to `production`
+   - `PORT`: Set to `5000`
+
+4. Click **Save** and your app will redeploy with new variables
+
+---
+
 ## Database Setup
 
 ### Database Schema Overview
