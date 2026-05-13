@@ -281,7 +281,7 @@ function App() {
           element={
             isAuthenticated && userRole === 'admin' ? (
               <div className="with-navbar">
-                <nav className="navbar">
+                <nav className="navbar" style={{ padding: "15px" }}>
                   <div className="navbar-content">
                     <h2 className="navbar-title">Autograder - Admin</h2>
                     <div className="navbar-user">
@@ -302,18 +302,7 @@ function App() {
           path="/admin/dashboard"
           element={
             isAuthenticated && userRole === 'admin' ? (
-              <div className="with-navbar">
-                <nav className="navbar">
-                  <div className="navbar-content">
-                    <h2 className="navbar-title">Autograder - Admin</h2>
-                    <div className="navbar-user">
-                      <span>{user?.name}</span>
-                      <button className="logout-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                  </div>
-                </nav>
                 <AdminDashboard />
-              </div>
             ) : (
               <Navigate to="/" replace={true} />
             )

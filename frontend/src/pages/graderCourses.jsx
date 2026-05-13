@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/auth";
+import api, { logout } from "../services/auth";
 import "./admin.css";
 import "./adminCourses.css";
 import "./dashboard.css";
@@ -14,6 +14,21 @@ export default function GraderCourses() {
     const saved = localStorage.getItem("selectedCourseId");
     return saved ? parseInt(saved, 10) : null;
   });
+
+    const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", "dark");
@@ -38,6 +53,8 @@ export default function GraderCourses() {
     fetchCourses();
   }, []);
 
+const selectedCourse = courses.find((course) => course.id === selectedCourseId);
+
   const openCourse = (courseId) => {
     localStorage.setItem("selectedCourseId", String(courseId));
     setSelectedCourseId(courseId);
@@ -46,6 +63,19 @@ export default function GraderCourses() {
 
   return (
     <div className="admin-dashboard">
+      <nav className="navbar" style={{ paddingBottom: "15px" }}>
+              <div className="navbar-content">
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <h1 className="brand">Autograder - Grader</h1>
+                  <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
+                </div>
+                <div className="navbar-actions">
+                  <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
+                  <span className="user-email">{currentUser?.email || "User"}</span>
+                  <button className="btn-logout" onClick={logout}>Logout</button>
+                </div>
+              </div>
+            </nav>
       <div className="course-shell">
       <div className="course-card">
         <div className="section-header">

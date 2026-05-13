@@ -101,6 +101,7 @@
 .main-tabs {
   display: flex;
   gap: 12px;
+  margin-top: 30px;
   margin-bottom: 30px;
   justify-content: center;
   flex-wrap: wrap;

@@ -467,10 +467,10 @@ export default function GraderDashboard() {
   if (!selectedAssignment) {
     return (
       <div className="grader-dashboard">
-        <nav className="navbar">
+        <nav className="navbar" style={{ padding: "15px" }}>
           <div className="navbar-content">
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <h1 className="brand">Autograder</h1>
+              <h1 className="brand">Autograder - Grader</h1>
               <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
             </div>
             <div className="navbar-actions">
@@ -509,7 +509,7 @@ export default function GraderDashboard() {
       <nav className="navbar">
         <div className="navbar-content">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <h1 className="brand">Autograder</h1>
+            <h1 className="brand">Autograder - Grader</h1>
             <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
           </div>
           <div className="navbar-actions">

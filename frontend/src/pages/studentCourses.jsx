@@ -58,10 +58,10 @@ export default function StudentCourses() {
 
   return (
     <div className="admin-dashboard">
-      <nav className="navbar">
+      <nav className="navbar" style={{ paddingBottom: "15px" }}>
         <div className="navbar-content">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <h1 className="brand">Autograder</h1>
+            <h1 className="brand">Autograder - Student</h1>
             <button className="btn-course-list" onClick={() => navigate("/student/courses")}>Course List</button>
           </div>
           <div className="navbar-actions">

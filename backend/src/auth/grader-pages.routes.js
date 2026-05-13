@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+const verify = require("../middlewares/verify.middleware");
 const checkRole = require("../middlewares/role.middleware");
 const graderController = require("./grader.controller");
 const adminController = require("./admin.controller");
@@ -8,7 +9,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // All grader routes are protected and require grader role
-router.use(checkRole("grader"));
+router.use(verify, checkRole("grader"));
 
 // ==================== GRADER DASHBOARD PAGE ====================
 // Main assignments list

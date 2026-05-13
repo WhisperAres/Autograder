@@ -111,7 +111,7 @@ body {
 .navbar {
   background-color: var(--bg-secondary);
   border-bottom: 2px solid var(--primary);
-  padding: 1rem 2rem;
+  padding: 0;
   box-shadow: var(--shadow);
 }
 
@@ -125,10 +125,11 @@ body {
 }
 
 .brand {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
+margin: 0;
+    font-size: 1.3rem;
+    color: #818cf8;
+    font-weight: 600;
+    letter-spacing: .5px;
 }
 
 .navbar-actions {
@@ -393,7 +394,8 @@ body {
 }
 
 [data-theme="dark"] .brand {
-  color: #e9f4ff;
+  color: #818cf8;
+  font-size: 1.3rem;
 }
 
 [data-theme="dark"] .btn-upload-assignment {
@@ -1990,7 +1992,11 @@ body {
   }
 
   .brand {
-    font-size: 1.25rem;
+    margin: 0;
+    font-size: 1.3rem;
+    color: #818cf8;
+    font-weight: 600;
+    letter-spacing: .5px;
   }
 
   .subtitle {

@@ -789,10 +789,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-dashboard">
-      <nav className="navbar">
+      <nav className="navbar" style={{ paddingBottom: "15px" }}>
         <div className="navbar-content">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <h1 className="brand">Autograder</h1>
+            <h1 className="brand">Autograder - Admin</h1>
             <button className="btn-course-list" onClick={() => navigate("/admin/courses")}>Course List</button>
           </div>
           <div className="navbar-actions">
@@ -802,49 +802,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </nav>
-
-      <div style={{ marginLeft: "2rem", marginTop: "1.5rem", marginBottom: "1.5rem" }}>
-        <h2>Admin Dashboard</h2>
-      </div>
-
-        {/* Course Selector */}
-        {courses.length > 0 && (
-          <div className="course-selector" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label htmlFor="course-select" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Course:</label>
-            <select 
-              id="course-select"
-              value={selectedCourseId || ''}
-              onChange={(e) => {
-                const courseId = parseInt(e.target.value);
-                setSelectedCourseId(courseId);
-                localStorage.setItem("selectedCourseId", courseId.toString());
-              }}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '0.25rem',
-                border: '1px solid var(--border)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                fontSize: '1rem'
-              }}
-            >
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>
-                  {course.name} {course.code ? `(${course.code})` : ''}
-                </option>
-              ))}
-            </select>
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => document.getElementById("createCourseForm").style.display = 
-                document.getElementById("createCourseForm").style.display === "none" ? "block" : "none"}
-              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-            >
-              + New Course
-            </button>
-          </div>
-        )}
         
         {/* Create Course Form */}
         <form id="createCourseForm" onSubmit={handleCreateCourse} className="form-panel" style={{ display: "none", marginBottom: "1rem" }}>
@@ -883,8 +840,6 @@ export default function AdminDashboard() {
             <button type="button" className="btn btn-secondary" onClick={() => document.getElementById("createCourseForm").style.display = "none"}>Cancel</button>
           </div>
         </form>
-        
-        <p>Manage assignments, users, grades, and reports</p>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -1708,7 +1663,7 @@ export default function AdminDashboard() {
             <h3>Add New User</h3>
             <div className="form-row">
               <div className="form-group">
-                <label>Email *</label>
+                <label style={{ color: "var(--text)" }}>Email *</label>
                 <input
                   type="email"
                   value={newUser.email}
@@ -1717,7 +1672,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="form-group">
-                <label>Name *</label>
+                <label style={{ color: "var(--text)" }}>Name *</label>
                 <input
                   type="text"
                   value={newUser.name}
@@ -1726,7 +1681,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="form-group">
-                <label>Role</label>
+                <label style={{ color: "var(--text)" }}>Role</label>
                 <select
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
@@ -1737,7 +1692,7 @@ export default function AdminDashboard() {
                 </select>
               </div>
             </div>
-            <button type="submit" className="btn btn-success">Create User</button>
+            <button type="submit" className="btn btn-success" style={{ marginTop: "20px" }}>Create User</button>
           </form>
 
           {/* Users Grid by Role */}
