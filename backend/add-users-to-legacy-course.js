@@ -85,16 +85,33 @@ const run = async () => {
         where: { courseId: legacyCourse.id, userId: user.id }
       });
 
+      // Determine the role based on the user's role
+      // Preserve their original role from the User table
+      const roleMapping = {
+        'admin': 'admin',
+        'grader': 'grader',
+        'student': 'student',
+        'ta': 'grader' // Map TA to grader
+      };
+      const userRole = roleMapping[user.role] || 'student';
+
       if (existing) {
-        console.log(`⏭️  User ${user.id} (${user.email}) already in legacy course as ${existing.role}`);
-        skippedCount++;
+        // If role doesn't match, update it
+        if (existing.role !== userRole) {
+          await existing.update({ role: userRole });
+          console.log(`✏️  Updated user ${user.id} (${user.email}) role from ${existing.role} to ${userRole}`);
+          addedCount++;
+        } else {
+          console.log(`⏭️  User ${user.id} (${user.email}) already in legacy course as ${existing.role}`);
+          skippedCount++;
+        }
       } else {
         await CourseUser.create({
           courseId: legacyCourse.id,
           userId: user.id,
-          role: 'student'
+          role: userRole
         });
-        console.log(`✨ Added user ${user.id} (${user.email}) as student to legacy course`);
+        console.log(`✨ Added user ${user.id} (${user.email}) as ${userRole} to legacy course`);
         addedCount++;
       }
     }
@@ -114,11 +131,15 @@ const run = async () => {
     const studentCount = await CourseUser.count({
       where: { courseId: legacyCourse.id, role: 'student' }
     });
+    const graderCount = await CourseUser.count({
+      where: { courseId: legacyCourse.id, role: 'grader' }
+    });
     const adminCount = await CourseUser.count({
       where: { courseId: legacyCourse.id, role: 'admin' }
     });
 
     console.log(`   - Admin: ${adminCount}`);
+    console.log(`   - Graders: ${graderCount}`);
     console.log(`   - Students: ${studentCount}`);
 
     console.log('\n✅ All done! Users can now access legacy course.');
