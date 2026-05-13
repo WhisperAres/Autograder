@@ -67,10 +67,8 @@ const selectedCourse = courses.find((course) => course.id === selectedCourseId);
               <div className="navbar-content">
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <h1 className="brand">Autograder - Grader</h1>
-                  <button className="btn-course-list" onClick={() => navigate("/grader/courses")}>Course List</button>
                 </div>
                 <div className="navbar-actions">
-                  <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
                   <span className="user-email">{currentUser?.email || "User"}</span>
                   <button className="btn-logout" onClick={logout}>Logout</button>
                 </div>

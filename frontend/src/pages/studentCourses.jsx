@@ -62,10 +62,8 @@ export default function StudentCourses() {
         <div className="navbar-content">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <h1 className="brand">Autograder - Student</h1>
-            <button className="btn-course-list" onClick={() => navigate("/student/courses")}>Course List</button>
           </div>
           <div className="navbar-actions">
-            <span className="user-email">Course: {selectedCourse?.name || "Not selected"}</span>
             <span className="user-email">{currentUser?.email || "User"}</span>
             <button className="btn-logout" onClick={logout}>Logout</button>
           </div>
