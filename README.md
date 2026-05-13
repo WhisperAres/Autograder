@@ -502,8 +502,8 @@ NODE_ENV=development
 1. Log in to Supabase (https://supabase.com)
 2. Select your project
 3. Go to **Settings** → **Database**
-4. Copy the connection string from "Connection pooling" or "Direct connection"
-5. The format is: `postgresql://user:password@host:port/database`
+4. Copy the connection string from "Transaction Pooler"
+5. The format is: `postgresql://postgres.dnubltroqduofqqojkod:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres`
 
 #### 2. JWT_SECRET & REFRESH_SECRET
 Generate strong random strings in your terminal:
