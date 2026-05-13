@@ -548,7 +548,6 @@ If deploying on Render:
    - `BREVO_SENDER_EMAIL`: Your verified sender email
    - `BREVO_SENDER_NAME`: Display name
    - `NODE_ENV`: Set to `production`
-   - `PORT`: Set to `5000`
 
 4. Click **Save** and your app will redeploy with new variables
 
