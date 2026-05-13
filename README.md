@@ -430,7 +430,17 @@ This app requires a PostgreSQL database and environment variables to run. Follow
      - For `DATABASE_URL`: Use your DB's connection string (e.g., from Supabase or local Postgres).
      - Generate a secure `JWT_SECRET` (e.g., run `openssl rand -hex 32` in terminal).
      - Set `NODE_ENV` to `production` for deployment.
-   - If using Docker, pass env vars via `-e` flags or a mounted `.env` file.
+     
+   - **For Render deployment**, add these environment variables in Render's dashboard (Settings → Environment):
+     - `DATABASE_URL`: Your PostgreSQL connection string
+     - `JWT_SECRET`: A strong random secret (generate with `openssl rand -hex 32`)
+     - `BREVO_API_KEY`: Your Brevo API key (from Brevo dashboard)
+     - `BREVO_SENDER_EMAIL`: Your verified sender email in Brevo
+     - `BREVO_SENDER_NAME`: Display name for emails (e.g., "Autograder")
+     - `NODE_ENV`: Set to `production`
+     - `REFRESH_SECRET`: Another strong random secret for refresh tokens
+     - `EMAIL_PASSWORD`: Password for email service
+   - If using Docker locally, pass env vars via `-e` flags or a mounted `.env` file.
 
 5. **Build and run**:
    - For development: `npm run dev` (backend only) or `npm run dev --prefix frontend`.
