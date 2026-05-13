@@ -2,6 +2,7 @@ const Assignment = require("../models/assignment");
 const TestCase = require("../models/testCase");
 const CourseUser = require("../models/courseUser");
 const sequelize = require("../config/database");
+const { Op } = require("sequelize");
 
 const parseCourseId = (value) => {
   const parsed = Number.parseInt(value, 10);
@@ -28,7 +29,7 @@ exports.getAllAssignments = async (req, res) => {
         }
         where.courseId = requestedCourseId;
       } else if (enrolledCourseIds.length > 0) {
-        where.courseId = enrolledCourseIds;
+        where.courseId = { [Op.in]: enrolledCourseIds };
       }
     }
 

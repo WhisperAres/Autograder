@@ -6,6 +6,7 @@ const TestResult = require("../models/testResult");
 const GraderSolution = require("../models/graderSolution");
 const GraderSolutionFile = require("../models/graderSolutionFile");
 const CourseUser = require("../models/courseUser");
+const { Op } = require("sequelize");
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -462,7 +463,7 @@ exports.getAssignments = async (req, res) => {
       }
       where.courseId = requestedCourseId;
     } else if (allowedCourseIds.length > 0) {
-      where.courseId = allowedCourseIds;
+      where.courseId = { [Op.in]: allowedCourseIds };
     } else {
       return res.json([]);
     }
@@ -488,7 +489,7 @@ exports.getAllSubmissions = async (req, res) => {
       const scopedAssignments = await Assignment.findAll({ where: { courseId: requestedCourseId }, attributes: ["id"] });
       assignmentIds = scopedAssignments.map((a) => a.id);
     } else {
-      const scopedAssignments = await Assignment.findAll({ where: { courseId: allowedCourseIds }, attributes: ["id"] });
+      const scopedAssignments = await Assignment.findAll({ where: { courseId: { [Op.in]: allowedCourseIds } }, attributes: ["id"] });
       assignmentIds = scopedAssignments.map((a) => a.id);
     }
 
@@ -497,7 +498,7 @@ exports.getAllSubmissions = async (req, res) => {
     }
 
     const submissions = await Submission.findAll({
-      where: { assignmentId: assignmentIds },
+      where: { assignmentId: { [Op.in]: assignmentIds } },
       include: [
         { model: Assignment, as: "assignment" },
         { model: CodeFile, as: "codeFiles" }
