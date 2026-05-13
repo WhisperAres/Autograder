@@ -1,35 +1,7 @@
 # Brevo Email Provider Setup Guide
 
 ## Overview
-The Autograder application has been migrated from SendGrid to **Brevo** (formerly Sendinblue) for email notifications.
-
----
-
-## Code Changes Made
-
-### 1. **Package Dependencies**
-- **Removed**: `@sendgrid/mail` (v8.1.3)
-- **No Additional Packages Needed**: Using Brevo's SMTP with existing Nodemailer dependency
-
-**Action Required**: Run `npm install` in the `/backend` directory to clean up and update dependencies.
-
-```bash
-cd backend
-npm install
-```
-
-### 2. **Email Service Implementation** (`backend/src/utils/email.js`)
-- Replaced SendGrid SDK with Brevo SMTP relay using Nodemailer
-- Configured Nodemailer to connect to Brevo's SMTP server (`smtp-relay.brevo.com` on port 587)
-- Uses SMTP authentication with Brevo credentials
-
-### 3. **Error Handling** (`backend/src/auth/invite.controller.js`)
-- Updated error message to reference new environment variables
-- Adjusted error parsing for Nodemailer/SMTP responses
-
-### 4. **Documentation** (`README.md`)
-- Updated technology stack to list Brevo instead of SendGrid
-- Updated architecture diagram showing Brevo as email service
+This guide explains how to configure Brevo for Autograder email delivery using the Brevo API.
 
 ---
 
@@ -37,74 +9,83 @@ npm install
 
 Update your `.env` file with the following variables:
 
-### **Required Variables** (for production)
-
+### Required Variables
 ```env
-# Brevo SMTP Configuration
-BREVO_SENDER_EMAIL=your-verified-sender@domain.com
-BREVO_SMTP_KEY=your_brevo_smtp_password_here
-EMAIL_USER=your-verified-sender@domain.com
+# Brevo API configuration
+BREVO_API_KEY=your_brevo_api_key_here
+BREVO_SENDER_EMAIL=your_verified_sender@domain.com
+BREVO_SENDER_NAME=Autograder
+
+# App configuration
+NODE_ENV=production
 ```
 
-### **Optional Variables**
-
+### Optional Variables
 ```env
-# Development/Testing
-EMAIL_LOG_ONLY=true              # Set to 'true' to log emails instead of sending (dev mode)
-NODE_ENV=development             # Set to 'production' to enable actual email sending
+EMAIL_LOG_ONLY=true   # Set to 'true' in development to log emails instead of sending
 ```
 
 ---
 
 ## Steps to Set Up Brevo
 
-### 1. **Create a Brevo Account**
-- Visit [https://www.brevo.com](https://www.brevo.com)
+### 1. Create a Brevo Account
+- Visit https://www.brevo.com
 - Sign up for a free account
-- Verify your email address
+- Verify your account email address
 
-### 2. **Generate SMTP Credentials**
-- Log in to Brevo Dashboard
-- Navigate to **Settings → SMTP & API**
-- In the **SMTP** section, you'll see:
-  - **SMTP Server**: `smtp-relay.brevo.com`
-  - **SMTP Port**: `587`
-  - **SMTP Username**: Your sender email address
-  - **SMTP Password**: Copy this password (this is your `BREVO_SMTP_KEY`)
-- Add the SMTP password to your `.env` file as `BREVO_SMTP_KEY`
+### 2. Generate a Brevo API Key
+- Log in to the Brevo Dashboard
+- Open **SMTP & API** or **API & SMTP** settings
+- Create a new API key
+- Copy the API key into `BREVO_API_KEY` in your `.env` file
 
-### 3. **Verify Sender Email**
-- Go to **Senders** section in Brevo Dashboard
-- Add your sender email address (the one you want to send from)
-- Verify ownership by clicking the verification link in the email Brevo sends
-- Add this verified email to `.env` as `BREVO_SENDER_EMAIL` and `EMAIL_USER`
+### 3. Verify a Sender Email
+- In the Brevo Dashboard, navigate to **Senders** or **Sender Identity**
+- Add the email address you want to send from
+- Verify the email by following the confirmation link sent by Brevo
+- Set the verified address in `BREVO_SENDER_EMAIL`
 
-### 4. **Monitor Email Activity (Optional)**
-- Once configured, you can track email delivery in Brevo Dashboard under **Reports**
-- View bounce rates, opens, clicks, etc.
+### 4. Configure Your Backend Environment
+- Copy `backend/.env.example` to `backend/.env`
+- Fill in your Brevo values:
+  - `BREVO_API_KEY`
+  - `BREVO_SENDER_EMAIL`
+  - `BREVO_SENDER_NAME`
+- Set `NODE_ENV=production` for real sending
+
+### 5. Restart the Backend
+- Restart your backend server so environment variables are loaded correctly
+- Example:
+  ```bash
+  cd backend
+  npm start
+  ```
 
 ---
 
 ## Testing Email Functionality
 
-### Development Mode (No SMTP Key)
+### Development Mode
 ```env
 EMAIL_LOG_ONLY=true
+NODE_ENV=development
 ```
-Emails will be logged to console instead of sent.
+In development mode, email content is logged to the console instead of being sent.
 
-### Production Mode (With SMTP Key)
+### Production Mode
 ```env
+EMAIL_LOG_ONLY=false
 NODE_ENV=production
+BREVO_API_KEY=your_brevo_api_key_here
 BREVO_SENDER_EMAIL=verified-email@domain.com
-BREVO_SMTP_KEY=your_actual_smtp_key
-EMAIL_USER=verified-email@domain.com
+BREVO_SENDER_NAME=Autograder
 ```
-Emails will be sent through Brevo SMTP relay.
+Emails are sent through the Brevo API.
 
 ### Test Endpoint
+Use the invite endpoint to verify email sending:
 ```bash
-# To test student invite functionality
 POST /api/admin/invite-students
 Body: {
   "emails": ["test@example.com"],
@@ -116,62 +97,44 @@ Body: {
 
 ## Important Notes
 
-1. **Free Plan Limits**: Brevo offers 300 emails/day on the free plan
-2. **Sender Verification**: Only verified senders can send emails
-3. **SMTP Port**: Uses port 587 (TLS, not SSL)
-4. **Error Messages**: If authentication fails, check:
-   - `BREVO_SMTP_KEY` is correct (copy the full SMTP password from Brevo, NOT the API key)
-   - `BREVO_SENDER_EMAIL` is verified in Brevo dashboard
-   - `EMAIL_USER` matches the sender email
-   - Network connectivity to Brevo SMTP server
+- `BREVO_API_KEY` is required for Brevo API email sending.
+- `BREVO_SENDER_EMAIL` must be a verified sender in Brevo.
+- `BREVO_SENDER_NAME` is optional and used as the display sender name.
+- For production email delivery, set `NODE_ENV=production`.
 
 ---
 
 ## Troubleshooting
 
-### "Email provider unauthorized" Error
-- Verify `BREVO_SMTP_KEY` in `.env` (make sure you copied the SMTP password, not API key)
-- Check if sender email is verified in Brevo dashboard
-- Ensure environment variables are loaded correctly
+### Missing or Invalid API Key
+- Confirm `BREVO_API_KEY` is set in `backend/.env`
+- Verify the key is copied exactly, with no extra spaces
+- If the key is invalid, create a new one in Brevo
 
-### "Invalid login credentials" or "Authentication failed"
-- SMTP password may be incorrect - copy it again from Brevo dashboard
-- Verify that SMTP is enabled in your Brevo account settings
-- Double-check that you're using BREVO_SENDER_EMAIL as the username
+### Unverified Sender Email
+- Make sure `BREVO_SENDER_EMAIL` is verified in Brevo
+- Resend verification from the Brevo Sender settings if needed
 
-### Emails Not Sending (Dev Mode)
-- Check if `EMAIL_LOG_ONLY=true` - if so, emails are logged, not sent
-- Set `NODE_ENV=production` for actual sending
-
-### Connection Timeout
-- Ensure you're using port 587 (already configured in code)
-- Check firewall allows outgoing connections on port 587
-- Verify SMTP server address is `smtp-relay.brevo.com`
+### Emails Not Sending
+- Ensure `NODE_ENV=production` and `EMAIL_LOG_ONLY` is not `true`
+- Restart the backend after changing `.env`
+- Check backend logs for Brevo API errors
 
 ---
 
 ## Quick Reference - Environment Variables
 
-| Variable | Source | Description |
-|----------|--------|-------------|
-| `BREVO_SENDER_EMAIL` | Brevo Senders | Verified sender email address |
-| `BREVO_SMTP_KEY` | Brevo SMTP & API Settings | SMTP password (NOT API key) |
-| `EMAIL_USER` | Same as BREVO_SENDER_EMAIL | For backward compatibility |
-| `EMAIL_LOG_ONLY` | Custom | Set to 'true' for dev mode |
-| `NODE_ENV` | Custom | Set to 'production' to enable sending |
+| Variable | Description |
+|----------|-------------|
+| `BREVO_API_KEY` | Brevo API key used for sending email via the Brevo API |
+| `BREVO_SENDER_EMAIL` | Verified sender email address |
+| `BREVO_SENDER_NAME` | Optional sender display name |
+| `EMAIL_LOG_ONLY` | If `true`, logs emails instead of sending them |
+| `NODE_ENV` | Set to `production` to enable actual email delivery |
 
 ---
 
-## Rollback to SendGrid (If Needed)
+## Additional Resources
 
-If you need to revert:
-1. Restore the original SendGrid package in `package.json`
-2. Restore original `email.js` implementation
-3. Update environment variables back to `SENDGRID_API_KEY` and `SENDGRID_FROM_EMAIL`
-
----
-
-## Questions or Issues?
 - Brevo Support: https://help.brevo.com
-- Brevo SMTP Guide: https://help.brevo.com/hc/en-us/articles/209467485-Configure-SMTP
 - Brevo API Docs: https://developers.brevo.com/docs
