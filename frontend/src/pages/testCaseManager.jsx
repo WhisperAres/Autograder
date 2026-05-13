@@ -4,6 +4,29 @@ import api from "../services/auth"; // Updated import
 import "./testCaseManager.css";
 
 export default function TestCaseManager({ assignment, onBack }) {
+  // Helper function to get user role from localStorage
+  const getUserRole = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (!userStr) return 'admin';
+      const user = JSON.parse(userStr);
+      const role = user.role || 'admin';
+      // Normalize 'ta' or 'TA' to 'grader'
+      return (role === 'ta' || role === 'TA') ? 'grader' : role;
+    } catch (err) {
+      return 'admin';
+    }
+  };
+
+  // Helper function to get the correct API path based on user role
+  const getApiPath = () => {
+    const userRole = getUserRole();
+    if (userRole === 'grader') {
+      return '/grader/page/manage-test-cases';
+    }
+    return '/admin/page/test-cases-management';
+  };
+
   const [testCases, setTestCases] = useState([]);
   const [selectedTestCase, setSelectedTestCase] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +74,12 @@ export default function TestCaseManager({ assignment, onBack }) {
     setLoading(true);
     try {
       // Using 'api' service instead of 'fetch'
-      const response = await api.get(`/admin/page/test-cases-management/${assignment.id}`);
+      const apiPath = getApiPath();
+      const userRole = getUserRole();
+      const endpoint = userRole === 'grader' 
+        ? `${apiPath}/${assignment.id}/list`
+        : `${apiPath}/${assignment.id}`;
+      const response = await api.get(endpoint);
       const data = response.data;
       
       // Ensure marks are converted to numbers
@@ -90,12 +118,13 @@ export default function TestCaseManager({ assignment, onBack }) {
         isHidden: newTestCase.isHidden,
       };
 
+      const apiPath = getApiPath();
       if (editingTestCase) {
         // PATCH request via api service
-        await api.patch(`/admin/page/test-cases-management/${editingTestCase.id}`, payload);
+        await api.patch(`${apiPath}/${editingTestCase.id}`, payload);
       } else {
         // POST request via api service
-        await api.post(`/admin/page/test-cases-management/${assignment.id}`, payload);
+        await api.post(`${apiPath}/${assignment.id}`, payload);
       }
 
       showModal('Success', `Test case ${editingTestCase ? 'updated' : 'created'} successfully!`, 'success');
@@ -134,7 +163,12 @@ export default function TestCaseManager({ assignment, onBack }) {
             setIsModalOpen(false);
             try {
               // DELETE request via api service
-              await api.delete(`/admin/page/test-cases-management/${testCaseId}`);
+              const apiPath = getApiPath();
+              const userRole = getUserRole();
+              const endpoint = userRole === 'grader'
+                ? `${apiPath}/${testCaseId}/delete`
+                : `${apiPath}/${testCaseId}`;
+              await api.delete(endpoint);
               showModal('Success', 'Test case deleted!', 'success');
               fetchTestCases(); // Refresh list after deletion
             } catch (err) {
