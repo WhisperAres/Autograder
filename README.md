@@ -398,6 +398,57 @@ Admin Login
 
 ---
 
+## Deployment Guide
+
+This app requires a PostgreSQL database and environment variables to run. Follow these steps to deploy on your own infrastructure.
+
+### Prerequisites
+- Node.js 20+ (matches Dockerfile)
+- PostgreSQL database (local or cloud, e.g., Supabase, AWS RDS)
+- Java JDK (for code execution features)
+
+### Setup Steps
+1. **Clone the repo**:
+   ```
+   git clone <your-repo-url>
+   cd autograder
+   ```
+
+2. **Install dependencies**:
+   ```
+   npm run install-all  # Installs backend and frontend deps
+   ```
+
+3. **Set up the database**:
+   - Create a PostgreSQL database instance.
+   - Run the init script to set up tables: `node backend/src/config/initDb.js` (ensure your DB is running and env vars are set).
+   - If migrating data, run additional scripts in `backend/` as needed (e.g., `node backend/src/config/migrate-graders-to-courses.js`).
+
+4. **Configure environment variables**:
+   - Copy `backend/.env.example` to `backend/.env`.
+   - Fill in real values:
+     - For `DATABASE_URL`: Use your DB's connection string (e.g., from Supabase or local Postgres).
+     - Generate a secure `JWT_SECRET` (e.g., run `openssl rand -hex 32` in terminal).
+     - Set `NODE_ENV` to `production` for deployment.
+   - If using Docker, pass env vars via `-e` flags or a mounted `.env` file.
+
+5. **Build and run**:
+   - For development: `npm run dev` (backend only) or `npm run dev --prefix frontend`.
+   - For production:
+     - Build frontend: `npm run build`.
+     - Start backend: `npm start`.
+   - Using Docker: `docker build -t autograder .` then `docker run -p 5000:5000 --env-file backend/.env autograder`.
+
+### Notes
+- The app runs on port 5000 by default.
+- Ensure your DB allows connections from your deploy service (e.g., whitelist IPs for cloud DBs).
+- For email features, configure Brevo (see `BREVO_SETUP.md`).
+- Test locally first: Run `npm run dev` in backend and `npm run dev` in frontend.
+
+If issues arise, check logs for DB connection errors or missing env vars.
+
+---
+
 ## Database Setup
 
 ### Database Schema Overview
